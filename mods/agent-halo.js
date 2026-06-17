@@ -182,11 +182,32 @@ function createBridge(letta, config) {
     model: null,
     permissionMode: null,
   };
+  let lastWorkingScope = null;
+
+  const cloneScope = (scope) => ({
+    agentId: scope.agentId ?? null,
+    agentName: scope.agentName ?? null,
+    conversationId: scope.conversationId ?? null,
+    cwd: scope.cwd ?? null,
+    model: scope.model ?? null,
+    permissionMode: scope.permissionMode ?? null,
+  });
 
   const rememberScope = (payload) => {
     for (const key of Object.keys(lastScope)) {
       if (payload[key] != null) lastScope[key] = payload[key];
     }
+    if (payload.type === "turn_start" || payload.type === "tool_start") {
+      lastWorkingScope = cloneScope(lastScope);
+    }
+  };
+
+  const hookScope = (data) => {
+    const scope = cloneScope(lastWorkingScope ?? lastScope);
+    for (const key of Object.keys(scope)) {
+      if (typeof data[key] === "string" && data[key].length > 0) scope[key] = data[key];
+    }
+    return scope;
   };
 
   const emitLocal = (payload) => {
@@ -268,7 +289,7 @@ function createBridge(letta, config) {
       id: randomUUID(),
       type: "turn_stop",
       timestamp: new Date().toISOString(),
-      ...lastScope,
+      ...hookScope(data),
       data: {
         hookEventName: typeof data.hookEventName === "string" ? data.hookEventName : "Stop",
         source: typeof data.source === "string" ? data.source : "hook",

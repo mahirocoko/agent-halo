@@ -254,14 +254,14 @@ const getGlyphStatus = (status: IStatusView["status"]): ISessionSummary["status"
   }
 };
 
-const getEventSessionStatus = (event: AgentHaloEvent): ISessionSummary["status"] => {
+const getEventSessionStatus = (event: AgentHaloEvent, now: Date = new Date()): ISessionSummary["status"] => {
   switch (event.type) {
     case "conversation_close":
     case "turn_stop":
       return "done";
     case "turn_start":
     case "tool_start":
-      return "working";
+      return now.getTime() - Date.parse(event.timestamp) > STALE_AFTER_MS ? "waiting" : "working";
     case "bridge_error":
       return "error";
     default:
@@ -321,7 +321,7 @@ const createDemoEvent = (index: number): AgentHaloEvent => {
   }
 };
 
-const buildSessionSummaries = (events: AgentHaloEvent[], presence: IAgentHaloPresence, view: IStatusView): ISessionSummary[] => {
+const buildSessionSummaries = (events: AgentHaloEvent[], presence: IAgentHaloPresence, now: Date): ISessionSummary[] => {
   const groupedEvents = new Map<string, AgentHaloEvent[]>();
 
   for (const event of events) {
@@ -344,12 +344,12 @@ const buildSessionSummaries = (events: AgentHaloEvent[], presence: IAgentHaloPre
       workspace: shortenPath(workspacePath ?? latestEvent.cwd),
       workspacePath,
       detail: getEventSessionDetail(latestEvent),
-      status: getEventSessionStatus(latestEvent),
+      status: getEventSessionStatus(latestEvent, now),
       lastActivityAt: latestEvent.timestamp,
     });
   }
 
-  if (presence.conversationId) {
+  if (presence.conversationId && !sessions.has(presence.conversationId)) {
     const sessionEvents = groupedEvents.get(presence.conversationId) ?? [];
     const currentEvent = sessionEvents[0]
       ? ({ ...sessionEvents[0], cwd: presence.cwd } satisfies AgentHaloEvent)
@@ -360,8 +360,8 @@ const buildSessionSummaries = (events: AgentHaloEvent[], presence: IAgentHaloPre
       project: projectName(workspacePath ?? presence.cwd),
       workspace: shortenPath(workspacePath ?? presence.cwd),
       workspacePath,
-      detail: presence.activeToolName ?? getStatusCopy(view).toLowerCase(),
-      status: getGlyphStatus(view.status),
+      detail: "idle",
+      status: "idle",
       lastActivityAt: presence.lastEventAt ?? new Date(0).toISOString(),
     });
   }
@@ -376,7 +376,6 @@ const buildSessionDetail = (
   sessions: ISessionSummary[],
   events: AgentHaloEvent[],
   presence: IAgentHaloPresence,
-  view: IStatusView,
 ): ISessionDetail | null => {
   if (!conversationId) return null;
 
@@ -394,7 +393,7 @@ const buildSessionDetail = (
     cwd: workspacePath ?? (isCurrent ? presence.cwd : latestEvent?.cwd) ?? "No workspace",
     model: (isCurrent ? presence.model : latestEvent?.model) ?? "Letta Code",
     permissionMode: (isCurrent ? presence.permissionMode : latestEvent?.permissionMode) ?? "—",
-    detail: isCurrent ? presence.activeToolName ?? getStatusCopy(view).toLowerCase() : summary.detail,
+    detail: summary.detail,
     events: sessionEvents,
   };
 };
@@ -532,11 +531,11 @@ const useAgentHaloPresence = () => {
 
   const view = useMemo(() => getPresenceView(presence, { now, staleAfterMs: STALE_AFTER_MS }), [now, presence]);
   const sessionEvents = useMemo(() => flattenSessionEvents(sessionEventRegistry), [sessionEventRegistry]);
-  return { capabilities, connection, presence, recentEvents, refreshCapabilities, sessionEvents, view };
+  return { capabilities, connection, now, presence, recentEvents, refreshCapabilities, sessionEvents, view };
 };
 
 const App = () => {
-  const { capabilities, connection, presence, recentEvents, refreshCapabilities, sessionEvents, view } = useAgentHaloPresence();
+  const { capabilities, connection, now, presence, recentEvents, refreshCapabilities, sessionEvents, view } = useAgentHaloPresence();
   const [acknowledgedConversationId, setAcknowledgedConversationId] = useState<string | null>(null);
   const [nativeAction, setNativeAction] = useState<INativeActionState>({ bridgeOnline: null, message: null });
   const [sessionAction, setSessionAction] = useState<ISessionActionState>({ ok: null, message: null });
@@ -555,7 +554,6 @@ const App = () => {
       ? ({ ...view, status: "idle", label: "idle" } satisfies IStatusView)
       : view;
   const canUseNativeControls = typeof window.__TAURI_INTERNALS__ !== "undefined";
-  const glyphStatus = getGlyphStatus(displayView.status);
   const isConnected = connection.status === "connected";
   const connectionTitle = DEMO_MODE ? "Demo mode" : (connection.message ?? connection.status);
   const workspace = shortenPath(presence.cwd);
@@ -563,16 +561,16 @@ const App = () => {
   const model = presence.model?.split("/").slice(-1)[0] ?? "Letta Code";
   const sessions = useMemo(
     () =>
-      buildSessionSummaries(sessionEvents, presence, displayView).filter(
+      buildSessionSummaries(sessionEvents, presence, now).filter(
         (session) =>
           !dismissedSessionIds.has(session.conversationId) ||
           (session.conversationId === presence.conversationId && !["idle", "closed"].includes(displayView.status)),
       ),
-    [dismissedSessionIds, displayView, presence.conversationId, presence, sessionEvents],
+    [dismissedSessionIds, displayView.status, now, presence, sessionEvents],
   );
   const selectedSession = useMemo(
-    () => buildSessionDetail(selectedSessionId, sessions, sessionEvents, presence, displayView),
-    [displayView, presence, selectedSessionId, sessionEvents, sessions],
+    () => buildSessionDetail(selectedSessionId, sessions, sessionEvents, presence),
+    [presence, selectedSessionId, sessionEvents, sessions],
   );
 
   useEffect(() => {
@@ -582,14 +580,27 @@ const App = () => {
     setAcknowledgedConversationId(null);
   }, [acknowledgedConversationId, presence.conversationId, view.status]);
   const headerLabel = setupOpen ? "Setup" : selectedSession ? selectedSession.project : sessions.length === 0 ? "Agent Halo" : sessions.length === 1 ? "1 session" : `${sessions.length} sessions`;
-  const isWorkingActivity = displayView.status === "thinking" || displayView.status === "tool-running" || displayView.status === "stale";
-  const hasLiveActivity = isWorkingActivity || displayView.status === "closed" || Boolean(presence.activeToolName);
+  const activitySession =
+    sessions.find((session) => session.status === "working") ??
+    sessions.find((session) => session.status === "waiting") ??
+    sessions.find((session) => session.status === "done" && session.conversationId !== acknowledgedConversationId) ??
+    null;
+  const activityStatus = activitySession?.status ?? getGlyphStatus(displayView.status);
+  const activityViewStatus: IStatusView["status"] = (() => {
+    if (activityStatus === "working") return "tool-running";
+    if (activityStatus === "waiting") return "stale";
+    if (activityStatus === "done") return "closed";
+    if (activityStatus === "error") return "error";
+    return displayView.status;
+  })();
+  const glyphStatus = getGlyphStatus(activityViewStatus);
+  const isWorkingActivity = activityStatus === "working" || activityStatus === "waiting";
+  const hasLiveActivity = isWorkingActivity || activityStatus === "done" || activityStatus === "error";
   const pillDetail = (() => {
-    if (presence.activeToolName) return presence.activeToolName;
-    if (displayView.status === "thinking") return "Thinking";
-    if (displayView.status === "tool-running") return "Tool";
-    if (displayView.status === "stale") return "Still?";
-    if (displayView.status === "closed") return "Done";
+    if (activitySession?.status === "working") return activitySession.detail === "thinking" ? "Thinking" : activitySession.detail;
+    if (activitySession?.status === "waiting") return "Still?";
+    if (activitySession?.status === "done") return "Done";
+    if (activityStatus === "error") return "Error";
     return project;
   })();
   const liveActivityWingWidth = hasLiveActivity ? estimateLiveActivityWingWidth(pillDetail) : 0;
@@ -601,7 +612,7 @@ const App = () => {
     "--camera-width": `${Math.round(notchMetrics.cameraWidth)}px`,
     "--pill-text-width": `${Math.max(0, liveActivityWingWidth - LIVE_ACTIVITY_TEXT_WIDTH_BUFFER)}px`,
   } as CSSProperties & Record<"--closed-width" | "--closed-height" | "--camera-width" | "--pill-text-width", string>;
-  const shouldAutoOpen = displayView.status === "error";
+  const shouldAutoOpen = activityStatus === "error";
   const surfaceState = renderPanel ? (panelOpen ? "open" : "closing") : "closed";
   const setupGuidance = (() => {
     if (!canUseNativeControls) {
@@ -784,7 +795,8 @@ const App = () => {
   };
 
   const acknowledgeDone = () => {
-    setAcknowledgedConversationId(presence.conversationId);
+    const conversationId = activitySession?.status === "done" ? activitySession.conversationId : presence.conversationId;
+    setAcknowledgedConversationId(conversationId);
     setSelectedSessionId(null);
     setPanelOpen(false);
   };
@@ -845,7 +857,7 @@ const App = () => {
   }, [setupOpen]);
 
   return (
-    <main className="overlay-root" data-live={hasLiveActivity ? "true" : "false"} data-running={isWorkingActivity ? "true" : "false"} data-status={displayView.status}>
+    <main className="overlay-root" data-live={hasLiveActivity ? "true" : "false"} data-running={isWorkingActivity ? "true" : "false"} data-status={activityViewStatus}>
       <section className={`notch-wrap ${panelOpen ? "is-open" : renderPanel ? "is-closing" : ""}`} style={notchStyle}>
         <div
           className="halo-surface"
@@ -1052,7 +1064,7 @@ const App = () => {
               )}
             </div>
 
-            {(setupOpen || selectedSession || (displayView.status === "closed" && acknowledgedConversationId !== presence.conversationId)) ? (
+            {(setupOpen || selectedSession || activitySession?.status === "done") ? (
               <div className="sheet-footer">
                 <span className="footer-meta">{workspace} · {model}</span>
                 <span className="spacer" />
@@ -1077,7 +1089,7 @@ const App = () => {
                     </button>
                   </div>
                 ) : null}
-                {displayView.status === "closed" && acknowledgedConversationId !== presence.conversationId ? (
+                {activitySession?.status === "done" ? (
                   <button className="pill-btn accent" type="button" onClick={(event) => { event.stopPropagation(); acknowledgeDone(); }} data-tauri-drag-region="false">
                     Acknowledge
                   </button>
