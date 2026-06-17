@@ -2,6 +2,7 @@
 node_modules/
 dist/
 build/
+target/
 coverage/
 .env
 .env.*
@@ -9,3 +10,5 @@ coverage/
 *.log
 .agent-state/
 .letta/
+test-results/
+playwright-report/

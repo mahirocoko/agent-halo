@@ -1,0 +1,16 @@
+[package]
+name = "agent-halo-desktop"
+version = "0.1.0"
+description = "Agent Halo desktop presence overlay"
+authors = ["Mahiro"]
+edition = "2021"
+
+[lib]
+name = "agent_halo_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png", "macos-private-api"] }

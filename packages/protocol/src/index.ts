@@ -1,5 +1,42 @@
 export const AGENT_HALO_PROTOCOL_VERSION = 1 as const;
 
+
+export interface IAgentHaloBridgeCapabilities {
+  events: {
+    lifecycle: boolean;
+    turns: boolean;
+    tools: boolean;
+  };
+  endpoints: {
+    health: boolean;
+    snapshot: boolean;
+    sse: boolean;
+  };
+  sessionActions: {
+    focusTerminal: boolean;
+    endSession: boolean;
+    dismissEnded: boolean;
+  };
+}
+
+export const createDefaultBridgeCapabilities = (): IAgentHaloBridgeCapabilities => ({
+  events: {
+    lifecycle: false,
+    turns: false,
+    tools: false,
+  },
+  endpoints: {
+    health: true,
+    snapshot: true,
+    sse: true,
+  },
+  sessionActions: {
+    focusTerminal: false,
+    endSession: false,
+    dismissEnded: true,
+  },
+});
+
 export type AgentHaloEventType =
   | "bridge_ready"
   | "conversation_open"
@@ -81,3 +118,10 @@ export type AgentHaloEvent =
   | IAgentHaloTurnStartEvent
   | IAgentHaloToolStartEvent
   | IAgentHaloBridgeErrorEvent;
+
+export type {
+  AgentHaloPresenceStatus,
+  IAgentHaloPresence,
+  IAgentHaloPresenceView,
+} from "./presence.js";
+export { createInitialPresence, getPresenceView, reducePresence } from "./presence.js";

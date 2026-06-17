@@ -6,11 +6,18 @@
   "type": "module",
   "packageManager": "pnpm@10.33.0",
   "scripts": {
-    "check": "tsc -p tsconfig.json --noEmit",
+    "check": "tsc -p tsconfig.json --noEmit && pnpm --filter @agent-halo/desktop check",
     "mod:install": "node scripts/install-mod.mjs",
-    "mod:tail": "tail -f ~/.letta/mods/agent-halo.events.ndjson"
+    "mod:tail": "tail -f ~/.letta/mods/agent-halo.events.ndjson",
+    "viewer": "node apps/viewer/index.mjs",
+    "desktop:dev": "pnpm --filter @agent-halo/desktop tauri:dev",
+    "desktop:build": "pnpm --filter @agent-halo/desktop tauri:build",
+    "desktop:web": "pnpm --filter @agent-halo/desktop dev",
+    "desktop:web:build": "pnpm --filter @agent-halo/desktop build",
+    "test:demo": "playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "1.61.0",
     "@types/node": "25.0.0",
     "typescript": "5.9.3"
   }

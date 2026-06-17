@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Agent Halo",
+  "version": "0.1.0",
+  "identifier": "com.mahirocoko.agent-halo",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "beforeBuildCommand": "pnpm build",
+    "devUrl": "http://127.0.0.1:47622",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Agent Halo",
+        "width": 272,
+        "height": 64,
+        "resizable": false,
+        "fullscreen": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false,
+        "center": false,
+        "visible": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src http://127.0.0.1:47621; style-src 'self' 'unsafe-inline'"
+    },
+    "macOSPrivateApi": true
+  },
+  "bundle": {
+    "active": false,
+    "targets": "all",
+    "icon": []
+  }
+}

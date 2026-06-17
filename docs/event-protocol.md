@@ -22,6 +22,36 @@ Events are newline-delimited JSON in `~/.letta/mods/agent-halo.events.ndjson` an
 }
 ```
 
+
+## Bridge endpoints
+
+`GET /health` and `GET /snapshot` include bridge capability metadata so viewers know which event streams and session actions are real instead of guessing or showing fake controls.
+
+```ts
+{
+  ok: true,
+  capabilities: {
+    events: {
+      lifecycle: boolean,
+      turns: boolean,
+      tools: boolean,
+    },
+    endpoints: {
+      health: true,
+      snapshot: true,
+      sse: true,
+    },
+    sessionActions: {
+      focusTerminal: boolean,
+      endSession: boolean,
+      dismissEnded: boolean,
+    },
+  }
+}
+```
+
+`GET /snapshot` also returns `recent: AgentHaloEvent[]`. Current bridge session actions intentionally report `focusTerminal: false` and `endSession: false` until real session/process capabilities exist.
+
 ## Event types
 
 ### `bridge_ready`

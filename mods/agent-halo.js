@@ -67,6 +67,27 @@ function baseEvent(type, event, ctx, data = {}) {
   };
 }
 
+
+function getCapabilities(letta) {
+  return {
+    events: {
+      lifecycle: letta.capabilities.events?.lifecycle === true,
+      turns: letta.capabilities.events?.turns === true,
+      tools: letta.capabilities.events?.tools === true,
+    },
+    endpoints: {
+      health: true,
+      snapshot: true,
+      sse: true,
+    },
+    sessionActions: {
+      focusTerminal: false,
+      endSession: false,
+      dismissEnded: true,
+    },
+  };
+}
+
 function getTextPreview(input, maxLength) {
   const parts = [];
 
@@ -96,6 +117,7 @@ function getTextPreview(input, maxLength) {
 function createBridge(letta, config) {
   mkdirSync(dirname(config.logFile), { recursive: true });
 
+  const capabilities = getCapabilities(letta);
   const clients = new Set();
   const recent = [];
   const maxRecent = 100;
@@ -117,16 +139,28 @@ function createBridge(letta, config) {
     }
   };
 
+  const corsHeaders = {
+    "access-control-allow-origin": "*",
+    "access-control-allow-methods": "GET, OPTIONS",
+    "access-control-allow-headers": "content-type, accept",
+  };
+
   const server = createServer((req, res) => {
+    if (req.method === "OPTIONS") {
+      res.writeHead(204, corsHeaders);
+      res.end();
+      return;
+    }
+
     if (req.url === "/health") {
-      res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
-      res.end(JSON.stringify({ ok: true, name: "agent-halo", version: PROTOCOL_VERSION, clients: clients.size }));
+      res.writeHead(200, { "content-type": "application/json; charset=utf-8", ...corsHeaders });
+      res.end(JSON.stringify({ ok: true, name: "agent-halo", version: PROTOCOL_VERSION, clients: clients.size, capabilities }));
       return;
     }
 
     if (req.url === "/snapshot") {
-      res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
-      res.end(JSON.stringify({ ok: true, recent }));
+      res.writeHead(200, { "content-type": "application/json; charset=utf-8", ...corsHeaders });
+      res.end(JSON.stringify({ ok: true, recent, capabilities }));
       return;
     }
 
@@ -136,6 +170,7 @@ function createBridge(letta, config) {
         "cache-control": "no-cache, no-transform",
         connection: "keep-alive",
         "x-accel-buffering": "no",
+        ...corsHeaders,
       });
       res.write(`: agent-halo connected ${new Date().toISOString()}\n\n`);
       clients.add(res);
@@ -143,7 +178,7 @@ function createBridge(letta, config) {
       return;
     }
 
-    res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
+    res.writeHead(404, { "content-type": "application/json; charset=utf-8", ...corsHeaders });
     res.end(JSON.stringify({ ok: false, error: "not_found" }));
   });
 
