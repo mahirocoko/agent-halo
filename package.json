@@ -12,6 +12,7 @@
     "viewer": "node apps/viewer/index.mjs",
     "desktop:dev": "pnpm --filter @agent-halo/desktop tauri:dev",
     "desktop:build": "pnpm --filter @agent-halo/desktop tauri:build",
+    "desktop:install": "node scripts/install-desktop.mjs",
     "desktop:web": "pnpm --filter @agent-halo/desktop dev",
     "desktop:web:build": "pnpm --filter @agent-halo/desktop build",
     "test:demo": "playwright test"

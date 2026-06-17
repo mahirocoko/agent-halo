@@ -11,6 +11,8 @@ export interface IAgentHaloBridgeCapabilities {
     health: boolean;
     snapshot: boolean;
     sse: boolean;
+    hookStop: boolean;
+    ingest: boolean;
   };
   sessionActions: {
     focusTerminal: boolean;
@@ -29,6 +31,8 @@ export const createDefaultBridgeCapabilities = (): IAgentHaloBridgeCapabilities 
     health: true,
     snapshot: true,
     sse: true,
+    hookStop: true,
+    ingest: true,
   },
   sessionActions: {
     focusTerminal: false,
@@ -42,6 +46,7 @@ export type AgentHaloEventType =
   | "conversation_open"
   | "conversation_close"
   | "turn_start"
+  | "turn_stop"
   | "tool_start"
   | "bridge_error";
 
@@ -94,6 +99,15 @@ export interface IAgentHaloTurnStartEvent extends IAgentHaloBaseEvent {
   };
 }
 
+export interface IAgentHaloTurnStopEvent extends IAgentHaloBaseEvent {
+  type: "turn_stop";
+  data: {
+    hookEventName: "Stop" | string;
+    source: "hook" | string;
+    message?: string | null;
+  };
+}
+
 export interface IAgentHaloToolStartEvent extends IAgentHaloBaseEvent {
   type: "tool_start";
   data: {
@@ -116,6 +130,7 @@ export type AgentHaloEvent =
   | IAgentHaloConversationOpenEvent
   | IAgentHaloConversationCloseEvent
   | IAgentHaloTurnStartEvent
+  | IAgentHaloTurnStopEvent
   | IAgentHaloToolStartEvent
   | IAgentHaloBridgeErrorEvent;
 

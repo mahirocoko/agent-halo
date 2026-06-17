@@ -1,5 +1,5 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
-import { createServer } from "node:http";
+import { createServer, request } from "node:http";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -79,6 +79,8 @@ function getCapabilities(letta) {
       health: true,
       snapshot: true,
       sse: true,
+      hookStop: true,
+      ingest: true,
     },
     sessionActions: {
       focusTerminal: false,
@@ -86,6 +88,55 @@ function getCapabilities(letta) {
       dismissEnded: true,
     },
   };
+}
+
+function postBridgeEvent(config, path, payload) {
+  const body = JSON.stringify(payload);
+  const req = request(
+    {
+      hostname: config.host,
+      port: config.port,
+      path,
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "content-length": Buffer.byteLength(body),
+      },
+      timeout: 500,
+    },
+    (res) => {
+      res.resume();
+    },
+  );
+
+  req.on("error", () => {
+    // Primary bridge is unavailable; drop ambient presence event.
+  });
+  req.on("timeout", () => {
+    req.destroy();
+  });
+  req.write(body);
+  req.end();
+}
+
+function readRecentEvents(logFile, maxRecent) {
+  try {
+    if (!existsSync(logFile)) return [];
+    return readFileSync(logFile, "utf8")
+      .trim()
+      .split("\n")
+      .slice(-maxRecent)
+      .map((line) => {
+        try {
+          return JSON.parse(line);
+        } catch {
+          return null;
+        }
+      })
+      .filter((event) => event && typeof event.type === "string" && typeof event.id === "string");
+  } catch {
+    return [];
+  }
 }
 
 function getTextPreview(input, maxLength) {
@@ -119,10 +170,27 @@ function createBridge(letta, config) {
 
   const capabilities = getCapabilities(letta);
   const clients = new Set();
-  const recent = [];
-  const maxRecent = 100;
+  const maxRecent = 500;
+  const recent = readRecentEvents(config.logFile, maxRecent);
+  const pendingEvents = [];
+  let bridgeMode = "pending";
+  const lastScope = {
+    agentId: null,
+    agentName: null,
+    conversationId: null,
+    cwd: null,
+    model: null,
+    permissionMode: null,
+  };
 
-  const emit = (payload) => {
+  const rememberScope = (payload) => {
+    for (const key of Object.keys(lastScope)) {
+      if (payload[key] != null) lastScope[key] = payload[key];
+    }
+  };
+
+  const emitLocal = (payload) => {
+    rememberScope(payload);
     recent.push(payload);
     if (recent.length > maxRecent) recent.shift();
 
@@ -139,16 +207,101 @@ function createBridge(letta, config) {
     }
   };
 
+  const flushPendingEvents = () => {
+    const queued = pendingEvents.splice(0, pendingEvents.length);
+    for (const event of queued) {
+      if (bridgeMode === "forward") {
+        postBridgeEvent(config, "/ingest", event);
+      } else {
+        emitLocal(event);
+      }
+    }
+  };
+
+  const emit = (payload) => {
+    rememberScope(payload);
+    if (bridgeMode === "pending") {
+      pendingEvents.push(payload);
+      return;
+    }
+    if (bridgeMode === "forward") {
+      postBridgeEvent(config, "/ingest", payload);
+      return;
+    }
+    emitLocal(payload);
+  };
+
   const corsHeaders = {
     "access-control-allow-origin": "*",
-    "access-control-allow-methods": "GET, OPTIONS",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
     "access-control-allow-headers": "content-type, accept",
   };
 
-  const server = createServer((req, res) => {
+  const readJsonBody = (req) =>
+    new Promise((resolve) => {
+      let body = "";
+      req.setEncoding("utf8");
+      req.on("data", (chunk) => {
+        body += chunk;
+        if (body.length > 16_384) {
+          req.destroy();
+          resolve({});
+        }
+      });
+      req.on("end", () => {
+        if (!body.trim()) {
+          resolve({});
+          return;
+        }
+        try {
+          resolve(JSON.parse(body));
+        } catch {
+          resolve({});
+        }
+      });
+      req.on("error", () => resolve({}));
+    });
+
+  const emitHookStop = (data = {}) => {
+    emit({
+      version: PROTOCOL_VERSION,
+      id: randomUUID(),
+      type: "turn_stop",
+      timestamp: new Date().toISOString(),
+      ...lastScope,
+      data: {
+        hookEventName: typeof data.hookEventName === "string" ? data.hookEventName : "Stop",
+        source: typeof data.source === "string" ? data.source : "hook",
+        message: typeof data.message === "string" ? data.message : null,
+      },
+    });
+  };
+
+  const server = createServer(async (req, res) => {
     if (req.method === "OPTIONS") {
       res.writeHead(204, corsHeaders);
       res.end();
+      return;
+    }
+
+    if (req.method === "POST" && req.url === "/ingest") {
+      const body = await readJsonBody(req);
+      if (body && typeof body === "object" && typeof body.type === "string" && typeof body.id === "string") {
+        emitLocal(body);
+        res.writeHead(202, { "content-type": "application/json; charset=utf-8", ...corsHeaders });
+        res.end(JSON.stringify({ ok: true, type: body.type }));
+        return;
+      }
+      res.writeHead(400, { "content-type": "application/json; charset=utf-8", ...corsHeaders });
+      res.end(JSON.stringify({ ok: false, error: "invalid_event" }));
+      return;
+    }
+
+    if (req.method === "POST" && req.url === "/hook/stop") {
+      const body = await readJsonBody(req);
+      emitHookStop(body);
+      res.writeHead(202, { "content-type": "application/json; charset=utf-8", ...corsHeaders });
+      res.end(JSON.stringify({ ok: true, type: "turn_stop" }));
       return;
     }
 
@@ -183,14 +336,17 @@ function createBridge(letta, config) {
   });
 
   server.on("error", (error) => {
+    bridgeMode = "forward";
+    flushPendingEvents();
     letta.diagnostics?.report?.({
       severity: "warning",
-      message: `Agent Halo bridge failed on ${config.host}:${config.port}: ${error.message}`,
+      message: `Agent Halo bridge is already running or unavailable on ${config.host}:${config.port}; this mod instance will forward events to the primary bridge. (${error.message})`,
     });
   });
 
   server.listen(config.port, config.host, () => {
-    emit({
+    bridgeMode = "server";
+    emitLocal({
       version: PROTOCOL_VERSION,
       id: randomUUID(),
       type: "bridge_ready",
@@ -208,6 +364,7 @@ function createBridge(letta, config) {
         healthPath: "/health",
       },
     });
+    flushPendingEvents();
   });
 
   return {

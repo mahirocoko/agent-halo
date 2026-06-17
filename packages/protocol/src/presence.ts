@@ -88,6 +88,13 @@ export const reducePresence = (
         status: "thinking",
         activeToolName: null,
       };
+    case "turn_stop":
+      return {
+        ...current,
+        ...scoped,
+        status: "closed",
+        activeToolName: null,
+      };
     case "tool_start":
       return {
         ...current,

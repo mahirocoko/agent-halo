@@ -64,6 +64,8 @@ function reducePresence(current, event) {
       };
     case "turn_start":
       return { ...current, ...scoped, status: "thinking", activeToolName: null };
+    case "turn_stop":
+      return { ...current, ...scoped, status: "closed", activeToolName: null };
     case "tool_start":
       return { ...current, ...scoped, status: "tool-running", activeToolName: event.data?.toolName ?? null };
     case "bridge_error":

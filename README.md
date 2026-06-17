@@ -52,12 +52,23 @@ It also writes a local event log:
 
 The first Notchcode-like desktop surface lives in `apps/desktop`. It is a transparent, always-on-top Tauri window that sits at the top center of the screen and subscribes to the Agent Halo bridge.
 
+For local development:
+
 ```bash
 pnpm desktop:web:build
 (cd apps/desktop/src-tauri && cargo check)
 pnpm test:demo
 pnpm desktop:dev
 ```
+
+For a local app install:
+
+```bash
+pnpm desktop:install
+open ~/Applications/Agent\ Halo.app
+```
+
+The desktop app can install or reinstall the Letta mod from Setup. After the first mod install, reload or restart Letta Code so it loads `~/.letta/mods/agent-halo.js`; once loaded, the app can reconnect/check bridge state from Setup.
 
 For browser-only visual QA without the bridge:
 
@@ -107,6 +118,6 @@ pnpm mod:tail
 
 ## Visual direction
 
-Agent Halo should follow Notchcode's taste for this project: a black hardware notch/pill at rest, a compact dropped sheet for live state, small functional glyphs, row-based session lists, restrained charcoal surfaces, hairline dividers, and orange/done status accents. Avoid generic dark dashboard moves such as cyan glow panels, metric-card grids, oversized orbs, and decorative SaaS copy. Track concrete parity evidence in `docs/notchcode-parity.md`; v1 is accepted as read-only + dismiss + setup/control-plane, with real focus/end actions intentionally post-v1 until public session/process controls exist.
+Agent Halo should follow Notchcode's taste for this project: a black hardware notch/pill at rest, a compact dropped sheet for live state, small functional glyphs, row-based session lists, restrained charcoal surfaces, hairline dividers, and orange/done status accents. Avoid generic dark dashboard moves such as cyan glow panels, metric-card grids, oversized orbs, and decorative SaaS copy. Track concrete parity evidence in `docs/notchcode-parity.md`; v1 is accepted as read-only + dismiss + setup/control-plane, with real focus/end actions intentionally post-v1 until public session/process controls exist. Notch geometry and sheet anatomy are adapted from Notchcode; see `CREDITS.md` and `THIRD_PARTY_LICENSES.md`.
 
-The Tauri runtime resizes the transparent window between a compact pill (`272x64`) and panel (`340x314`) so the overlay does not leave a permanent dashboard-sized hit area on screen.
+The Tauri runtime resizes the transparent window between a compact pill (`272x64`) and panel (`340x314`) so the overlay does not leave a permanent dashboard-sized hit area on screen. The expanded shell should read as the notch extending downward, not as a detached popup below it.

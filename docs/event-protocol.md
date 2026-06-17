@@ -40,6 +40,8 @@ Events are newline-delimited JSON in `~/.letta/mods/agent-halo.events.ndjson` an
       health: true,
       snapshot: true,
       sse: true,
+      hookStop: true,
+      ingest: true,
     },
     sessionActions: {
       focusTerminal: boolean,
@@ -50,7 +52,7 @@ Events are newline-delimited JSON in `~/.letta/mods/agent-halo.events.ndjson` an
 }
 ```
 
-`GET /snapshot` also returns `recent: AgentHaloEvent[]`. Current bridge session actions intentionally report `focusTerminal: false` and `endSession: false` until real session/process capabilities exist.
+`GET /snapshot` also returns `recent: AgentHaloEvent[]`. `POST /hook/stop` is a local hook integration endpoint that converts a Letta `Stop` hook into a `turn_stop` event. `POST /ingest` is the local multi-instance fan-in endpoint: secondary mod instances that cannot bind the bridge port forward their events to the primary bridge instead of dropping them. Current bridge session actions intentionally report `focusTerminal: false` and `endSession: false` until real session/process capabilities exist.
 
 ## Event types
 
@@ -107,6 +109,21 @@ By default this records counts only. Text previews are disabled unless local con
   "type": "turn_start",
   "data": {
     "inputCount": 1
+  }
+}
+```
+
+### `turn_stop`
+
+Emitted when a local Letta `Stop` hook posts to `POST /hook/stop`. This means the assistant turn finished; it is not the same as a process/session kill.
+
+```json
+{
+  "type": "turn_stop",
+  "data": {
+    "hookEventName": "Stop",
+    "source": "hook",
+    "message": null
   }
 }
 ```

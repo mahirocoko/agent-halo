@@ -3,14 +3,22 @@ use std::{
     io::Write,
     net::{SocketAddr, TcpStream},
     path::PathBuf,
+    sync::mpsc,
     time::Duration,
 };
 
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    LogicalSize, Manager, PhysicalPosition, Size,
+    LogicalSize, Manager, Size,
 };
+
+#[cfg(target_os = "macos")]
+use objc2::MainThreadMarker;
+#[cfg(target_os = "macos")]
+use objc2_app_kit::{NSScreen, NSStatusWindowLevel, NSWindow, NSWindowCollectionBehavior};
+#[cfg(target_os = "macos")]
+use objc2_foundation::{NSPoint, NSRect, NSSize};
 
 const TRAY_SHOW: &str = "show";
 const TRAY_HIDE: &str = "hide";
@@ -56,11 +64,67 @@ fn agent_halo_mod_status() -> Result<(String, bool), String> {
 }
 
 #[tauri::command]
+fn notch_metrics(window: tauri::WebviewWindow) -> (f64, f64) {
+    if let Some(metrics) = notch_metrics_for_platform(&window) {
+        return metrics;
+    }
+
+    let (sender, receiver) = mpsc::channel();
+    let scheduled_window = window.clone();
+    if window
+        .run_on_main_thread(move || {
+            let _ = sender.send(notch_metrics_for_platform(&scheduled_window));
+        })
+        .is_ok()
+    {
+        if let Ok(Some(metrics)) = receiver.recv_timeout(Duration::from_millis(250)) {
+            return metrics;
+        }
+    }
+
+    (184.0, 36.0)
+}
+
+#[cfg(target_os = "macos")]
+fn notch_metrics_for_platform(window: &tauri::WebviewWindow) -> Option<(f64, f64)> {
+    let mtm = MainThreadMarker::new()?;
+    let ns_window_ptr = window.ns_window().ok()?;
+
+    // SAFETY: Tauri owns this NSWindow and we only query AppKit on the main thread.
+    unsafe {
+        let ns_window: &NSWindow = &*ns_window_ptr.cast();
+        let screen = ns_window.screen().or_else(|| NSScreen::mainScreen(mtm))?;
+        let screen_frame = screen.frame();
+        let visible_frame = screen.visibleFrame();
+        let safe_insets = screen.safeAreaInsets();
+        let left_area = screen.auxiliaryTopLeftArea();
+        let right_area = screen.auxiliaryTopRightArea();
+        let derived_camera_width = screen_frame.size.width - left_area.size.width - right_area.size.width + 4.0;
+        let camera_width = if safe_insets.top > 0.0 {
+            derived_camera_width.clamp(160.0, 260.0)
+        } else {
+            184.0
+        };
+        let menu_bar_height = (screen_frame.origin.y + screen_frame.size.height) - (visible_frame.origin.y + visible_frame.size.height);
+        let closed_height = if safe_insets.top > 0.0 {
+            safe_insets.top.clamp(28.0, 44.0)
+        } else {
+            menu_bar_height.clamp(28.0, 40.0)
+        };
+
+        Some((camera_width, closed_height))
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn notch_metrics_for_platform(_window: &tauri::WebviewWindow) -> Option<(f64, f64)> {
+    Some((184.0, 36.0))
+}
+
+#[tauri::command]
 fn set_panel_open(window: tauri::WebviewWindow, open: bool, width: f64, height: f64) -> Result<(), String> {
-    window
-        .set_size(Size::Logical(LogicalSize::new(width, height)))
-        .map_err(|error| format!("Failed to resize Agent Halo window: {error}"))?;
-    position_main_window(&window).map_err(|error| format!("Failed to position Agent Halo window: {error}"))?;
+    set_main_window_frame(&window, width, height)
+        .map_err(|error| format!("Failed to resize/recenter Agent Halo window: {error}"))?;
 
     if open {
         let _ = window.set_focus();
@@ -69,15 +133,123 @@ fn set_panel_open(window: tauri::WebviewWindow, open: bool, width: f64, height: 
     Ok(())
 }
 
+fn set_main_window_frame(window: &tauri::WebviewWindow, width: f64, height: f64) -> tauri::Result<()> {
+    set_main_window_frame_for_platform(window, width, height)
+}
+
+#[cfg(target_os = "macos")]
+fn set_main_window_frame_for_platform(window: &tauri::WebviewWindow, width: f64, height: f64) -> tauri::Result<()> {
+    if position_main_window_with_appkit(window, Some((width, height))) {
+        return Ok(());
+    }
+
+    let (sender, receiver) = mpsc::channel();
+    let scheduled_window = window.clone();
+    window.run_on_main_thread(move || {
+        let _ = sender.send(position_main_window_with_appkit(&scheduled_window, Some((width, height))));
+    })?;
+
+    if receiver.recv_timeout(Duration::from_millis(250)).unwrap_or(false) {
+        return Ok(());
+    }
+
+    window
+        .set_size(Size::Logical(LogicalSize::new(width, height)))?;
+    position_main_window_for_logical_width(window, width)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn set_main_window_frame_for_platform(window: &tauri::WebviewWindow, width: f64, height: f64) -> tauri::Result<()> {
+    window
+        .set_size(Size::Logical(LogicalSize::new(width, height)))?;
+    position_main_window_for_logical_width(window, width)
+}
+
 fn position_main_window(window: &tauri::WebviewWindow) -> tauri::Result<()> {
-    if let Some(monitor) = window.current_monitor()? {
+    let width = f64::from(window.outer_size()?.width);
+    position_main_window_for_physical_width(window, width)
+}
+
+fn position_main_window_for_logical_width(window: &tauri::WebviewWindow, width: f64) -> tauri::Result<()> {
+    let scale = window.scale_factor()?;
+    position_main_window_for_physical_width(window, width * scale)
+}
+
+fn position_main_window_for_physical_width(window: &tauri::WebviewWindow, width: f64) -> tauri::Result<()> {
+    position_main_window_for_platform(window, width)
+}
+
+#[cfg(target_os = "macos")]
+fn position_main_window_for_platform(window: &tauri::WebviewWindow, _width: f64) -> tauri::Result<()> {
+    if position_main_window_with_appkit(window, None) {
+        return Ok(());
+    }
+
+    let scheduled_window = window.clone();
+    window.run_on_main_thread(move || {
+        let _ = position_main_window_with_appkit(&scheduled_window, None);
+    })?;
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn position_main_window_for_platform(window: &tauri::WebviewWindow, width: f64) -> tauri::Result<()> {
+    let monitor = match window.primary_monitor()? {
+        Some(monitor) => Some(monitor),
+        None => window.current_monitor()?,
+    };
+
+    if let Some(monitor) = monitor {
+        let monitor_position = monitor.position();
         let monitor_size = monitor.size();
-        let window_size = window.outer_size()?;
-        let x = monitor_size.width.saturating_sub(window_size.width) / 2;
-        window.set_position(PhysicalPosition::new(x as i32, 8))?;
+        let centered_offset = ((f64::from(monitor_size.width) - width).max(0.0) / 2.0).round() as i32;
+        let x = monitor_position.x + centered_offset;
+        window.set_position(tauri::PhysicalPosition::new(x, monitor_position.y))?;
     }
 
     Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn position_main_window_with_appkit(window: &tauri::WebviewWindow, target_size: Option<(f64, f64)>) -> bool {
+    let Some(mtm) = MainThreadMarker::new() else {
+        return false;
+    };
+
+    let Ok(ns_window_ptr) = window.ns_window() else {
+        return false;
+    };
+
+    // SAFETY: Tauri gives us the backing NSWindow pointer for this WebviewWindow.
+    // We only touch AppKit from the main thread (guarded above), matching AppKit's thread rules.
+    unsafe {
+        let ns_window: &NSWindow = &*ns_window_ptr.cast();
+        let Some(screen) = ns_window.screen().or_else(|| NSScreen::mainScreen(mtm)) else {
+            return false;
+        };
+
+        let frame = ns_window.frame();
+        let (width, height) = target_size.unwrap_or((frame.size.width, frame.size.height));
+        let screen_frame = screen.frame();
+        let x = screen_frame.origin.x + (screen_frame.size.width / 2.0) - (width / 2.0);
+        let y = screen_frame.origin.y + screen_frame.size.height - height;
+
+        ns_window.setLevel(NSStatusWindowLevel);
+        ns_window.setCollectionBehavior(
+            ns_window.collectionBehavior()
+                | NSWindowCollectionBehavior::CanJoinAllSpaces
+                | NSWindowCollectionBehavior::FullScreenAuxiliary
+                | NSWindowCollectionBehavior::Stationary,
+        );
+
+        if target_size.is_some() {
+            ns_window.setFrame_display(NSRect::new(NSPoint::new(x, y), NSSize::new(width, height)), true);
+        } else {
+            ns_window.setFrameOrigin(NSPoint::new(x, y));
+        }
+    }
+
+    true
 }
 
 fn show_main_window(app: &tauri::AppHandle) {
@@ -134,9 +306,12 @@ pub fn run() {
             agent_halo_mod_status,
             bridge_health,
             install_agent_halo_mod,
+            notch_metrics,
             set_panel_open
         ])
         .setup(|app| {
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
             if let Some(window) = app.get_webview_window("main") {
                 position_main_window(&window)?;
             }

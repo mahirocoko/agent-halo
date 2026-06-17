@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { createRoot } from "react-dom/client";
 import {
   createDefaultBridgeCapabilities,
@@ -16,15 +16,17 @@ import "./styles.css";
 const BRIDGE_URL = "http://127.0.0.1:47621";
 const STALE_AFTER_MS = 30_000;
 const MAX_RECENT_EVENTS = 80;
+const MAX_SESSION_EVENTS_PER_SESSION = 32;
 const DEMO_MODE = new URLSearchParams(window.location.search).has("demo");
-const NOTCH_WIDTH = 200;
-const NOTCH_HEIGHT = 32;
-const PILL_WINDOW_WIDTH = 272;
-const PILL_WINDOW_HEIGHT = 64;
-const PANEL_WINDOW_WIDTH = 340;
-const PANEL_WINDOW_HEIGHT = 314;
+const DEFAULT_CAMERA_NOTCH_WIDTH = 184;
+const DEFAULT_CLOSED_NOTCH_HEIGHT = 36;
+const LIVE_ACTIVITY_WING_WIDTH = 96;
+const PILL_WINDOW_WIDTH = DEFAULT_CAMERA_NOTCH_WIDTH + LIVE_ACTIVITY_WING_WIDTH * 2;
+const PILL_WINDOW_HEIGHT = 42;
+const PANEL_WINDOW_WIDTH = 560;
+const PANEL_WINDOW_HEIGHT = 440;
 const DISMISSED_SESSIONS_STORAGE_KEY = "agent-halo.dismissed-sessions";
-const MAX_DISMISSED_SESSION_IDS = 80;
+const SESSION_EVENTS_STORAGE_KEY = "agent-halo.session-events";
 
 interface IConnectionState {
   status: "connecting" | "connected" | "disconnected" | "error";
@@ -41,9 +43,16 @@ interface IModStatus {
   installed: boolean | null;
 }
 
+interface INotchMetrics {
+  cameraWidth: number;
+  closedHeight: number;
+}
+
 interface ISessionSummary {
   conversationId: string;
   project: string;
+  workspace: string;
+  workspacePath: string | null;
   detail: string;
   status: "idle" | "working" | "waiting" | "done" | "error";
   lastActivityAt: string;
@@ -57,6 +66,8 @@ interface ISessionDetail extends ISessionSummary {
   events: AgentHaloEvent[];
 }
 
+type SessionEventRegistry = Record<string, AgentHaloEvent[]>;
+
 interface IStatusView {
   status: AgentHaloPresenceStatus | "stale";
   label: string;
@@ -64,19 +75,46 @@ interface IStatusView {
   staleForMs: number;
 }
 
-const notchPath = (width: number, height: number, topRadius = 8, bottomRadius = 10): string =>
-  [
-    "M 0 0",
-    `Q ${topRadius} 0 ${topRadius} ${topRadius}`,
-    `L ${topRadius} ${height - bottomRadius}`,
-    `Q ${topRadius} ${height} ${topRadius + bottomRadius} ${height}`,
-    `L ${width - topRadius - bottomRadius} ${height}`,
-    `Q ${width - topRadius} ${height} ${width - topRadius} ${height - bottomRadius}`,
-    `L ${width - topRadius} ${topRadius}`,
-    `Q ${width - topRadius} 0 ${width} 0`,
-    "Z",
-  ].join(" ");
+const isSessionEventRegistry = (value: unknown): value is SessionEventRegistry =>
+  typeof value === "object" &&
+  value !== null &&
+  !Array.isArray(value) &&
+  Object.values(value).every(
+    (events) =>
+      Array.isArray(events) &&
+      events.every(
+        (event) =>
+          typeof event === "object" &&
+          event !== null &&
+          typeof (event as AgentHaloEvent).id === "string" &&
+          typeof (event as AgentHaloEvent).timestamp === "string" &&
+          typeof (event as AgentHaloEvent).conversationId === "string",
+      ),
+  );
 
+const readSessionEventRegistry = (): SessionEventRegistry => {
+  try {
+    const raw = window.localStorage.getItem(SESSION_EVENTS_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return isSessionEventRegistry(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const writeSessionEventRegistry = (registry: SessionEventRegistry) => {
+  try {
+    window.localStorage.setItem(SESSION_EVENTS_STORAGE_KEY, JSON.stringify(registry));
+  } catch {
+    // Ignore storage errors; the in-memory registry still prevents SSE/recent-window churn.
+  }
+};
+
+const removeSessionFromRegistry = (registry: SessionEventRegistry, conversationId: string): SessionEventRegistry => {
+  const { [conversationId]: _removed, ...next } = registry;
+  return next;
+};
 
 const readDismissedSessionIds = (): Set<string> => {
   try {
@@ -84,7 +122,7 @@ const readDismissedSessionIds = (): Set<string> => {
     if (!raw) return new Set();
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return new Set();
-    return new Set(parsed.filter((item): item is string => typeof item === "string").slice(-MAX_DISMISSED_SESSION_IDS));
+    return new Set(parsed.filter((item): item is string => typeof item === "string"));
   } catch {
     return new Set();
   }
@@ -92,21 +130,11 @@ const readDismissedSessionIds = (): Set<string> => {
 
 const writeDismissedSessionIds = (ids: Set<string>) => {
   try {
-    const bounded = Array.from(ids).slice(-MAX_DISMISSED_SESSION_IDS);
-    window.localStorage.setItem(DISMISSED_SESSIONS_STORAGE_KEY, JSON.stringify(bounded));
+    window.localStorage.setItem(DISMISSED_SESSIONS_STORAGE_KEY, JSON.stringify(Array.from(ids)));
   } catch {
     // Ignore storage errors; dismissal still works for the current runtime session.
   }
 };
-
-const NotchShape = ({ children }: { children: ReactNode }) => (
-  <div className="notch" style={{ width: NOTCH_WIDTH, height: NOTCH_HEIGHT }}>
-    <svg className="notch-bg" width={NOTCH_WIDTH} height={NOTCH_HEIGHT} viewBox={`0 0 ${NOTCH_WIDTH} ${NOTCH_HEIGHT}`} aria-hidden="true">
-      <path d={notchPath(NOTCH_WIDTH, NOTCH_HEIGHT)} fill="#000" />
-    </svg>
-    <div className="notch-content">{children}</div>
-  </div>
-);
 
 const shortenPath = (path: string | null | undefined): string => {
   if (!path) return "No workspace";
@@ -121,6 +149,43 @@ const projectName = (path: string | null | undefined): string => {
   if (!path) return "Agent Halo";
   return path.split("/").filter(Boolean).at(-1) ?? "Agent Halo";
 };
+
+const isInternalWorkspacePath = (path: string | null | undefined): boolean => {
+  if (!path) return false;
+  return path.includes("/.letta/lc-local-backend/memfs/") || path.includes("/.letta/mod-cache/") || path.endsWith("/.letta/mods") || path.endsWith("/memory");
+};
+
+const getSessionWorkspacePath = (events: AgentHaloEvent[], fallbackPath?: string | null): string | null => {
+  const preferred = events.find((event) => event.cwd && !isInternalWorkspacePath(event.cwd));
+  if (preferred?.cwd) return preferred.cwd;
+  return fallbackPath && !isInternalWorkspacePath(fallbackPath) ? fallbackPath : null;
+};
+
+const isInternalOnlySession = (events: AgentHaloEvent[]): boolean =>
+  events.length > 0 && events.every((event) => !event.cwd || isInternalWorkspacePath(event.cwd));
+
+const sortEventsNewestFirst = (events: AgentHaloEvent[]): AgentHaloEvent[] =>
+  [...events].sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));
+
+const mergeSessionEvents = (current: SessionEventRegistry, incoming: AgentHaloEvent[]): SessionEventRegistry => {
+  if (incoming.length === 0) return current;
+
+  const next: SessionEventRegistry = { ...current };
+
+  for (const event of incoming) {
+    if (!event.conversationId) continue;
+    const existing = next[event.conversationId] ?? [];
+    const byId = new Map<string, AgentHaloEvent>();
+    for (const item of existing) byId.set(item.id, item);
+    byId.set(event.id, event);
+    next[event.conversationId] = sortEventsNewestFirst([...byId.values()]).slice(0, MAX_SESSION_EVENTS_PER_SESSION);
+  }
+
+  return next;
+};
+
+const flattenSessionEvents = (registry: SessionEventRegistry): AgentHaloEvent[] =>
+  sortEventsNewestFirst(Object.values(registry).flat());
 
 const formatTime = (timestamp: string | null): string => {
   if (!timestamp) return "—";
@@ -142,6 +207,8 @@ const getEventDetail = (event: AgentHaloEvent): string => {
       return `closed · ${event.data.reason}`;
     case "turn_start":
       return `turn · ${event.data.inputCount} input`;
+    case "turn_stop":
+      return event.data.message ? `done · ${event.data.message}` : "done";
     case "tool_start":
       return `tool · ${event.data.toolName}`;
     case "bridge_error":
@@ -183,6 +250,7 @@ const getGlyphStatus = (status: IStatusView["status"]): ISessionSummary["status"
 const getEventSessionStatus = (event: AgentHaloEvent): ISessionSummary["status"] => {
   switch (event.type) {
     case "conversation_close":
+    case "turn_stop":
       return "done";
     case "turn_start":
     case "tool_start":
@@ -200,6 +268,7 @@ const getEventSessionDetail = (event: AgentHaloEvent): string => {
       return event.data.toolName;
     case "turn_start":
       return "thinking";
+    case "turn_stop":
     case "conversation_close":
       return "done";
     case "bridge_error":
@@ -241,36 +310,58 @@ const createDemoEvent = (index: number): AgentHaloEvent => {
     case 3:
       return { ...base, type: "tool_start", data: { toolCallId: "demo-tool-2", toolName: "Agent", argKeys: ["prompt", "description"] } };
     default:
-      return { ...base, type: "conversation_close", data: { durationMs: 184000, messageCount: 14, reason: "quit", toolCallCount: 6 } };
+      return { ...base, type: "turn_stop", data: { hookEventName: "Stop", source: "hook", message: "ทำงานเสร็จแล้วค่ะ" } };
   }
 };
 
 const buildSessionSummaries = (events: AgentHaloEvent[], presence: IAgentHaloPresence, view: IStatusView): ISessionSummary[] => {
-  const sessions = new Map<string, ISessionSummary>();
+  const groupedEvents = new Map<string, AgentHaloEvent[]>();
 
   for (const event of events) {
-    if (!event.conversationId || sessions.has(event.conversationId)) continue;
-    sessions.set(event.conversationId, {
-      conversationId: event.conversationId,
-      project: projectName(event.cwd),
-      detail: getEventSessionDetail(event),
-      status: getEventSessionStatus(event),
-      lastActivityAt: event.timestamp,
+    if (!event.conversationId) continue;
+    const sessionEvents = groupedEvents.get(event.conversationId) ?? [];
+    sessionEvents.push(event);
+    groupedEvents.set(event.conversationId, sessionEvents);
+  }
+
+  const sessions = new Map<string, ISessionSummary>();
+
+  for (const [conversationId, sessionEvents] of groupedEvents) {
+    if (conversationId === "default" && isInternalOnlySession(sessionEvents)) continue;
+    const latestEvent = sessionEvents[0];
+    if (!latestEvent) continue;
+    const workspacePath = getSessionWorkspacePath(sessionEvents, latestEvent.cwd);
+    sessions.set(conversationId, {
+      conversationId,
+      project: projectName(workspacePath ?? latestEvent.cwd),
+      workspace: shortenPath(workspacePath ?? latestEvent.cwd),
+      workspacePath,
+      detail: getEventSessionDetail(latestEvent),
+      status: getEventSessionStatus(latestEvent),
+      lastActivityAt: latestEvent.timestamp,
     });
   }
 
   if (presence.conversationId) {
+    const sessionEvents = groupedEvents.get(presence.conversationId) ?? [];
+    const currentEvent = sessionEvents[0]
+      ? ({ ...sessionEvents[0], cwd: presence.cwd } satisfies AgentHaloEvent)
+      : null;
+    const workspacePath = getSessionWorkspacePath(currentEvent ? [currentEvent, ...sessionEvents] : sessionEvents, presence.cwd);
     sessions.set(presence.conversationId, {
       conversationId: presence.conversationId,
-      project: projectName(presence.cwd),
+      project: projectName(workspacePath ?? presence.cwd),
+      workspace: shortenPath(workspacePath ?? presence.cwd),
+      workspacePath,
       detail: presence.activeToolName ?? getStatusCopy(view).toLowerCase(),
       status: getGlyphStatus(view.status),
       lastActivityAt: presence.lastEventAt ?? new Date(0).toISOString(),
     });
   }
 
-  return [...sessions.values()].slice(0, 5);
+  return [...sessions.values()];
 };
+
 
 
 const buildSessionDetail = (
@@ -288,11 +379,12 @@ const buildSessionDetail = (
   const sessionEvents = events.filter((event) => event.conversationId === conversationId);
   const latestEvent = sessionEvents[0];
   const isCurrent = presence.conversationId === conversationId;
+  const workspacePath = summary.workspacePath ?? getSessionWorkspacePath(sessionEvents, latestEvent?.cwd);
 
   return {
     ...summary,
     agentName: (isCurrent ? presence.agentName : latestEvent?.agentName) ?? "Mahiro Code",
-    cwd: (isCurrent ? presence.cwd : latestEvent?.cwd) ?? "No workspace",
+    cwd: workspacePath ?? (isCurrent ? presence.cwd : latestEvent?.cwd) ?? "No workspace",
     model: (isCurrent ? presence.model : latestEvent?.model) ?? "Letta Code",
     permissionMode: (isCurrent ? presence.permissionMode : latestEvent?.permissionMode) ?? "—",
     detail: isCurrent ? presence.activeToolName ?? getStatusCopy(view).toLowerCase() : summary.detail,
@@ -308,6 +400,7 @@ const appendRecentEvent = (events: AgentHaloEvent[], event: AgentHaloEvent): Age
 const useAgentHaloPresence = () => {
   const [presence, setPresence] = useState<IAgentHaloPresence>(() => createInitialPresence());
   const [recentEvents, setRecentEvents] = useState<AgentHaloEvent[]>([]);
+  const [sessionEventRegistry, setSessionEventRegistry] = useState<SessionEventRegistry>(readSessionEventRegistry);
   const [capabilities, setCapabilities] = useState<IAgentHaloBridgeCapabilities>(() => createDefaultBridgeCapabilities());
   const [connection, setConnection] = useState<IConnectionState>({ status: "connecting", message: null });
   const [now, setNow] = useState(() => new Date());
@@ -333,6 +426,11 @@ const useAgentHaloPresence = () => {
         index += 1;
         setPresence((current) => reducePresence(current, event));
         setRecentEvents((current) => appendRecentEvent(current, event));
+        setSessionEventRegistry((current) => {
+          const next = mergeSessionEvents(current, [event]);
+          writeSessionEventRegistry(next);
+          return next;
+        });
       };
       pushDemoEvent();
       const timer = window.setInterval(pushDemoEvent, 1_600);
@@ -349,6 +447,11 @@ const useAgentHaloPresence = () => {
           if (Array.isArray(payload.recent)) {
             setPresence(payload.recent.reduce(applyEvent, createInitialPresence()));
             setRecentEvents(payload.recent.slice(-MAX_RECENT_EVENTS).reverse());
+            setSessionEventRegistry((current) => {
+              const next = mergeSessionEvents(current, payload.recent ?? []);
+              writeSessionEventRegistry(next);
+              return next;
+            });
           }
         }
       } catch {
@@ -388,12 +491,17 @@ const useAgentHaloPresence = () => {
         const event = JSON.parse(message.data) as AgentHaloEvent;
         setPresence((current) => reducePresence(current, event));
         setRecentEvents((current) => appendRecentEvent(current, event));
+        setSessionEventRegistry((current) => {
+          const next = mergeSessionEvents(current, [event]);
+          writeSessionEventRegistry(next);
+          return next;
+        });
       } catch {
         setConnection({ status: "error", message: "Received malformed bridge event" });
       }
     };
 
-    for (const type of ["bridge_ready", "conversation_open", "conversation_close", "turn_start", "tool_start", "bridge_error"]) {
+    for (const type of ["bridge_ready", "conversation_open", "conversation_close", "turn_start", "turn_stop", "tool_start", "bridge_error"]) {
       source.addEventListener(type, handleEvent as EventListener);
     }
 
@@ -416,18 +524,30 @@ const useAgentHaloPresence = () => {
   };
 
   const view = useMemo(() => getPresenceView(presence, { now, staleAfterMs: STALE_AFTER_MS }), [now, presence]);
+  const sessionEvents = useMemo(() => flattenSessionEvents(sessionEventRegistry), [sessionEventRegistry]);
+  const removeSessionEvents = (conversationId: string) => {
+    setSessionEventRegistry((current) => {
+      const next = removeSessionFromRegistry(current, conversationId);
+      writeSessionEventRegistry(next);
+      return next;
+    });
+  };
 
-  return { capabilities, connection, presence, recentEvents, refreshCapabilities, view };
+  return { capabilities, connection, presence, recentEvents, refreshCapabilities, removeSessionEvents, sessionEvents, view };
 };
 
 const App = () => {
-  const { capabilities, connection, presence, recentEvents, refreshCapabilities, view } = useAgentHaloPresence();
+  const { capabilities, connection, presence, recentEvents, refreshCapabilities, removeSessionEvents, sessionEvents, view } = useAgentHaloPresence();
   const [acknowledgedConversationId, setAcknowledgedConversationId] = useState<string | null>(null);
   const [nativeAction, setNativeAction] = useState<INativeActionState>({ bridgeOnline: null, message: null });
   const [panelOpen, setPanelOpen] = useState(DEMO_MODE);
+  const [renderPanel, setRenderPanel] = useState(DEMO_MODE);
+  const [hoverExpanded, setHoverExpanded] = useState(false);
+  const [hoverExpandSuppressed, setHoverExpandSuppressed] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [setupOpen, setSetupOpen] = useState(false);
   const [modStatus, setModStatus] = useState<IModStatus>({ path: null, installed: null });
+  const [notchMetrics, setNotchMetrics] = useState<INotchMetrics>({ cameraWidth: DEFAULT_CAMERA_NOTCH_WIDTH, closedHeight: DEFAULT_CLOSED_NOTCH_HEIGHT });
   const [dismissedSessionIds, setDismissedSessionIds] = useState<Set<string>>(readDismissedSessionIds);
   const displayView =
     view.status === "closed" && (acknowledgedConversationId === presence.conversationId || (presence.conversationId ? dismissedSessionIds.has(presence.conversationId) : false))
@@ -442,20 +562,37 @@ const App = () => {
   const model = presence.model?.split("/").slice(-1)[0] ?? "Letta Code";
   const sessions = useMemo(
     () =>
-      buildSessionSummaries(recentEvents, presence, displayView).filter(
+      buildSessionSummaries(sessionEvents, presence, displayView).filter(
         (session) =>
           !dismissedSessionIds.has(session.conversationId) ||
           (session.conversationId === presence.conversationId && !["idle", "closed"].includes(displayView.status)),
       ),
-    [dismissedSessionIds, displayView, presence.conversationId, presence, recentEvents],
+    [dismissedSessionIds, displayView, presence.conversationId, presence, sessionEvents],
   );
   const selectedSession = useMemo(
-    () => buildSessionDetail(selectedSessionId, sessions, recentEvents, presence, displayView),
-    [displayView, presence, recentEvents, selectedSessionId, sessions],
+    () => buildSessionDetail(selectedSessionId, sessions, sessionEvents, presence, displayView),
+    [displayView, presence, selectedSessionId, sessionEvents, sessions],
   );
   const headerLabel = setupOpen ? "Setup" : selectedSession ? selectedSession.project : sessions.length === 0 ? "Agent Halo" : sessions.length === 1 ? "1 session" : `${sessions.length} sessions`;
-  const pillDetail = presence.activeToolName ?? (displayView.status === "idle" ? project : getStatusCopy(displayView));
-  const shouldAutoOpen = ["thinking", "tool-running", "stale", "closed", "error"].includes(displayView.status);
+  const isWorkingActivity = displayView.status === "thinking" || displayView.status === "tool-running" || displayView.status === "stale";
+  const hasLiveActivity = isWorkingActivity || displayView.status === "closed" || Boolean(presence.activeToolName);
+  const pillDetail = (() => {
+    if (presence.activeToolName) return presence.activeToolName;
+    if (displayView.status === "thinking") return "Thinking";
+    if (displayView.status === "tool-running") return "Tool";
+    if (displayView.status === "stale") return "Still?";
+    if (displayView.status === "closed") return "Done";
+    return project;
+  })();
+  const closedSurfaceWidth = Math.round(notchMetrics.cameraWidth + (hasLiveActivity ? LIVE_ACTIVITY_WING_WIDTH * 2 : 0));
+  const closedSurfaceHeight = Math.round(notchMetrics.closedHeight);
+  const notchStyle = {
+    "--closed-width": `${closedSurfaceWidth}px`,
+    "--closed-height": `${closedSurfaceHeight}px`,
+    "--camera-width": `${Math.round(notchMetrics.cameraWidth)}px`,
+  } as CSSProperties & Record<"--closed-width" | "--closed-height" | "--camera-width", string>;
+  const shouldAutoOpen = displayView.status === "error";
+  const surfaceState = renderPanel ? (panelOpen ? "open" : "closing") : "closed";
   const setupGuidance = (() => {
     if (!canUseNativeControls) {
       return {
@@ -497,27 +634,96 @@ const App = () => {
 
   useEffect(() => {
     if (!canUseNativeControls) return;
-    void invoke("set_panel_open", {
-      open: panelOpen,
-      width: panelOpen ? PANEL_WINDOW_WIDTH : PILL_WINDOW_WIDTH,
-      height: panelOpen ? PANEL_WINDOW_HEIGHT : PILL_WINDOW_HEIGHT,
-    });
-  }, [canUseNativeControls, panelOpen]);
 
-  const togglePanel = () => setPanelOpen((open) => !open);
-  const collapsePanel = () => {
+    void invoke<[number, number]>("notch_metrics")
+      .then(([cameraWidth, closedHeight]) => {
+        setNotchMetrics({
+          cameraWidth: Number.isFinite(cameraWidth) ? cameraWidth : DEFAULT_CAMERA_NOTCH_WIDTH,
+          closedHeight: Number.isFinite(closedHeight) ? closedHeight : DEFAULT_CLOSED_NOTCH_HEIGHT,
+        });
+      })
+      .catch(() => {
+        setNotchMetrics({ cameraWidth: DEFAULT_CAMERA_NOTCH_WIDTH, closedHeight: DEFAULT_CLOSED_NOTCH_HEIGHT });
+      });
+  }, [canUseNativeControls]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const resizeNativePanel = async (open: boolean) => {
+      if (!canUseNativeControls) return;
+      await invoke("set_panel_open", {
+        open,
+        width: open ? PANEL_WINDOW_WIDTH : closedSurfaceWidth,
+        height: open ? PANEL_WINDOW_HEIGHT : closedSurfaceHeight,
+      });
+    };
+
+    if (panelOpen) {
+      void (async () => {
+        await resizeNativePanel(true);
+        if (!cancelled) setRenderPanel(true);
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (!renderPanel) {
+      void resizeNativePanel(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const timer = window.setTimeout(() => {
+      setRenderPanel(false);
+      void resizeNativePanel(false);
+    }, 220);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [canUseNativeControls, closedSurfaceHeight, closedSurfaceWidth, panelOpen, renderPanel]);
+
+  const closePanel = ({ suppressHover }: { suppressHover: boolean }) => {
+    setHoverExpanded(false);
+    if (suppressHover) setHoverExpandSuppressed(true);
     setSelectedSessionId(null);
     setSetupOpen(false);
     setPanelOpen(false);
   };
 
+  const openPanelExplicitly = () => {
+    setHoverExpanded(false);
+    setHoverExpandSuppressed(false);
+    setPanelOpen(true);
+  };
+
+  const expandPanelOnHover = () => {
+    if (renderPanel || panelOpen || hoverExpandSuppressed) return;
+    setHoverExpanded(true);
+    setPanelOpen(true);
+  };
+
+  const handleSurfaceMouseLeave = () => {
+    setHoverExpandSuppressed(false);
+    if (!hoverExpanded || shouldAutoOpen) return;
+    closePanel({ suppressHover: false });
+  };
+
+  const collapsePanel = () => closePanel({ suppressHover: true });
+
   const openSession = (conversationId: string) => {
+    setHoverExpanded(false);
     setSetupOpen(false);
     setSelectedSessionId(conversationId);
     setPanelOpen(true);
   };
 
   const openSetup = () => {
+    setHoverExpanded(false);
     setSelectedSessionId(null);
     setSetupOpen(true);
     setPanelOpen(true);
@@ -534,6 +740,7 @@ const App = () => {
       writeDismissedSessionIds(next);
       return next;
     });
+    removeSessionEvents(conversationId);
     if (conversationId === presence.conversationId) setAcknowledgedConversationId(conversationId);
     if (selectedSessionId === conversationId) setSelectedSessionId(null);
   };
@@ -582,7 +789,7 @@ const App = () => {
     try {
       const path = await invoke<string>("install_agent_halo_mod");
       setModStatus({ path, installed: true });
-      setNativeAction({ bridgeOnline: nativeAction.bridgeOnline, message: `Installed → ${shortenPath(path)}` });
+      setNativeAction({ bridgeOnline: nativeAction.bridgeOnline, message: `Installed → ${shortenPath(path)} · reload Letta Code` });
     } catch (error) {
       setNativeAction({
         bridgeOnline: nativeAction.bridgeOnline,
@@ -596,19 +803,36 @@ const App = () => {
   }, [setupOpen]);
 
   return (
-    <main className="overlay-root" data-status={displayView.status} data-tauri-drag-region>
-      <section className="notch-wrap" data-tauri-drag-region>
-        <button className="notch-button" type="button" onClick={togglePanel} data-tauri-drag-region="false" aria-label={panelOpen ? "Collapse Agent Halo" : "Open Agent Halo"}>
-          <NotchShape>
-          <div className="pill-content">
-            <StatusGlyph status={glyphStatus} />
-            <span className="pill-detail">{pillDetail}</span>
+    <main className="overlay-root" data-live={hasLiveActivity ? "true" : "false"} data-running={isWorkingActivity ? "true" : "false"} data-status={displayView.status}>
+      <section className={`notch-wrap ${panelOpen ? "is-open" : renderPanel ? "is-closing" : ""}`} style={notchStyle}>
+        <div
+          className="halo-surface"
+          data-state={surfaceState}
+          onMouseEnter={expandPanelOnHover}
+          onMouseLeave={handleSurfaceMouseLeave}
+          onClick={!renderPanel ? openPanelExplicitly : undefined}
+          onKeyDown={!renderPanel ? (event) => { if (event.key === "Enter" || event.key === " ") openPanelExplicitly(); } : undefined}
+          role={!renderPanel ? "button" : undefined}
+          tabIndex={!renderPanel ? 0 : undefined}
+          aria-label={!renderPanel ? "Open Agent Halo" : undefined}
+          data-tauri-drag-region="false"
+        >
+          <div className="surface-pill" aria-hidden={surfaceState === "open"}>
+            <div className="notch-wing notch-wing-left">
+              {hasLiveActivity ? (
+                <>
+                  <StatusGlyph status={glyphStatus} />
+                  <span className="pill-detail">{pillDetail}</span>
+                </>
+              ) : null}
+            </div>
+            <div className="camera-spacer" aria-hidden="true" />
+            <div className="notch-wing notch-wing-right" aria-hidden="true">
+              {hasLiveActivity ? <span className="activity-bars"><span /><span /><span /></span> : null}
+            </div>
           </div>
-          </NotchShape>
-        </button>
 
-        {panelOpen ? <div className="sheet view-panel docked" data-tauri-drag-region>
-          <div className="sheet-inner">
+          {renderPanel ? <div className="sheet-inner">
             {setupOpen ? (
               <div className="sheet-header detail-header" data-tauri-drag-region="false">
                 <button className="gear-btn" type="button" onClick={backToSessions} data-tauri-drag-region="false" title="Back to sessions">
@@ -737,9 +961,12 @@ const App = () => {
                       <li className={`session-row ${session.status === "done" ? "ended" : ""}`} key={session.conversationId} title={session.conversationId} onClick={() => openSession(session.conversationId)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") openSession(session.conversationId); }} role="button" tabIndex={0}>
                         <StatusGlyph status={session.status} />
                         <span className="session-label">
-                          <span className="agent-badge">LC</span>
-                          <span className="session-project">{session.project}</span>
-                          <span className="session-meta">{session.detail}</span>
+                          <span className="session-main-line">
+                            <span className="agent-badge">LC</span>
+                            <span className="session-project">{session.project}</span>
+                            <span className="session-meta">{session.detail}</span>
+                          </span>
+                          <span className="session-folder">{session.workspace}</span>
                         </span>
                         <span className="spacer" />
                         <span className="session-time">{formatTime(session.lastActivityAt)}</span>
@@ -776,39 +1003,37 @@ const App = () => {
               )}
             </div>
 
-            <div className="sheet-footer">
-              <span className="footer-meta">{workspace} · {model}</span>
-              <span className="spacer" />
-              {setupOpen ? (
-                <div className="footer-actions">
-                  <button className="pill-btn" type="button" onClick={backToSessions} data-tauri-drag-region="false">
-                    Sessions
-                  </button>
-                </div>
-              ) : selectedSession ? (
-                <div className="footer-actions">
-                  {selectedSession.status === "done" ? (
-                    <button className="pill-btn danger" type="button" onClick={() => dismissSession(selectedSession.conversationId)} data-tauri-drag-region="false">
-                      Dismiss
+            {(setupOpen || selectedSession || (displayView.status === "closed" && acknowledgedConversationId !== presence.conversationId)) ? (
+              <div className="sheet-footer">
+                <span className="footer-meta">{workspace} · {model}</span>
+                <span className="spacer" />
+                {setupOpen ? (
+                  <div className="footer-actions">
+                    <button className="pill-btn" type="button" onClick={backToSessions} data-tauri-drag-region="false">
+                      Sessions
                     </button>
-                  ) : null}
-                  <button className="pill-btn" type="button" onClick={backToSessions} data-tauri-drag-region="false">
-                    Sessions
+                  </div>
+                ) : selectedSession ? (
+                  <div className="footer-actions">
+                    {selectedSession.status === "done" ? (
+                      <button className="pill-btn danger" type="button" onClick={() => dismissSession(selectedSession.conversationId)} data-tauri-drag-region="false">
+                        Dismiss
+                      </button>
+                    ) : null}
+                    <button className="pill-btn" type="button" onClick={backToSessions} data-tauri-drag-region="false">
+                      Sessions
+                    </button>
+                  </div>
+                ) : null}
+                {displayView.status === "closed" && acknowledgedConversationId !== presence.conversationId ? (
+                  <button className="pill-btn accent" type="button" onClick={(event) => { event.stopPropagation(); acknowledgeDone(); }} data-tauri-drag-region="false">
+                    Acknowledge
                   </button>
-                </div>
-              ) : (
-                <button className="pill-btn" type="button" onClick={(event) => { event.stopPropagation(); openSetup(); }} data-tauri-drag-region="false">
-                  Setup
-                </button>
-              )}
-              {displayView.status === "closed" && acknowledgedConversationId !== presence.conversationId ? (
-                <button className="pill-btn accent" type="button" onClick={(event) => { event.stopPropagation(); acknowledgeDone(); }} data-tauri-drag-region="false">
-                  Acknowledge
-                </button>
-              ) : null}
-            </div>
-          </div>
-        </div> : null}
+                ) : null}
+              </div>
+            ) : null}
+          </div> : null}
+        </div>
       </section>
     </main>
   );

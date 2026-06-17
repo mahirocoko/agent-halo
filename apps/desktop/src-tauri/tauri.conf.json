@@ -14,8 +14,8 @@
       {
         "label": "main",
         "title": "Agent Halo",
-        "width": 272,
-        "height": 64,
+        "width": 460,
+        "height": 42,
         "resizable": false,
         "fullscreen": false,
         "decorations": false,
@@ -33,8 +33,10 @@
     "macOSPrivateApi": true
   },
   "bundle": {
-    "active": false,
-    "targets": "all",
+    "active": true,
+    "targets": [
+      "app"
+    ],
     "icon": []
   }
 }
