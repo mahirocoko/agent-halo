@@ -28,6 +28,7 @@ const PANEL_WINDOW_WIDTH = 560;
 const PANEL_WINDOW_HEIGHT = 440;
 const ACTIVITY_COLLAPSE_MS = 220;
 const DISMISSED_SESSIONS_STORAGE_KEY = "agent-halo.dismissed-sessions";
+const DELETED_SESSIONS_STORAGE_KEY = "agent-halo.deleted-sessions";
 const SESSION_EVENTS_STORAGE_KEY = "agent-halo.session-events";
 
 interface IConnectionState {
@@ -75,6 +76,7 @@ interface ISessionDetail extends ISessionSummary {
 
 type SessionEventRegistry = Record<string, AgentHaloEvent[]>;
 type DismissedSessionRegistry = Record<string, number>;
+type DeletedSessionRegistry = Record<string, number>;
 
 const estimateLiveActivityWingWidth = (label: string): number => {
   const textWidth = Math.ceil(label.length * 5.6);
@@ -149,6 +151,28 @@ const writeDismissedSessionIds = (registry: DismissedSessionRegistry) => {
   }
 };
 
+const readDeletedSessionIds = (): DeletedSessionRegistry => {
+  try {
+    const raw = window.localStorage.getItem(DELETED_SESSIONS_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed).filter((entry): entry is [string, number] => typeof entry[0] === "string" && typeof entry[1] === "number"),
+    );
+  } catch {
+    return {};
+  }
+};
+
+const writeDeletedSessionIds = (registry: DeletedSessionRegistry) => {
+  try {
+    window.localStorage.setItem(DELETED_SESSIONS_STORAGE_KEY, JSON.stringify(registry));
+  } catch {
+    // Ignore storage errors; the deleted tombstone still works for the current runtime session.
+  }
+};
+
 const isDismissedAfter = (registry: DismissedSessionRegistry, conversationId: string | null | undefined, latestEventAt: string | null | undefined): boolean => {
   if (!conversationId || !latestEventAt) return false;
   const dismissedAt = registry[conversationId];
@@ -156,6 +180,15 @@ const isDismissedAfter = (registry: DismissedSessionRegistry, conversationId: st
   const latestEventMs = Date.parse(latestEventAt);
   if (!Number.isFinite(latestEventMs)) return false;
   return dismissedAt >= latestEventMs;
+};
+
+const isDeletedAfter = (registry: DeletedSessionRegistry, conversationId: string | null | undefined, latestEventAt: string | null | undefined): boolean => {
+  if (!conversationId || !latestEventAt) return false;
+  const deletedAt = registry[conversationId];
+  if (typeof deletedAt !== "number") return false;
+  const latestEventMs = Date.parse(latestEventAt);
+  if (!Number.isFinite(latestEventMs)) return false;
+  return deletedAt >= latestEventMs;
 };
 
 const shortenPath = (path: string | null | undefined): string => {
@@ -549,11 +582,11 @@ const useAgentHaloPresence = () => {
 
   const view = useMemo(() => getPresenceView(presence, { now, staleAfterMs: STALE_AFTER_MS }), [now, presence]);
   const sessionEvents = useMemo(() => flattenSessionEvents(sessionEventRegistry), [sessionEventRegistry]);
-  return { capabilities, connection, lastLiveEvent, now, presence, recentEvents, refreshCapabilities, sessionEvents, view };
+  return { capabilities, connection, lastLiveEvent, now, presence, recentEvents, refreshCapabilities, sessionEvents, setSessionEventRegistry, view };
 };
 
 const App = () => {
-  const { capabilities, connection, lastLiveEvent, now, presence, recentEvents, refreshCapabilities, sessionEvents, view } = useAgentHaloPresence();
+  const { capabilities, connection, lastLiveEvent, now, presence, recentEvents, refreshCapabilities, sessionEvents, setSessionEventRegistry, view } = useAgentHaloPresence();
   const [acknowledgedConversationId, setAcknowledgedConversationId] = useState<string | null>(null);
   const [nativeAction, setNativeAction] = useState<INativeActionState>({ bridgeOnline: null, message: null });
   const [sessionAction, setSessionAction] = useState<ISessionActionState>({ ok: null, message: null });
@@ -567,8 +600,10 @@ const App = () => {
   const [notchMetrics, setNotchMetrics] = useState<INotchMetrics>({ cameraWidth: DEFAULT_CAMERA_NOTCH_WIDTH, closedHeight: DEFAULT_CLOSED_NOTCH_HEIGHT });
   const [nativeClosedSurfaceWidth, setNativeClosedSurfaceWidth] = useState(DEFAULT_CAMERA_NOTCH_WIDTH);
   const [dismissedSessionIds, setDismissedSessionIds] = useState<DismissedSessionRegistry>(readDismissedSessionIds);
+  const [deletedSessionIds, setDeletedSessionIds] = useState<DeletedSessionRegistry>(readDeletedSessionIds);
   const displayView =
-    view.status === "closed" && (acknowledgedConversationId === presence.conversationId || isDismissedAfter(dismissedSessionIds, presence.conversationId, presence.lastEventAt))
+    isDeletedAfter(deletedSessionIds, presence.conversationId, presence.lastEventAt) ||
+    (view.status === "closed" && (acknowledgedConversationId === presence.conversationId || isDismissedAfter(dismissedSessionIds, presence.conversationId, presence.lastEventAt)))
       ? ({ ...view, status: "idle", label: "idle" } satisfies IStatusView)
       : view;
   const canUseNativeControls = typeof window.__TAURI_INTERNALS__ !== "undefined";
@@ -581,10 +616,11 @@ const App = () => {
     () =>
       buildSessionSummaries(sessionEvents, presence, now).filter(
         (session) =>
-          !isDismissedAfter(dismissedSessionIds, session.conversationId, session.lastActivityAt) ||
-          (session.conversationId === presence.conversationId && !["idle", "closed"].includes(displayView.status)),
+          !isDeletedAfter(deletedSessionIds, session.conversationId, session.lastActivityAt) &&
+          (!isDismissedAfter(dismissedSessionIds, session.conversationId, session.lastActivityAt) ||
+            (session.conversationId === presence.conversationId && !["idle", "closed"].includes(displayView.status))),
       ),
-    [dismissedSessionIds, displayView.status, now, presence, sessionEvents],
+    [deletedSessionIds, dismissedSessionIds, displayView.status, now, presence, sessionEvents],
   );
   const selectedSession = useMemo(
     () => buildSessionDetail(selectedSessionId, sessions, sessionEvents, presence),
@@ -607,6 +643,14 @@ const App = () => {
       if (typeof current[conversationId] !== "number" || isDismissedAfter(current, conversationId, lastLiveEvent.timestamp)) return current;
       const { [conversationId]: _removed, ...next } = current;
       writeDismissedSessionIds(next);
+      return next;
+    });
+
+    setDeletedSessionIds((current) => {
+      const conversationId = lastLiveEvent.conversationId ?? "";
+      if (typeof current[conversationId] !== "number" || isDeletedAfter(current, conversationId, lastLiveEvent.timestamp)) return current;
+      const { [conversationId]: _removed, ...next } = current;
+      writeDeletedSessionIds(next);
       return next;
     });
   }, [lastLiveEvent]);
@@ -808,6 +852,28 @@ const App = () => {
       return next;
     });
     if (conversationId === presence.conversationId) setAcknowledgedConversationId(conversationId);
+    if (selectedSessionId === conversationId) setSelectedSessionId(null);
+  };
+
+  const deleteSession = (conversationId: string) => {
+    setSessionAction({ ok: null, message: null });
+    setSessionEventRegistry((current) => {
+      const { [conversationId]: _removed, ...next } = current;
+      writeSessionEventRegistry(next);
+      return next;
+    });
+    setDismissedSessionIds((current) => {
+      if (typeof current[conversationId] !== "number") return current;
+      const { [conversationId]: _removed, ...next } = current;
+      writeDismissedSessionIds(next);
+      return next;
+    });
+    setDeletedSessionIds((current) => {
+      const next = { ...current, [conversationId]: Date.now() };
+      writeDeletedSessionIds(next);
+      return next;
+    });
+    if (conversationId === acknowledgedConversationId) setAcknowledgedConversationId(null);
     if (selectedSessionId === conversationId) setSelectedSessionId(null);
   };
 
@@ -1016,7 +1082,7 @@ const App = () => {
                   </div>
                   <div className="detail-path" title={selectedSession.cwd}>{shortenPath(selectedSession.cwd)}</div>
                   {canUseNativeControls ? (
-                    <div className="capability-note">Focus activates Ghostty; exact tab needs title/tmux mapping</div>
+                    <div className="capability-note">Focus matches Ghostty terminal cwd/title and selects its tab</div>
                   ) : (
                     <div className="capability-note">Focus needs the desktop runtime</div>
                   )}
@@ -1115,6 +1181,9 @@ const App = () => {
                         Dismiss
                       </button>
                     ) : null}
+                    <button className="pill-btn danger" type="button" onClick={() => deleteSession(selectedSession.conversationId)} data-tauri-drag-region="false" title="Delete stuck session locally">
+                      Delete
+                    </button>
                     <button className="pill-btn" type="button" onClick={backToSessions} data-tauri-drag-region="false">
                       Sessions
                     </button>

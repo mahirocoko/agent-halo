@@ -21,7 +21,7 @@ Mahiro accepted Notchcode v1 as a read-only + dismiss + setup/control-plane surf
 | Setup boundary regression | `apps/desktop/tests/demo-setup.spec.ts` verifies browser demo does not fake native install/check behavior or focus/end controls. | Covered |
 | Capability-aware bridge | `packages/protocol/src/index.ts` defines bridge capabilities; `/health` and `/snapshot` include them from `mods/agent-halo.js`. | Done |
 | No fake focus/end | Bridge-level `focusTerminal` / `endSession` remain false; desktop labels Ghostty focus as a native fallback, not exact session/process control. | Done |
-| Ghostty focus fallback | Desktop detail view can activate Ghostty and attempt title-based window raise, then falls back to app activation. Exact pane focus still needs title/tmux metadata. | Partial |
+| Ghostty focus fallback | Desktop detail view uses Ghostty's scripting dictionary to match terminal cwd/title/id, select the owning tab, and focus the terminal. It falls back to app activation when no terminal match is found. | Done |
 | Real end session action | Needs a real Letta session/process capability before exposing controls. | Post-v1 |
 
 ## Focus/end capability evidence

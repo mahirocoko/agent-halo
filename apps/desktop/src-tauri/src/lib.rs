@@ -82,7 +82,7 @@ fn focus_ghostty_window(conversation_id: &str, cwd: Option<&str>) -> Result<Stri
         .map_err(|error| format!("Failed to launch Ghostty: {error}"))?;
 
     if output.status.success() {
-        return Ok("Activated Ghostty · exact tab needs title/tmux mapping".to_string());
+        return Ok("Activated Ghostty · exact terminal not found".to_string());
     }
 
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
@@ -135,7 +135,7 @@ fn focus_ghostty_with_window_hints(hints: &[String]) -> Result<String, String> {
     if stdout.strip_prefix("matched:").is_some() {
         Ok(format!("Focused Ghostty · {}", stdout.trim_start_matches("matched:")))
     } else {
-        Ok("Activated Ghostty · exact tab not found".to_string())
+        Ok("Activated Ghostty · exact terminal not found".to_string())
     }
 }
 
@@ -154,24 +154,32 @@ fn build_focus_ghostty_script(hints: &[String]) -> String {
 
     format!(
         r#"set matchHints to {hints_source}
-tell application "Ghostty" to activate
-delay 0.05
-tell application "System Events"
-  if exists process "Ghostty" then
-    tell process "Ghostty"
-      set frontmost to true
-      repeat with candidateWindow in windows
-        set candidateTitle to name of candidateWindow as text
+tell application "Ghostty"
+  repeat with candidateWindow in windows
+    set windowTitle to name of candidateWindow as text
+    set windowId to id of candidateWindow as text
+    repeat with candidateTab in tabs of candidateWindow
+      set tabTitle to name of candidateTab as text
+      set tabId to id of candidateTab as text
+      repeat with candidateTerminal in terminals of candidateTab
+        set terminalTitle to name of candidateTerminal as text
+        set terminalId to id of candidateTerminal as text
+        set terminalCwd to working directory of candidateTerminal as text
         repeat with matchHint in matchHints
           set hintText to matchHint as text
-          if hintText is not "" and candidateTitle contains hintText then
-            perform action "AXRaise" of candidateWindow
-            return "matched:" & candidateTitle
+          if hintText is not "" then
+            if terminalCwd is hintText or terminalCwd contains hintText or terminalTitle contains hintText or tabTitle contains hintText or windowTitle contains hintText or terminalId is hintText or tabId is hintText or windowId is hintText then
+              select tab candidateTab
+              focus candidateTerminal
+              activate window candidateWindow
+              return "matched:" & terminalCwd & " · " & terminalTitle
+            end if
           end if
         end repeat
       end repeat
-    end tell
-  end if
+    end repeat
+  end repeat
+  activate
 end tell
 return "activated"
 "#
