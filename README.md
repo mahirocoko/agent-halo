@@ -2,6 +2,10 @@
 
 Agent Halo is a native presence layer for Letta Code: a trusted Letta mod emits normalized local events, and a desktop halo can render agent activity without scraping terminal output or transcripts.
 
+<p align="center">
+  <img src="apps/desktop/assets/agent-halo-app-icon.png" alt="Agent Halo app icon" width="128" height="128" />
+</p>
+
 ## Current shape
 
 This repository starts contract-first:
@@ -65,7 +69,7 @@ For a local app install:
 
 ```bash
 pnpm desktop:install
-open ~/Applications/Agent\ Halo.app
+open /Applications/Agent\ Halo.app
 ```
 
 The desktop app can install or reinstall the Letta mod from Setup. After the first mod install, reload or restart Letta Code so it loads `~/.letta/mods/agent-halo.js`; once loaded, the app can reconnect/check bridge state from Setup.
@@ -81,7 +85,7 @@ Browser demo mode intentionally guards native-only buttons. Use `pnpm desktop:de
 
 Current desktop behavior:
 
-- renders a Notchcode-inspired black hardware notch, click-to-expand dropped sheet, compact session rows, session drill-down, dismiss controls for ended sessions, compact capability-aware setup view with real mod install status and next-step guidance, and recent-event timeline
+- renders a Notchcode-inspired black hardware notch, hover-driven dropped sheet, compact workspace-grouped session rows, session drill-down, inline focus/dismiss/delete controls, compact capability-aware setup view with real mod install status and next-step guidance, and recent-event timeline
 - reads macOS notch metrics when available so the idle surface can match the physical camera notch instead of a generic floating pill
 - shows live activity as compact left/right wings around an empty camera center for thinking, tool-running, stale, and done states; error remains the stronger auto-open state
 - lets CSS animate live activity wings back to the idle camera notch before shrinking the native Tauri/AppKit window, avoiding clipped collapse transitions

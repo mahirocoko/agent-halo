@@ -37,6 +37,8 @@
     "targets": [
       "app"
     ],
-    "icon": []
+    "icon": [
+      "icons/icon.icns"
+    ]
   }
 }

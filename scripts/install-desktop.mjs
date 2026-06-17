@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, cpSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -8,8 +8,9 @@ const root = resolve(new URL("..", import.meta.url).pathname);
 const appName = "Agent Halo.app";
 const builtApp = join(root, "apps/desktop/src-tauri/target/release/bundle/macos", appName);
 const fallbackApp = join(root, "apps/desktop/src-tauri/target/release", appName);
-const installDir = process.env.AGENT_HALO_INSTALL_DIR || join(homedir(), "Applications");
+const installDir = process.env.AGENT_HALO_INSTALL_DIR || "/Applications";
 const installPath = join(installDir, appName);
+const userApplicationsPath = join(homedir(), "Applications", appName);
 
 const run = (command, args) => {
   const result = spawnSync(command, args, { cwd: root, stdio: "inherit" });
@@ -24,8 +25,34 @@ if (!existsSync(sourceApp)) {
   process.exit(1);
 }
 
-rmSync(installPath, { recursive: true, force: true });
-cpSync(sourceApp, installPath, { recursive: true });
+try {
+  mkdirSync(installDir, { recursive: true });
+  rmSync(installPath, { recursive: true, force: true });
+  cpSync(sourceApp, installPath, { recursive: true });
+} catch (error) {
+  console.error(`Failed to install ${appName} → ${installPath}`);
+  console.error(error instanceof Error ? error.message : error);
+  if (!process.env.AGENT_HALO_INSTALL_DIR && installDir === "/Applications") {
+    console.error(
+      `If /Applications is not writable from your shell, rerun with AGENT_HALO_INSTALL_DIR=${join(
+        homedir(),
+        "Applications",
+      )} pnpm desktop:install`,
+    );
+  }
+  process.exit(1);
+}
+rmSync(sourceApp, { recursive: true, force: true });
+if (installPath !== userApplicationsPath) {
+  rmSync(userApplicationsPath, { recursive: true, force: true });
+}
+
+spawnSync(
+  "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
+  ["-f", installPath],
+  { stdio: "ignore" },
+);
+spawnSync("mdimport", [installPath], { stdio: "ignore" });
 
 console.log(`Installed ${appName} → ${installPath}`);
 console.log("Open it, then use Setup → Install/Reinstall to install the Letta mod if needed.");

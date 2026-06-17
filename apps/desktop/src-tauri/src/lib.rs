@@ -406,7 +406,7 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
     let menu = Menu::with_items(app, &[&show, &hide, &separator, &quit])?;
     TrayIconBuilder::with_id("agent-halo")
         .tooltip("Agent Halo")
-        .icon(tauri::include_image!("icons/icon.png"))
+        .icon(tauri::include_image!("icons/tray-icon.png"))
         .icon_as_template(true)
         .menu(&menu)
         .show_menu_on_left_click(false)

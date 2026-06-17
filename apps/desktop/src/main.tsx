@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createRoot } from "react-dom/client";
 import {
   createDefaultBridgeCapabilities,
@@ -27,6 +27,12 @@ const PILL_WINDOW_HEIGHT = 42;
 const PANEL_WINDOW_WIDTH = 560;
 const PANEL_WINDOW_HEIGHT = 440;
 const ACTIVITY_COLLAPSE_MS = 220;
+const HOVER_OPEN_DELAY_MS = 24;
+const HOVER_CLOSE_DELAY_MS = 170;
+const CLOSED_TOP_SHOULDER_RADIUS = 11;
+const OPEN_TOP_SHOULDER_RADIUS = 19;
+const CLOSED_BOTTOM_RADIUS = 15;
+const PANEL_BOTTOM_RADIUS = 22;
 const DISMISSED_SESSIONS_STORAGE_KEY = "agent-halo.dismissed-sessions";
 const DELETED_SESSIONS_STORAGE_KEY = "agent-halo.deleted-sessions";
 const SESSION_EVENTS_STORAGE_KEY = "agent-halo.session-events";
@@ -74,6 +80,18 @@ interface ISessionDetail extends ISessionSummary {
   events: AgentHaloEvent[];
 }
 
+interface IWorkspaceSessionGroup {
+  key: string;
+  project: string;
+  workspace: string;
+  workspacePath: string | null;
+  status: ISessionSummary["status"];
+  detail: string;
+  lastActivityAt: string;
+  primarySession: ISessionSummary;
+  sessions: ISessionSummary[];
+}
+
 type SessionEventRegistry = Record<string, AgentHaloEvent[]>;
 type DismissedSessionRegistry = Record<string, number>;
 type DeletedSessionRegistry = Record<string, number>;
@@ -82,6 +100,27 @@ const estimateLiveActivityWingWidth = (label: string): number => {
   const textWidth = Math.ceil(label.length * 5.6);
   return Math.min(MAX_LIVE_ACTIVITY_WING_WIDTH, Math.max(MIN_LIVE_ACTIVITY_WING_WIDTH, LIVE_ACTIVITY_TEXT_WIDTH_BUFFER + textWidth));
 };
+
+const buildNotchShapePath = (width: number, height: number, topRadius: number, bottomRadius: number): string => {
+  const safeWidth = Math.max(1, width);
+  const safeHeight = Math.max(1, height);
+  const top = Math.min(Math.max(0, topRadius), safeWidth / 2, safeHeight / 2);
+  const bottom = Math.min(Math.max(0, bottomRadius), safeWidth / 2, safeHeight / 2);
+
+  return [
+    `M 0 0`,
+    `Q ${top} 0 ${top} ${top}`,
+    `L ${top} ${safeHeight - bottom}`,
+    `Q ${top} ${safeHeight} ${top + bottom} ${safeHeight}`,
+    `L ${safeWidth - top - bottom} ${safeHeight}`,
+    `Q ${safeWidth - top} ${safeHeight} ${safeWidth - top} ${safeHeight - bottom}`,
+    `L ${safeWidth - top} ${top}`,
+    `Q ${safeWidth - top} 0 ${safeWidth} 0`,
+    "Z",
+  ].join(" ");
+};
+
+const waitForNextPaint = () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
 
 interface IStatusView {
   status: AgentHaloPresenceStatus | "stale";
@@ -331,6 +370,61 @@ const getEventSessionDetail = (event: AgentHaloEvent): string => {
     default:
       return "idle";
   }
+};
+
+const sessionStatusPriority: Record<ISessionSummary["status"], number> = {
+  error: 5,
+  working: 4,
+  waiting: 3,
+  done: 2,
+  idle: 1,
+};
+
+const compareSessionsByActivity = (a: ISessionSummary, b: ISessionSummary): number => Date.parse(b.lastActivityAt) - Date.parse(a.lastActivityAt);
+
+const getWorkspaceGroupKey = (session: ISessionSummary): string => session.workspacePath ? `cwd:${session.workspacePath}` : `session:${session.conversationId}`;
+
+const buildWorkspaceSessionGroups = (sessions: ISessionSummary[]): IWorkspaceSessionGroup[] => {
+  const grouped = new Map<string, ISessionSummary[]>();
+
+  for (const session of sessions) {
+    const key = getWorkspaceGroupKey(session);
+    grouped.set(key, [...(grouped.get(key) ?? []), session]);
+  }
+
+  return [...grouped.entries()]
+    .map(([key, groupSessions]) => {
+      const sortedSessions = [...groupSessions].sort((a, b) => {
+        const statusDelta = sessionStatusPriority[b.status] - sessionStatusPriority[a.status];
+        return statusDelta !== 0 ? statusDelta : compareSessionsByActivity(a, b);
+      });
+      const primarySession = sortedSessions[0];
+      const latestSession = [...groupSessions].sort(compareSessionsByActivity)[0] ?? primarySession;
+      const status = primarySession.status;
+      const activeCount = groupSessions.filter((session) => session.status === "working" || session.status === "waiting").length;
+      const doneCount = groupSessions.filter((session) => session.status === "done").length;
+      const detail = activeCount > 0
+        ? `${activeCount} active · ${groupSessions.length} sessions`
+        : doneCount === groupSessions.length
+          ? `${doneCount} done sessions`
+          : `${groupSessions.length} sessions`;
+
+      return {
+        key,
+        project: primarySession.project,
+        workspace: primarySession.workspace,
+        workspacePath: primarySession.workspacePath,
+        status,
+        detail,
+        lastActivityAt: latestSession.lastActivityAt,
+        primarySession,
+        sessions: groupSessions.sort(compareSessionsByActivity),
+      } satisfies IWorkspaceSessionGroup;
+    })
+    .sort((a, b) => {
+      const statusDelta = sessionStatusPriority[b.status] - sessionStatusPriority[a.status];
+      return statusDelta !== 0 ? statusDelta : Date.parse(b.lastActivityAt) - Date.parse(a.lastActivityAt);
+    });
 };
 
 const StatusGlyph = ({ status }: { status: ISessionSummary["status"] }) => {
@@ -592,7 +686,6 @@ const App = () => {
   const [sessionAction, setSessionAction] = useState<ISessionActionState>({ ok: null, message: null });
   const [panelOpen, setPanelOpen] = useState(DEMO_MODE);
   const [renderPanel, setRenderPanel] = useState(DEMO_MODE);
-  const [hoverExpanded, setHoverExpanded] = useState(false);
   const [hoverExpandSuppressed, setHoverExpandSuppressed] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [setupOpen, setSetupOpen] = useState(false);
@@ -601,6 +694,9 @@ const App = () => {
   const [nativeClosedSurfaceWidth, setNativeClosedSurfaceWidth] = useState(DEFAULT_CAMERA_NOTCH_WIDTH);
   const [dismissedSessionIds, setDismissedSessionIds] = useState<DismissedSessionRegistry>(readDismissedSessionIds);
   const [deletedSessionIds, setDeletedSessionIds] = useState<DeletedSessionRegistry>(readDeletedSessionIds);
+  const surfaceRef = useRef<HTMLDivElement | null>(null);
+  const hoverOpenTimerRef = useRef<number | null>(null);
+  const hoverCloseTimerRef = useRef<number | null>(null);
   const displayView =
     isDeletedAfter(deletedSessionIds, presence.conversationId, presence.lastEventAt) ||
     (view.status === "closed" && (acknowledgedConversationId === presence.conversationId || isDismissedAfter(dismissedSessionIds, presence.conversationId, presence.lastEventAt)))
@@ -626,6 +722,7 @@ const App = () => {
     () => buildSessionDetail(selectedSessionId, sessions, sessionEvents, presence),
     [presence, selectedSessionId, sessionEvents, sessions],
   );
+  const sessionGroups = useMemo(() => buildWorkspaceSessionGroups(sessions), [sessions]);
 
   useEffect(() => {
     if (!presence.conversationId) return;
@@ -654,7 +751,15 @@ const App = () => {
       return next;
     });
   }, [lastLiveEvent]);
-  const headerLabel = setupOpen ? "Setup" : selectedSession ? selectedSession.project : sessions.length === 0 ? "Agent Halo" : sessions.length === 1 ? "1 session" : `${sessions.length} sessions`;
+  const headerLabel = setupOpen
+    ? "Setup"
+    : selectedSession
+      ? selectedSession.project
+      : sessionGroups.length === 0
+        ? "Agent Halo"
+        : sessionGroups.length === 1
+          ? sessionGroups[0].sessions.length === 1 ? "1 session" : `${sessionGroups[0].sessions.length} sessions`
+          : `${sessionGroups.length} workspaces`;
   const activitySession =
     sessions.find((session) => session.status === "working") ??
     sessions.find((session) => session.status === "waiting") ??
@@ -689,6 +794,10 @@ const App = () => {
   } as CSSProperties & Record<"--closed-width" | "--closed-height" | "--camera-width" | "--pill-text-width", string>;
   const shouldAutoOpen = activityStatus === "error";
   const surfaceState = renderPanel ? (panelOpen ? "open" : "closing") : "closed";
+  const shapeMetrics = surfaceState === "open"
+    ? { width: PANEL_WINDOW_WIDTH, height: PANEL_WINDOW_HEIGHT, topRadius: OPEN_TOP_SHOULDER_RADIUS, bottomRadius: PANEL_BOTTOM_RADIUS }
+    : { width: closedSurfaceWidth, height: closedSurfaceHeight, topRadius: CLOSED_TOP_SHOULDER_RADIUS, bottomRadius: CLOSED_BOTTOM_RADIUS };
+  const notchShapePath = buildNotchShapePath(shapeMetrics.width, shapeMetrics.height, shapeMetrics.topRadius, shapeMetrics.bottomRadius);
   const setupGuidance = (() => {
     if (!canUseNativeControls) {
       return {
@@ -772,6 +881,8 @@ const App = () => {
     if (panelOpen) {
       void (async () => {
         await resizeNativePanel(true);
+        await waitForNextPaint();
+        await waitForNextPaint();
         if (!cancelled) setRenderPanel(true);
       })();
       return () => {
@@ -797,36 +908,86 @@ const App = () => {
     };
   }, [canUseNativeControls, closedSurfaceHeight, nativeClosedSurfaceWidth, panelOpen, renderPanel]);
 
+  useEffect(
+    () => () => {
+      if (hoverOpenTimerRef.current !== null) window.clearTimeout(hoverOpenTimerRef.current);
+      if (hoverCloseTimerRef.current !== null) window.clearTimeout(hoverCloseTimerRef.current);
+    },
+    [],
+  );
+
+  const clearHoverOpenTimer = () => {
+    if (hoverOpenTimerRef.current === null) return;
+    window.clearTimeout(hoverOpenTimerRef.current);
+    hoverOpenTimerRef.current = null;
+  };
+
+  const clearHoverCloseTimer = () => {
+    if (hoverCloseTimerRef.current === null) return;
+    window.clearTimeout(hoverCloseTimerRef.current);
+    hoverCloseTimerRef.current = null;
+  };
+
   const closePanel = ({ suppressHover }: { suppressHover: boolean }) => {
-    setHoverExpanded(false);
+    clearHoverOpenTimer();
+    clearHoverCloseTimer();
     if (suppressHover) setHoverExpandSuppressed(true);
     setSelectedSessionId(null);
     setSetupOpen(false);
     setPanelOpen(false);
   };
 
-  const openPanelExplicitly = () => {
-    setHoverExpanded(false);
-    setHoverExpandSuppressed(false);
-    setPanelOpen(true);
-  };
-
   const expandPanelOnHover = () => {
+    clearHoverCloseTimer();
     if (renderPanel || panelOpen || hoverExpandSuppressed) return;
-    setHoverExpanded(true);
-    setPanelOpen(true);
+    if (hoverOpenTimerRef.current !== null) return;
+    hoverOpenTimerRef.current = window.setTimeout(() => {
+      hoverOpenTimerRef.current = null;
+      if (hoverExpandSuppressed) return;
+      setPanelOpen(true);
+    }, HOVER_OPEN_DELAY_MS);
   };
 
-  const handleSurfaceMouseLeave = () => {
+  const scheduleHoverClose = () => {
+    clearHoverOpenTimer();
     setHoverExpandSuppressed(false);
-    if (!hoverExpanded || shouldAutoOpen) return;
-    closePanel({ suppressHover: false });
+    if (shouldAutoOpen || setupOpen || selectedSessionId || !panelOpen) return;
+    if (hoverCloseTimerRef.current !== null) return;
+    hoverCloseTimerRef.current = window.setTimeout(() => {
+      hoverCloseTimerRef.current = null;
+      closePanel({ suppressHover: false });
+    }, HOVER_CLOSE_DELAY_MS);
   };
 
-  const collapsePanel = () => closePanel({ suppressHover: true });
+  useEffect(() => {
+    if (!panelOpen || setupOpen || selectedSessionId || shouldAutoOpen) return;
+
+    const isOutsideSurface = (event: MouseEvent) => {
+      const surface = surfaceRef.current;
+      if (!surface) return false;
+      const rect = surface.getBoundingClientRect();
+      return event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom;
+    };
+
+    const handleMouseMove = (event: MouseEvent) => {
+      if (isOutsideSurface(event)) scheduleHoverClose();
+    };
+
+    const handleMouseOut = (event: MouseEvent) => {
+      if (event.relatedTarget === null) scheduleHoverClose();
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseout", handleMouseOut);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseout", handleMouseOut);
+    };
+  }, [panelOpen, selectedSessionId, setupOpen, shouldAutoOpen]);
 
   const openSession = (conversationId: string) => {
-    setHoverExpanded(false);
+    clearHoverOpenTimer();
+    clearHoverCloseTimer();
     setSetupOpen(false);
     setSessionAction({ ok: null, message: null });
     setSelectedSessionId(conversationId);
@@ -834,7 +995,8 @@ const App = () => {
   };
 
   const openSetup = () => {
-    setHoverExpanded(false);
+    clearHoverOpenTimer();
+    clearHoverCloseTimer();
     setSelectedSessionId(null);
     setSetupOpen(true);
     setPanelOpen(true);
@@ -853,6 +1015,18 @@ const App = () => {
     });
     if (conversationId === presence.conversationId) setAcknowledgedConversationId(conversationId);
     if (selectedSessionId === conversationId) setSelectedSessionId(null);
+  };
+
+  const dismissSessionGroup = (group: IWorkspaceSessionGroup) => {
+    const dismissedAt = Date.now();
+    setDismissedSessionIds((current) => {
+      const next = { ...current };
+      for (const session of group.sessions) next[session.conversationId] = dismissedAt;
+      writeDismissedSessionIds(next);
+      return next;
+    });
+    setAcknowledgedConversationId(null);
+    if (selectedSessionId && group.sessions.some((session) => session.conversationId === selectedSessionId)) setSelectedSessionId(null);
   };
 
   const deleteSession = (conversationId: string) => {
@@ -931,7 +1105,7 @@ const App = () => {
     }
   };
 
-  const focusSelectedSession = async (session: ISessionDetail) => {
+  const focusSelectedSession = async (session: ISessionDetail | ISessionSummary) => {
     if (!canUseNativeControls) {
       setSessionAction({ ok: false, message: "Focus needs the desktop runtime" });
       return;
@@ -940,7 +1114,7 @@ const App = () => {
     try {
       const message = await invoke<string>("focus_terminal", {
         conversationId: session.conversationId,
-        cwd: session.cwd,
+        cwd: "cwd" in session ? session.cwd : session.workspacePath,
       });
       setSessionAction({ ok: true, message });
       closePanel({ suppressHover: true });
@@ -955,19 +1129,19 @@ const App = () => {
 
   return (
     <main className="overlay-root" data-live={hasLiveActivity ? "true" : "false"} data-running={isWorkingActivity ? "true" : "false"} data-status={activityViewStatus}>
-      <section className={`notch-wrap ${panelOpen ? "is-open" : renderPanel ? "is-closing" : ""}`} style={notchStyle}>
+      <section className={`notch-wrap ${surfaceState === "open" ? "is-open" : surfaceState === "closing" ? "is-closing" : ""}`} style={notchStyle}>
         <div
+          ref={surfaceRef}
           className="halo-surface"
           data-state={surfaceState}
           onMouseEnter={expandPanelOnHover}
-          onMouseLeave={handleSurfaceMouseLeave}
-          onClick={!renderPanel ? openPanelExplicitly : undefined}
-          onKeyDown={!renderPanel ? (event) => { if (event.key === "Enter" || event.key === " ") openPanelExplicitly(); } : undefined}
-          role={!renderPanel ? "button" : undefined}
-          tabIndex={!renderPanel ? 0 : undefined}
-          aria-label={!renderPanel ? "Open Agent Halo" : undefined}
+          onMouseLeave={scheduleHoverClose}
+          onPointerLeave={scheduleHoverClose}
           data-tauri-drag-region="false"
         >
+          <svg className="halo-shape" viewBox={`0 0 ${shapeMetrics.width} ${shapeMetrics.height}`} preserveAspectRatio="none" aria-hidden="true" focusable="false">
+            <path d={notchShapePath} />
+          </svg>
           <div className="surface-pill" aria-hidden={surfaceState === "open"}>
             <div className="notch-wing notch-wing-left">
               {hasLiveActivity ? (
@@ -1005,7 +1179,7 @@ const App = () => {
                 <span className="agent-badge">LC</span>
               </div>
             ) : (
-              <div className="sheet-header" onClick={collapsePanel} data-tauri-drag-region="false" role="button" tabIndex={0} aria-label="Collapse Agent Halo panel" onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") collapsePanel(); }}>
+              <div className="sheet-header" data-tauri-drag-region="false">
                 <StatusGlyph status={glyphStatus} />
                 <span className="header-title">{headerLabel}</span>
                 {DEMO_MODE ? <span className="agent-badge">DEMO</span> : null}
@@ -1115,35 +1289,54 @@ const App = () => {
               ) : (
                 <>
                   <ul className="session-list">
-                    {sessions.map((session) => (
-                      <li className={`session-row ${session.status === "done" ? "ended" : ""}`} key={session.conversationId} title={session.conversationId} onClick={() => openSession(session.conversationId)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") openSession(session.conversationId); }} role="button" tabIndex={0}>
-                        <StatusGlyph status={session.status} />
+                    {sessionGroups.map((group) => {
+                      const session = group.primarySession;
+                      const isGrouped = group.sessions.length > 1;
+                      const rowTitle = isGrouped ? `${group.workspacePath ?? group.workspace} · ${group.sessions.length} sessions` : session.conversationId;
+
+                      return (
+                      <li className={`session-row ${isGrouped ? "session-group" : ""} ${group.status === "done" ? "ended" : ""}`} key={group.key} title={rowTitle} onClick={() => openSession(session.conversationId)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") openSession(session.conversationId); }} role="button" tabIndex={0}>
+                        <StatusGlyph status={group.status} />
                         <span className="session-label">
                           <span className="session-main-line">
-                            <span className="agent-badge">LC</span>
-                            <span className="session-project">{session.project}</span>
-                            <span className="session-meta">{session.detail}</span>
+                            <span className="agent-badge">{isGrouped ? `×${group.sessions.length}` : "LC"}</span>
+                            <span className="session-project">{group.project}</span>
+                            <span className="session-meta">{isGrouped ? group.detail : session.detail}</span>
                           </span>
-                          <span className="session-folder">{session.workspace}</span>
+                          <span className="session-folder">{group.workspace}</span>
                         </span>
                         <span className="spacer" />
-                        <span className="session-time">{formatTime(session.lastActivityAt)}</span>
-                        {session.status === "done" ? (
+                        <span className="session-time">{formatTime(group.lastActivityAt)}</span>
+                        <button
+                          className="row-btn row-focus"
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void focusSelectedSession(session);
+                          }}
+                          data-tauri-drag-region="false"
+                          title="Focus session in Ghostty"
+                        >
+                          Focus
+                        </button>
+                        {group.status === "done" ? (
                           <button
                             className="row-btn danger"
                             type="button"
                             onClick={(event) => {
                               event.stopPropagation();
-                              dismissSession(session.conversationId);
+                              if (isGrouped) dismissSessionGroup(group);
+                              else dismissSession(session.conversationId);
                             }}
                             data-tauri-drag-region="false"
-                            title="Dismiss session"
+                            title={isGrouped ? "Dismiss workspace sessions" : "Dismiss session"}
                           >
                             ×
                           </button>
                         ) : null}
                       </li>
-                    ))}
+                      );
+                    })}
                   </ul>
 
                   <div className="sheet-divider soft" />
