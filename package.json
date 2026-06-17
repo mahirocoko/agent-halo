@@ -1,0 +1,17 @@
+{
+  "name": "agent-halo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Native presence bridge and desktop halo for Letta Code agent activity.",
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "check": "tsc -p tsconfig.json --noEmit",
+    "mod:install": "node scripts/install-mod.mjs",
+    "mod:tail": "tail -f ~/.letta/mods/agent-halo.events.ndjson"
+  },
+  "devDependencies": {
+    "@types/node": "25.0.0",
+    "typescript": "5.9.3"
+  }
+}
