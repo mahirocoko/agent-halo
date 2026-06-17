@@ -74,6 +74,7 @@ interface ISessionDetail extends ISessionSummary {
 }
 
 type SessionEventRegistry = Record<string, AgentHaloEvent[]>;
+type DismissedSessionRegistry = Record<string, number>;
 
 const estimateLiveActivityWingWidth = (label: string): number => {
   const textWidth = Math.ceil(label.length * 5.6);
@@ -123,24 +124,38 @@ const writeSessionEventRegistry = (registry: SessionEventRegistry) => {
   }
 };
 
-const readDismissedSessionIds = (): Set<string> => {
+const readDismissedSessionIds = (): DismissedSessionRegistry => {
   try {
     const raw = window.localStorage.getItem(DISMISSED_SESSIONS_STORAGE_KEY);
-    if (!raw) return new Set();
+    if (!raw) return {};
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return new Set();
-    return new Set(parsed.filter((item): item is string => typeof item === "string"));
+    if (Array.isArray(parsed)) {
+      return Object.fromEntries(parsed.filter((item): item is string => typeof item === "string").map((id) => [id, 0]));
+    }
+    if (typeof parsed !== "object" || parsed === null) return {};
+    return Object.fromEntries(
+      Object.entries(parsed).filter((entry): entry is [string, number] => typeof entry[0] === "string" && typeof entry[1] === "number"),
+    );
   } catch {
-    return new Set();
+    return {};
   }
 };
 
-const writeDismissedSessionIds = (ids: Set<string>) => {
+const writeDismissedSessionIds = (registry: DismissedSessionRegistry) => {
   try {
-    window.localStorage.setItem(DISMISSED_SESSIONS_STORAGE_KEY, JSON.stringify(Array.from(ids)));
+    window.localStorage.setItem(DISMISSED_SESSIONS_STORAGE_KEY, JSON.stringify(registry));
   } catch {
     // Ignore storage errors; dismissal still works for the current runtime session.
   }
+};
+
+const isDismissedAfter = (registry: DismissedSessionRegistry, conversationId: string | null | undefined, latestEventAt: string | null | undefined): boolean => {
+  if (!conversationId || !latestEventAt) return false;
+  const dismissedAt = registry[conversationId];
+  if (typeof dismissedAt !== "number") return false;
+  const latestEventMs = Date.parse(latestEventAt);
+  if (!Number.isFinite(latestEventMs)) return false;
+  return dismissedAt >= latestEventMs;
 };
 
 const shortenPath = (path: string | null | undefined): string => {
@@ -406,6 +421,7 @@ const appendRecentEvent = (events: AgentHaloEvent[], event: AgentHaloEvent): Age
 const useAgentHaloPresence = () => {
   const [presence, setPresence] = useState<IAgentHaloPresence>(() => createInitialPresence());
   const [recentEvents, setRecentEvents] = useState<AgentHaloEvent[]>([]);
+  const [lastLiveEvent, setLastLiveEvent] = useState<AgentHaloEvent | null>(null);
   const [sessionEventRegistry, setSessionEventRegistry] = useState<SessionEventRegistry>(readSessionEventRegistry);
   const [capabilities, setCapabilities] = useState<IAgentHaloBridgeCapabilities>(() => createDefaultBridgeCapabilities());
   const [connection, setConnection] = useState<IConnectionState>({ status: "connecting", message: null });
@@ -430,6 +446,7 @@ const useAgentHaloPresence = () => {
       const pushDemoEvent = () => {
         const event = createDemoEvent(index);
         index += 1;
+        setLastLiveEvent(event);
         setPresence((current) => reducePresence(current, event));
         setRecentEvents((current) => appendRecentEvent(current, event));
         setSessionEventRegistry((current) => {
@@ -495,6 +512,7 @@ const useAgentHaloPresence = () => {
     const handleEvent = (message: MessageEvent<string>) => {
       try {
         const event = JSON.parse(message.data) as AgentHaloEvent;
+        setLastLiveEvent(event);
         setPresence((current) => reducePresence(current, event));
         setRecentEvents((current) => appendRecentEvent(current, event));
         setSessionEventRegistry((current) => {
@@ -531,11 +549,11 @@ const useAgentHaloPresence = () => {
 
   const view = useMemo(() => getPresenceView(presence, { now, staleAfterMs: STALE_AFTER_MS }), [now, presence]);
   const sessionEvents = useMemo(() => flattenSessionEvents(sessionEventRegistry), [sessionEventRegistry]);
-  return { capabilities, connection, now, presence, recentEvents, refreshCapabilities, sessionEvents, view };
+  return { capabilities, connection, lastLiveEvent, now, presence, recentEvents, refreshCapabilities, sessionEvents, view };
 };
 
 const App = () => {
-  const { capabilities, connection, now, presence, recentEvents, refreshCapabilities, sessionEvents, view } = useAgentHaloPresence();
+  const { capabilities, connection, lastLiveEvent, now, presence, recentEvents, refreshCapabilities, sessionEvents, view } = useAgentHaloPresence();
   const [acknowledgedConversationId, setAcknowledgedConversationId] = useState<string | null>(null);
   const [nativeAction, setNativeAction] = useState<INativeActionState>({ bridgeOnline: null, message: null });
   const [sessionAction, setSessionAction] = useState<ISessionActionState>({ ok: null, message: null });
@@ -548,9 +566,9 @@ const App = () => {
   const [modStatus, setModStatus] = useState<IModStatus>({ path: null, installed: null });
   const [notchMetrics, setNotchMetrics] = useState<INotchMetrics>({ cameraWidth: DEFAULT_CAMERA_NOTCH_WIDTH, closedHeight: DEFAULT_CLOSED_NOTCH_HEIGHT });
   const [nativeClosedSurfaceWidth, setNativeClosedSurfaceWidth] = useState(DEFAULT_CAMERA_NOTCH_WIDTH);
-  const [dismissedSessionIds, setDismissedSessionIds] = useState<Set<string>>(readDismissedSessionIds);
+  const [dismissedSessionIds, setDismissedSessionIds] = useState<DismissedSessionRegistry>(readDismissedSessionIds);
   const displayView =
-    view.status === "closed" && (acknowledgedConversationId === presence.conversationId || (presence.conversationId ? dismissedSessionIds.has(presence.conversationId) : false))
+    view.status === "closed" && (acknowledgedConversationId === presence.conversationId || isDismissedAfter(dismissedSessionIds, presence.conversationId, presence.lastEventAt))
       ? ({ ...view, status: "idle", label: "idle" } satisfies IStatusView)
       : view;
   const canUseNativeControls = typeof window.__TAURI_INTERNALS__ !== "undefined";
@@ -563,7 +581,7 @@ const App = () => {
     () =>
       buildSessionSummaries(sessionEvents, presence, now).filter(
         (session) =>
-          !dismissedSessionIds.has(session.conversationId) ||
+          !isDismissedAfter(dismissedSessionIds, session.conversationId, session.lastActivityAt) ||
           (session.conversationId === presence.conversationId && !["idle", "closed"].includes(displayView.status)),
       ),
     [dismissedSessionIds, displayView.status, now, presence, sessionEvents],
@@ -579,6 +597,19 @@ const App = () => {
     if (view.status !== "thinking" && view.status !== "tool-running" && view.status !== "stale") return;
     setAcknowledgedConversationId(null);
   }, [acknowledgedConversationId, presence.conversationId, view.status]);
+
+  useEffect(() => {
+    if (!lastLiveEvent?.conversationId) return;
+    if (!["turn_start", "tool_start", "turn_stop"].includes(lastLiveEvent.type)) return;
+
+    setDismissedSessionIds((current) => {
+      const conversationId = lastLiveEvent.conversationId ?? "";
+      if (typeof current[conversationId] !== "number" || isDismissedAfter(current, conversationId, lastLiveEvent.timestamp)) return current;
+      const { [conversationId]: _removed, ...next } = current;
+      writeDismissedSessionIds(next);
+      return next;
+    });
+  }, [lastLiveEvent]);
   const headerLabel = setupOpen ? "Setup" : selectedSession ? selectedSession.project : sessions.length === 0 ? "Agent Halo" : sessions.length === 1 ? "1 session" : `${sessions.length} sessions`;
   const activitySession =
     sessions.find((session) => session.status === "working") ??
@@ -772,7 +803,7 @@ const App = () => {
 
   const dismissSession = (conversationId: string) => {
     setDismissedSessionIds((current) => {
-      const next = new Set(current).add(conversationId);
+      const next = { ...current, [conversationId]: Date.now() };
       writeDismissedSessionIds(next);
       return next;
     });
