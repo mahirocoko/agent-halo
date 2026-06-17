@@ -144,9 +144,9 @@ button {
 }
 
 .notch-wing-right {
-  justify-content: flex-start;
-  padding-left: 12px;
-  padding-right: 14px;
+  justify-content: flex-end;
+  padding-left: 6px;
+  padding-right: 10px;
   transform-origin: left center;
 }
 
@@ -161,7 +161,7 @@ button {
 }
 
 .pill-detail {
-  max-width: 60px;
+  max-width: var(--pill-text-width, 58px);
   overflow: hidden;
   color: #cfd0d4;
   font-size: 10px;

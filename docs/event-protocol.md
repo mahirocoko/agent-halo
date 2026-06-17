@@ -52,7 +52,9 @@ Events are newline-delimited JSON in `~/.letta/mods/agent-halo.events.ndjson` an
 }
 ```
 
-`GET /snapshot` also returns `recent: AgentHaloEvent[]`. `POST /hook/stop` is a local hook integration endpoint that converts a Letta `Stop` hook into a `turn_stop` event. `POST /ingest` is the local multi-instance fan-in endpoint: secondary mod instances that cannot bind the bridge port forward their events to the primary bridge instead of dropping them. Current bridge session actions intentionally report `focusTerminal: false` and `endSession: false` until real session/process capabilities exist.
+`GET /snapshot` also returns `recent: AgentHaloEvent[]`. `POST /hook/stop` is a local hook integration endpoint that converts a Letta `Stop` hook into a `turn_stop` event. `POST /ingest` is the local multi-instance fan-in endpoint: secondary mod instances that cannot bind the bridge port forward their events to the primary bridge instead of dropping them. Current bridge session actions intentionally report `focusTerminal: false` and `endSession: false` until real Letta-scoped session/process capabilities exist.
+
+The desktop app may expose a separate native-only Ghostty focus fallback. That action activates Ghostty and can raise a matching window title when available, but it is not a bridge-level session action and should not be treated as exact pane focus without title/tmux metadata.
 
 ## Event types
 

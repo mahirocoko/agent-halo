@@ -20,11 +20,13 @@ const MAX_SESSION_EVENTS_PER_SESSION = 32;
 const DEMO_MODE = new URLSearchParams(window.location.search).has("demo");
 const DEFAULT_CAMERA_NOTCH_WIDTH = 184;
 const DEFAULT_CLOSED_NOTCH_HEIGHT = 36;
-const LIVE_ACTIVITY_WING_WIDTH = 96;
-const PILL_WINDOW_WIDTH = DEFAULT_CAMERA_NOTCH_WIDTH + LIVE_ACTIVITY_WING_WIDTH * 2;
+const MIN_LIVE_ACTIVITY_WING_WIDTH = 66;
+const MAX_LIVE_ACTIVITY_WING_WIDTH = 110;
+const LIVE_ACTIVITY_TEXT_WIDTH_BUFFER = 52;
 const PILL_WINDOW_HEIGHT = 42;
 const PANEL_WINDOW_WIDTH = 560;
 const PANEL_WINDOW_HEIGHT = 440;
+const ACTIVITY_COLLAPSE_MS = 220;
 const DISMISSED_SESSIONS_STORAGE_KEY = "agent-halo.dismissed-sessions";
 const SESSION_EVENTS_STORAGE_KEY = "agent-halo.session-events";
 
@@ -35,6 +37,11 @@ interface IConnectionState {
 
 interface INativeActionState {
   bridgeOnline: boolean | null;
+  message: string | null;
+}
+
+interface ISessionActionState {
+  ok: boolean | null;
   message: string | null;
 }
 
@@ -67,6 +74,11 @@ interface ISessionDetail extends ISessionSummary {
 }
 
 type SessionEventRegistry = Record<string, AgentHaloEvent[]>;
+
+const estimateLiveActivityWingWidth = (label: string): number => {
+  const textWidth = Math.ceil(label.length * 5.6);
+  return Math.min(MAX_LIVE_ACTIVITY_WING_WIDTH, Math.max(MIN_LIVE_ACTIVITY_WING_WIDTH, LIVE_ACTIVITY_TEXT_WIDTH_BUFFER + textWidth));
+};
 
 interface IStatusView {
   status: AgentHaloPresenceStatus | "stale";
@@ -109,11 +121,6 @@ const writeSessionEventRegistry = (registry: SessionEventRegistry) => {
   } catch {
     // Ignore storage errors; the in-memory registry still prevents SSE/recent-window churn.
   }
-};
-
-const removeSessionFromRegistry = (registry: SessionEventRegistry, conversationId: string): SessionEventRegistry => {
-  const { [conversationId]: _removed, ...next } = registry;
-  return next;
 };
 
 const readDismissedSessionIds = (): Set<string> => {
@@ -525,21 +532,14 @@ const useAgentHaloPresence = () => {
 
   const view = useMemo(() => getPresenceView(presence, { now, staleAfterMs: STALE_AFTER_MS }), [now, presence]);
   const sessionEvents = useMemo(() => flattenSessionEvents(sessionEventRegistry), [sessionEventRegistry]);
-  const removeSessionEvents = (conversationId: string) => {
-    setSessionEventRegistry((current) => {
-      const next = removeSessionFromRegistry(current, conversationId);
-      writeSessionEventRegistry(next);
-      return next;
-    });
-  };
-
-  return { capabilities, connection, presence, recentEvents, refreshCapabilities, removeSessionEvents, sessionEvents, view };
+  return { capabilities, connection, presence, recentEvents, refreshCapabilities, sessionEvents, view };
 };
 
 const App = () => {
-  const { capabilities, connection, presence, recentEvents, refreshCapabilities, removeSessionEvents, sessionEvents, view } = useAgentHaloPresence();
+  const { capabilities, connection, presence, recentEvents, refreshCapabilities, sessionEvents, view } = useAgentHaloPresence();
   const [acknowledgedConversationId, setAcknowledgedConversationId] = useState<string | null>(null);
   const [nativeAction, setNativeAction] = useState<INativeActionState>({ bridgeOnline: null, message: null });
+  const [sessionAction, setSessionAction] = useState<ISessionActionState>({ ok: null, message: null });
   const [panelOpen, setPanelOpen] = useState(DEMO_MODE);
   const [renderPanel, setRenderPanel] = useState(DEMO_MODE);
   const [hoverExpanded, setHoverExpanded] = useState(false);
@@ -548,6 +548,7 @@ const App = () => {
   const [setupOpen, setSetupOpen] = useState(false);
   const [modStatus, setModStatus] = useState<IModStatus>({ path: null, installed: null });
   const [notchMetrics, setNotchMetrics] = useState<INotchMetrics>({ cameraWidth: DEFAULT_CAMERA_NOTCH_WIDTH, closedHeight: DEFAULT_CLOSED_NOTCH_HEIGHT });
+  const [nativeClosedSurfaceWidth, setNativeClosedSurfaceWidth] = useState(DEFAULT_CAMERA_NOTCH_WIDTH);
   const [dismissedSessionIds, setDismissedSessionIds] = useState<Set<string>>(readDismissedSessionIds);
   const displayView =
     view.status === "closed" && (acknowledgedConversationId === presence.conversationId || (presence.conversationId ? dismissedSessionIds.has(presence.conversationId) : false))
@@ -573,6 +574,13 @@ const App = () => {
     () => buildSessionDetail(selectedSessionId, sessions, sessionEvents, presence, displayView),
     [displayView, presence, selectedSessionId, sessionEvents, sessions],
   );
+
+  useEffect(() => {
+    if (!presence.conversationId) return;
+    if (acknowledgedConversationId !== presence.conversationId) return;
+    if (view.status !== "thinking" && view.status !== "tool-running" && view.status !== "stale") return;
+    setAcknowledgedConversationId(null);
+  }, [acknowledgedConversationId, presence.conversationId, view.status]);
   const headerLabel = setupOpen ? "Setup" : selectedSession ? selectedSession.project : sessions.length === 0 ? "Agent Halo" : sessions.length === 1 ? "1 session" : `${sessions.length} sessions`;
   const isWorkingActivity = displayView.status === "thinking" || displayView.status === "tool-running" || displayView.status === "stale";
   const hasLiveActivity = isWorkingActivity || displayView.status === "closed" || Boolean(presence.activeToolName);
@@ -584,13 +592,15 @@ const App = () => {
     if (displayView.status === "closed") return "Done";
     return project;
   })();
-  const closedSurfaceWidth = Math.round(notchMetrics.cameraWidth + (hasLiveActivity ? LIVE_ACTIVITY_WING_WIDTH * 2 : 0));
+  const liveActivityWingWidth = hasLiveActivity ? estimateLiveActivityWingWidth(pillDetail) : 0;
+  const closedSurfaceWidth = Math.round(notchMetrics.cameraWidth + liveActivityWingWidth * 2);
   const closedSurfaceHeight = Math.round(notchMetrics.closedHeight);
   const notchStyle = {
     "--closed-width": `${closedSurfaceWidth}px`,
     "--closed-height": `${closedSurfaceHeight}px`,
     "--camera-width": `${Math.round(notchMetrics.cameraWidth)}px`,
-  } as CSSProperties & Record<"--closed-width" | "--closed-height" | "--camera-width", string>;
+    "--pill-text-width": `${Math.max(0, liveActivityWingWidth - LIVE_ACTIVITY_TEXT_WIDTH_BUFFER)}px`,
+  } as CSSProperties & Record<"--closed-width" | "--closed-height" | "--camera-width" | "--pill-text-width", string>;
   const shouldAutoOpen = displayView.status === "error";
   const surfaceState = renderPanel ? (panelOpen ? "open" : "closing") : "closed";
   const setupGuidance = (() => {
@@ -629,6 +639,20 @@ const App = () => {
   })();
 
   useEffect(() => {
+    let shrinkTimer: number | null = null;
+
+    setNativeClosedSurfaceWidth((currentWidth) => {
+      if (closedSurfaceWidth >= currentWidth) return closedSurfaceWidth;
+      shrinkTimer = window.setTimeout(() => setNativeClosedSurfaceWidth(closedSurfaceWidth), ACTIVITY_COLLAPSE_MS);
+      return currentWidth;
+    });
+
+    return () => {
+      if (shrinkTimer !== null) window.clearTimeout(shrinkTimer);
+    };
+  }, [closedSurfaceWidth]);
+
+  useEffect(() => {
     if (shouldAutoOpen) setPanelOpen(true);
   }, [shouldAutoOpen]);
 
@@ -654,7 +678,7 @@ const App = () => {
       if (!canUseNativeControls) return;
       await invoke("set_panel_open", {
         open,
-        width: open ? PANEL_WINDOW_WIDTH : closedSurfaceWidth,
+        width: open ? PANEL_WINDOW_WIDTH : nativeClosedSurfaceWidth,
         height: open ? PANEL_WINDOW_HEIGHT : closedSurfaceHeight,
       });
     };
@@ -685,7 +709,7 @@ const App = () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [canUseNativeControls, closedSurfaceHeight, closedSurfaceWidth, panelOpen, renderPanel]);
+  }, [canUseNativeControls, closedSurfaceHeight, nativeClosedSurfaceWidth, panelOpen, renderPanel]);
 
   const closePanel = ({ suppressHover }: { suppressHover: boolean }) => {
     setHoverExpanded(false);
@@ -718,6 +742,7 @@ const App = () => {
   const openSession = (conversationId: string) => {
     setHoverExpanded(false);
     setSetupOpen(false);
+    setSessionAction({ ok: null, message: null });
     setSelectedSessionId(conversationId);
     setPanelOpen(true);
   };
@@ -740,7 +765,6 @@ const App = () => {
       writeDismissedSessionIds(next);
       return next;
     });
-    removeSessionEvents(conversationId);
     if (conversationId === presence.conversationId) setAcknowledgedConversationId(conversationId);
     if (selectedSessionId === conversationId) setSelectedSessionId(null);
   };
@@ -795,6 +819,24 @@ const App = () => {
         bridgeOnline: nativeAction.bridgeOnline,
         message: error instanceof Error ? error.message : "Install failed; run pnpm mod:install",
       });
+    }
+  };
+
+  const focusSelectedSession = async (session: ISessionDetail) => {
+    if (!canUseNativeControls) {
+      setSessionAction({ ok: false, message: "Focus needs the desktop runtime" });
+      return;
+    }
+
+    try {
+      const message = await invoke<string>("focus_terminal", {
+        conversationId: session.conversationId,
+        cwd: session.cwd,
+      });
+      setSessionAction({ ok: true, message });
+      closePanel({ suppressHover: true });
+    } catch (error) {
+      setSessionAction({ ok: false, message: error instanceof Error ? error.message : "Ghostty focus failed" });
     }
   };
 
@@ -910,9 +952,11 @@ const App = () => {
                     <span className="setup-copy">
                       <span className="setup-title">Session controls</span>
                       <span className="setup-detail">
-                        {capabilities.sessionActions.focusTerminal || capabilities.sessionActions.endSession
-                          ? "Focus/end available from bridge"
-                          : "Focus/end unavailable in current bridge"}
+                        {canUseNativeControls
+                          ? "Ghostty focus available · end unavailable"
+                          : capabilities.sessionActions.focusTerminal || capabilities.sessionActions.endSession
+                            ? "Focus/end available from bridge"
+                            : "Focus/end unavailable in current bridge"}
                       </span>
                     </span>
                   </div>
@@ -928,8 +972,13 @@ const App = () => {
                     <span>{selectedSession.permissionMode}</span>
                   </div>
                   <div className="detail-path" title={selectedSession.cwd}>{shortenPath(selectedSession.cwd)}</div>
-                  {!capabilities.sessionActions.focusTerminal && !capabilities.sessionActions.endSession ? (
-                    <div className="capability-note">Focus/end controls need bridge session actions</div>
+                  {canUseNativeControls ? (
+                    <div className="capability-note">Focus activates Ghostty; exact tab needs title/tmux mapping</div>
+                  ) : (
+                    <div className="capability-note">Focus needs the desktop runtime</div>
+                  )}
+                  {sessionAction.message ? (
+                    <div className="notice-row compact" data-online={sessionAction.ok === true}>{sessionAction.message}</div>
                   ) : null}
                   <div className="detail-section-label">Recent activity</div>
                   {selectedSession.events.length === 0 ? (
@@ -1015,6 +1064,9 @@ const App = () => {
                   </div>
                 ) : selectedSession ? (
                   <div className="footer-actions">
+                    <button className="pill-btn accent" type="button" onClick={() => void focusSelectedSession(selectedSession)} data-tauri-drag-region="false">
+                      Focus
+                    </button>
                     {selectedSession.status === "done" ? (
                       <button className="pill-btn danger" type="button" onClick={() => dismissSession(selectedSession.conversationId)} data-tauri-drag-region="false">
                         Dismiss

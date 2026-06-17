@@ -2,7 +2,8 @@ use std::{
     fs,
     io::Write,
     net::{SocketAddr, TcpStream},
-    path::PathBuf,
+    path::{Path, PathBuf},
+    process::Command,
     sync::mpsc,
     time::Duration,
 };
@@ -61,6 +62,129 @@ fn agent_halo_mod_status() -> Result<(String, bool), String> {
     let path = letta_mod_path()?;
     let installed = path.exists();
     Ok((path.to_string_lossy().to_string(), installed))
+}
+
+#[tauri::command]
+fn focus_terminal(conversation_id: String, cwd: Option<String>) -> Result<String, String> {
+    focus_ghostty_window(&conversation_id, cwd.as_deref())
+}
+
+fn focus_ghostty_window(conversation_id: &str, cwd: Option<&str>) -> Result<String, String> {
+    let hints = build_focus_hints(conversation_id, cwd);
+
+    if let Ok(message) = focus_ghostty_with_window_hints(&hints) {
+        return Ok(message);
+    }
+
+    let output = Command::new("open")
+        .args(["-a", "Ghostty"])
+        .output()
+        .map_err(|error| format!("Failed to launch Ghostty: {error}"))?;
+
+    if output.status.success() {
+        return Ok("Activated Ghostty · exact tab needs title/tmux mapping".to_string());
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    Err(if stderr.is_empty() {
+        "Failed to activate Ghostty".to_string()
+    } else {
+        format!("Failed to activate Ghostty: {stderr}")
+    })
+}
+
+fn build_focus_hints(conversation_id: &str, cwd: Option<&str>) -> Vec<String> {
+    let mut hints = Vec::new();
+    let trimmed_conversation_id = conversation_id.trim();
+
+    if !trimmed_conversation_id.is_empty() {
+        hints.push(trimmed_conversation_id.to_string());
+        hints.push(trimmed_conversation_id.chars().take(8).collect::<String>());
+    }
+
+    if let Some(cwd) = cwd.map(str::trim).filter(|value| !value.is_empty()) {
+        hints.push(cwd.to_string());
+        if let Some(name) = Path::new(cwd).file_name().and_then(|name| name.to_str()) {
+            hints.push(name.to_string());
+        }
+    }
+
+    hints.sort();
+    hints.dedup();
+    hints
+}
+
+fn focus_ghostty_with_window_hints(hints: &[String]) -> Result<String, String> {
+    let script = build_focus_ghostty_script(hints);
+    let output = Command::new("osascript")
+        .arg("-e")
+        .arg(script)
+        .output()
+        .map_err(|error| format!("Failed to run AppleScript: {error}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if stderr.is_empty() {
+            "AppleScript focus failed".to_string()
+        } else {
+            stderr
+        });
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if stdout.strip_prefix("matched:").is_some() {
+        Ok(format!("Focused Ghostty · {}", stdout.trim_start_matches("matched:")))
+    } else {
+        Ok("Activated Ghostty · exact tab not found".to_string())
+    }
+}
+
+fn build_focus_ghostty_script(hints: &[String]) -> String {
+    let hints_source = hints
+        .iter()
+        .filter(|hint| !hint.trim().is_empty())
+        .map(|hint| apple_script_string(hint))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let hints_source = if hints_source.is_empty() {
+        "{}".to_string()
+    } else {
+        format!("{{{hints_source}}}")
+    };
+
+    format!(
+        r#"set matchHints to {hints_source}
+tell application "Ghostty" to activate
+delay 0.05
+tell application "System Events"
+  if exists process "Ghostty" then
+    tell process "Ghostty"
+      set frontmost to true
+      repeat with candidateWindow in windows
+        set candidateTitle to name of candidateWindow as text
+        repeat with matchHint in matchHints
+          set hintText to matchHint as text
+          if hintText is not "" and candidateTitle contains hintText then
+            perform action "AXRaise" of candidateWindow
+            return "matched:" & candidateTitle
+          end if
+        end repeat
+      end repeat
+    end tell
+  end if
+end tell
+return "activated"
+"#
+    )
+}
+
+fn apple_script_string(value: &str) -> String {
+    let escaped = value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', " ")
+        .replace('\r', " ");
+    format!("\"{escaped}\"")
 }
 
 #[tauri::command]
@@ -305,6 +429,7 @@ pub fn run() {
             agent_halo_mod_path,
             agent_halo_mod_status,
             bridge_health,
+            focus_terminal,
             install_agent_halo_mod,
             notch_metrics,
             set_panel_open

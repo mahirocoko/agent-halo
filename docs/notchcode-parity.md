@@ -20,8 +20,9 @@ Mahiro accepted Notchcode v1 as a read-only + dismiss + setup/control-plane surf
 | Setup/control plane | Setup view shows bridge, mod install status, next step, and session-control capability boundary. | Done |
 | Setup boundary regression | `apps/desktop/tests/demo-setup.spec.ts` verifies browser demo does not fake native install/check behavior or focus/end controls. | Covered |
 | Capability-aware bridge | `packages/protocol/src/index.ts` defines bridge capabilities; `/health` and `/snapshot` include them from `mods/agent-halo.js`. | Done |
-| No fake focus/end | Desktop only shows a capability note while `focusTerminal` / `endSession` are false. | Done |
-| Real focus/end session actions | Needs a real Letta session/process capability before exposing controls. | Post-v1 |
+| No fake focus/end | Bridge-level `focusTerminal` / `endSession` remain false; desktop labels Ghostty focus as a native fallback, not exact session/process control. | Done |
+| Ghostty focus fallback | Desktop detail view can activate Ghostty and attempt title-based window raise, then falls back to app activation. Exact pane focus still needs title/tmux metadata. | Partial |
+| Real end session action | Needs a real Letta session/process capability before exposing controls. | Post-v1 |
 
 ## Focus/end capability evidence
 
@@ -31,7 +32,9 @@ Current Letta Code mod public APIs expose lifecycle, turn, and tool events plus 
 - Event `ctx.conversation` exposes `id`, `getHistory()`, `fork()`, and `sendMessageStream()`.
 - `creating-mods/references/architecture.md` says: “If the mod API does not expose a capability yet, avoid reaching around it.”
 
-The installed Letta Code protocol types include lower-level app-server commands such as `abort_message`, `terminal_kill`, and terminal process messages, but those are not exposed through the trusted mod API used by `mods/agent-halo.js`. Agent Halo should therefore keep `sessionActions.focusTerminal` and `sessionActions.endSession` false until Letta exposes a public scoped session/process action or Mahiro explicitly accepts an internal/experimental bridge.
+The installed Letta Code protocol types include lower-level app-server commands such as `abort_message`, `terminal_kill`, and terminal process messages, but those are not exposed through the trusted mod API used by `mods/agent-halo.js`. Agent Halo should therefore keep bridge-level `sessionActions.focusTerminal` and `sessionActions.endSession` false until Letta exposes a public scoped session/process action or Mahiro explicitly accepts an internal/experimental bridge.
+
+Current desktop focus is intentionally narrower: `focus_terminal` is a macOS/Ghostty fallback that activates Ghostty, attempts to raise a window whose title contains the conversation id, cwd, or folder name, and otherwise reports app-level activation. It is not exact pane focus. Exact pane focus should use future metadata such as terminal title mapping or `TMUX_PANE` plus `tmux select-pane`.
 
 ## Verification commands
 

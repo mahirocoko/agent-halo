@@ -9,7 +9,7 @@ This repository starts contract-first:
 - `mods/agent-halo.js` — Letta Code mod that emits lifecycle/tool/turn events.
 - `packages/protocol/` — shared event schema for the mod and future desktop app.
 - `docs/` — architecture and protocol notes.
-- `apps/desktop/` — planned desktop renderer surface.
+- `apps/desktop/` — native Tauri desktop halo renderer.
 
 ## Design stance
 
@@ -82,7 +82,12 @@ Browser demo mode intentionally guards native-only buttons. Use `pnpm desktop:de
 Current desktop behavior:
 
 - renders a Notchcode-inspired black hardware notch, click-to-expand dropped sheet, compact session rows, session drill-down, dismiss controls for ended sessions, compact capability-aware setup view with real mod install status and next-step guidance, and recent-event timeline
-- keeps completed sessions sticky until the user acknowledges or dismisses them, with dismissed ended sessions remembered locally across reloads
+- reads macOS notch metrics when available so the idle surface can match the physical camera notch instead of a generic floating pill
+- shows live activity as compact left/right wings around an empty camera center for thinking, tool-running, stale, and done states; error remains the stronger auto-open state
+- lets CSS animate live activity wings back to the idle camera notch before shrinking the native Tauri/AppKit window, avoiding clipped collapse transitions
+- keeps completed sessions sticky until the user acknowledges or dismisses them; acknowledgement resets when the same conversation starts working again so the next completion can show `Done`
+- treats dismiss as hide-only: dismissed ended sessions are remembered locally across reloads without deleting the local session event registry
+- exposes a native macOS/Ghostty `Focus` fallback from session detail: it activates Ghostty and attempts to raise a matching window title by conversation id/cwd/folder, then falls back to app activation. This is intentionally labeled as app/window focus, not exact pane focus.
 - exposes a first tray/menu-bar lifecycle menu: show, hide, quit
 - hydrates `GET /snapshot`
 - subscribes to `GET /events` with `EventSource`
@@ -118,6 +123,6 @@ pnpm mod:tail
 
 ## Visual direction
 
-Agent Halo should follow Notchcode's taste for this project: a black hardware notch/pill at rest, a compact dropped sheet for live state, small functional glyphs, row-based session lists, restrained charcoal surfaces, hairline dividers, and orange/done status accents. Avoid generic dark dashboard moves such as cyan glow panels, metric-card grids, oversized orbs, and decorative SaaS copy. Track concrete parity evidence in `docs/notchcode-parity.md`; v1 is accepted as read-only + dismiss + setup/control-plane, with real focus/end actions intentionally post-v1 until public session/process controls exist. Notch geometry and sheet anatomy are adapted from Notchcode; see `CREDITS.md` and `THIRD_PARTY_LICENSES.md`.
+Agent Halo should follow Notchcode's taste for this project: a black hardware notch at rest, compact live-activity wings, a dropped sheet for session detail/setup, small functional glyphs, row-based session lists, restrained charcoal surfaces, hairline dividers, and orange/done status accents. Avoid generic dark dashboard moves such as cyan glow panels, metric-card grids, oversized orbs, and decorative SaaS copy. Track concrete parity evidence in `docs/notchcode-parity.md`; bridge-level focus/end session actions remain capability-gated until public scoped session/process controls exist. The desktop Ghostty focus fallback is native app/window activation only unless future title/tmux metadata enables exact pane focus. Notch geometry and sheet anatomy are adapted from Notchcode; see `CREDITS.md` and `THIRD_PARTY_LICENSES.md`.
 
-The Tauri runtime resizes the transparent window between a compact pill (`272x64`) and panel (`340x314`) so the overlay does not leave a permanent dashboard-sized hit area on screen. The expanded shell should read as the notch extending downward, not as a detached popup below it.
+The Tauri runtime resizes the transparent window between the current closed notch/activity width and the expanded panel so the overlay does not leave a permanent dashboard-sized hit area on screen. The expanded shell should read as the notch extending downward, not as a detached popup below it.
