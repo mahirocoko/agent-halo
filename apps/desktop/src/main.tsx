@@ -2,22 +2,16 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   ArrowRight,
   BarChart3,
-  Bot,
   Check,
   ChevronLeft,
-  CircleDot,
-  Cloud,
   Download,
   Focus,
   List,
-  MousePointer2,
   RefreshCw,
   Settings,
-  Sparkles,
   Trash2,
   TriangleAlert,
   X,
-  type LucideIcon,
 } from "lucide-react";
 import lottie from "lottie-web/build/player/lottie_light";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
@@ -35,7 +29,8 @@ import {
 import "./styles.css";
 
 const BRIDGE_URL = "http://127.0.0.1:47621";
-const USAGE_POLL_MS = 60_000;
+const DEFAULT_USAGE_REFRESH_MS = 15 * 60_000;
+const USAGE_SETTINGS_STORAGE_KEY = "agent-halo.usage-settings";
 const STALE_AFTER_MS = 30_000;
 const MAX_RECENT_EVENTS = 80;
 const MAX_SESSION_EVENTS_PER_SESSION = 32;
@@ -121,12 +116,24 @@ type DeletedSessionRegistry = Record<string, number>;
 
 type UsageProviderId = "codex" | "agy" | "claude" | "cursor" | "grok";
 type MainPanelTab = "sessions" | "usage";
+type UsageMode = "left" | "used";
+type UsageResetMode = "relative" | "absolute";
+type UsageTimeFormat = "auto" | "12h" | "24h";
+type UsageSidebarSelection = UsageProviderId | "settings";
 
 interface IUsageProviderConfig {
   id: UsageProviderId;
   label: string;
   command: "codex_usage" | "agy_usage" | "claude_usage" | "cursor_usage" | "grok_usage";
-  Icon: LucideIcon;
+  iconPath: string;
+  color: string;
+}
+
+interface IUsageSettings {
+  refreshMs: number;
+  usageMode: UsageMode;
+  resetMode: UsageResetMode;
+  timeFormat: UsageTimeFormat;
 }
 
 interface IUsageMetricLine {
@@ -150,6 +157,7 @@ interface IAgentUsageSnapshot {
 interface IUsageMetric {
   label: string;
   value: number | null;
+  statusLevel: "ok" | "warning" | "danger";
   remainingLabel: string | null;
   resetLabel: string | null;
 }
@@ -171,12 +179,19 @@ interface IAgentUsageState {
 }
 
 const USAGE_PROVIDERS: IUsageProviderConfig[] = [
-  { id: "codex", label: "Codex", command: "codex_usage", Icon: Bot },
-  { id: "agy", label: "Antigravity", command: "agy_usage", Icon: Sparkles },
-  { id: "claude", label: "Claude Code", command: "claude_usage", Icon: Cloud },
-  { id: "cursor", label: "Cursor", command: "cursor_usage", Icon: MousePointer2 },
-  { id: "grok", label: "Grok", command: "grok_usage", Icon: CircleDot },
+  { id: "codex", label: "Codex", command: "codex_usage", iconPath: "/provider-icons/codex.svg", color: "#10a37f" },
+  { id: "agy", label: "Antigravity", command: "agy_usage", iconPath: "/provider-icons/antigravity.svg", color: "#4285f4" },
+  { id: "claude", label: "Claude Code", command: "claude_usage", iconPath: "/provider-icons/claude.svg", color: "#d97757" },
+  { id: "cursor", label: "Cursor", command: "cursor_usage", iconPath: "/provider-icons/cursor.svg", color: "#ffffff" },
+  { id: "grok", label: "Grok", command: "grok_usage", iconPath: "/provider-icons/grok.svg", color: "#d9d9d9" },
 ];
+
+const DEFAULT_USAGE_SETTINGS: IUsageSettings = {
+  refreshMs: DEFAULT_USAGE_REFRESH_MS,
+  usageMode: "left",
+  resetMode: "relative",
+  timeFormat: "auto",
+};
 
 const estimateLiveActivityWingWidth = (label: string): number => {
   const textWidth = Math.ceil(label.length * 5.6);
@@ -296,6 +311,35 @@ const writeDeletedSessionIds = (registry: DeletedSessionRegistry) => {
   }
 };
 
+const isUsageMode = (value: unknown): value is UsageMode => value === "left" || value === "used";
+const isUsageResetMode = (value: unknown): value is UsageResetMode => value === "relative" || value === "absolute";
+const isUsageTimeFormat = (value: unknown): value is UsageTimeFormat => value === "auto" || value === "12h" || value === "24h";
+const isRefreshMs = (value: unknown): value is number => typeof value === "number" && [5, 15, 30, 60].includes(value / 60_000);
+
+const readUsageSettings = (): IUsageSettings => {
+  try {
+    const raw = window.localStorage.getItem(USAGE_SETTINGS_STORAGE_KEY);
+    if (!raw) return DEFAULT_USAGE_SETTINGS;
+    const parsed = JSON.parse(raw) as Partial<IUsageSettings>;
+    return {
+      refreshMs: isRefreshMs(parsed.refreshMs) ? parsed.refreshMs : DEFAULT_USAGE_SETTINGS.refreshMs,
+      usageMode: isUsageMode(parsed.usageMode) ? parsed.usageMode : DEFAULT_USAGE_SETTINGS.usageMode,
+      resetMode: isUsageResetMode(parsed.resetMode) ? parsed.resetMode : DEFAULT_USAGE_SETTINGS.resetMode,
+      timeFormat: isUsageTimeFormat(parsed.timeFormat) ? parsed.timeFormat : DEFAULT_USAGE_SETTINGS.timeFormat,
+    };
+  } catch {
+    return DEFAULT_USAGE_SETTINGS;
+  }
+};
+
+const writeUsageSettings = (settings: IUsageSettings) => {
+  try {
+    window.localStorage.setItem(USAGE_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+  } catch {
+    // Ignore storage errors; settings still apply for the current runtime session.
+  }
+};
+
 const isDismissedAfter = (registry: DismissedSessionRegistry, conversationId: string | null | undefined, latestEventAt: string | null | undefined): boolean => {
   if (!conversationId || !latestEventAt) return false;
   const dismissedAt = registry[conversationId];
@@ -408,8 +452,23 @@ const formatDurationShort = (ms: number): string => {
   return `${minutes}m`;
 };
 
-const formatResetLabel = (resetsAt: string | undefined): string | null => {
+const formatAbsoluteTime = (timestamp: string, format: UsageTimeFormat): string | null => {
+  const date = new Date(timestamp);
+  if (!Number.isFinite(date.getTime())) return null;
+  const hour12 = format === "auto" ? undefined : format === "12h";
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12,
+  }).format(date);
+};
+
+const formatResetLabel = (resetsAt: string | undefined, settings: IUsageSettings): string | null => {
   if (!resetsAt) return null;
+  if (settings.resetMode === "absolute") {
+    const time = formatAbsoluteTime(resetsAt, settings.timeFormat);
+    return time ? `Reset at ${time}` : null;
+  }
   const resetMs = Date.parse(resetsAt);
   if (!Number.isFinite(resetMs)) return null;
   const delta = resetMs - Date.now();
@@ -417,14 +476,21 @@ const formatResetLabel = (resetsAt: string | undefined): string | null => {
   return `Resets in ${formatDurationShort(delta)}`;
 };
 
-const createUsageMetric = (line: IUsageMetricLine): IUsageMetric => {
+const createUsageMetric = (line: IUsageMetricLine, settings: IUsageSettings): IUsageMetric => {
   const used = readProgressPercent(line);
   const left = used === null ? null : Math.max(0, 100 - used);
+  const value = settings.usageMode === "used" ? used : left;
+  const statusLevel = used === null
+    ? "ok"
+    : settings.usageMode === "used"
+      ? used >= 80 ? "danger" : used >= 55 ? "warning" : "ok"
+      : left !== null && left <= 20 ? "danger" : left !== null && left <= 45 ? "warning" : "ok";
   return {
     label: line.label,
-    value: left,
-    remainingLabel: left === null ? null : `${left}% left`,
-    resetLabel: formatResetLabel(line.resetsAt),
+    value,
+    statusLevel,
+    remainingLabel: value === null ? null : `${value}% ${settings.usageMode}`,
+    resetLabel: formatResetLabel(line.resetsAt, settings),
   };
 };
 
@@ -445,11 +511,11 @@ const createAgentUsageState = (providerId: UsageProviderId, partial: Partial<IAg
   ...partial,
 });
 
-const parseAgentUsageSnapshot = (providerId: UsageProviderId, snapshot: IAgentUsageSnapshot): IAgentUsageState => {
+const parseAgentUsageSnapshot = (providerId: UsageProviderId, snapshot: IAgentUsageSnapshot, settings: IUsageSettings): IAgentUsageState => {
   const lines = Array.isArray(snapshot.lines) ? snapshot.lines : [];
   const metrics = lines
     .filter((line) => line.type === "progress")
-    .map(createUsageMetric);
+    .map((line) => createUsageMetric(line, settings));
 
   return createAgentUsageState(providerId, {
     status: "online",
@@ -1162,14 +1228,14 @@ const demoUsageForProvider = (provider: IUsageProviderConfig): IAgentUsageState 
     plan: provider.id === "codex" ? "Pro" : "Max",
     metrics: provider.id === "codex"
       ? [
-          { label: "Session", value: 73, remainingLabel: "73% left", resetLabel: "Resets in 2h 18m" },
-          { label: "Weekly", value: 91, remainingLabel: "91% left", resetLabel: "Resets in 4d 7h" },
-          { label: "Reviews", value: 96, remainingLabel: "96% left", resetLabel: null },
+          { label: "Session", value: 73, statusLevel: "ok", remainingLabel: "73% left", resetLabel: "Resets in 2h 18m" },
+          { label: "Weekly", value: 91, statusLevel: "ok", remainingLabel: "91% left", resetLabel: "Resets in 4d 7h" },
+          { label: "Reviews", value: 96, statusLevel: "ok", remainingLabel: "96% left", resetLabel: null },
         ]
       : [
-          { label: "Gemini Pro", value: 82, remainingLabel: "82% left", resetLabel: "Resets in 4h 31m" },
-          { label: "Gemini Flash", value: 93, remainingLabel: "93% left", resetLabel: "Resets in 4h 31m" },
-          { label: "Claude", value: 42, remainingLabel: "42% left", resetLabel: "Resets in 1d 19h" },
+          { label: "Gemini Pro", value: 82, statusLevel: "ok", remainingLabel: "82% left", resetLabel: "Resets in 4h 31m" },
+          { label: "Gemini Flash", value: 93, statusLevel: "ok", remainingLabel: "93% left", resetLabel: "Resets in 4h 31m" },
+          { label: "Claude", value: 42, statusLevel: "warning", remainingLabel: "42% left", resetLabel: "Resets in 1d 19h" },
         ],
     sessionPercent: provider.id === "codex" ? 27 : null,
     weeklyPercent: provider.id === "codex" ? 9 : null,
@@ -1180,10 +1246,16 @@ const demoUsageForProvider = (provider: IUsageProviderConfig): IAgentUsageState 
     last30Days: null,
   });
 
-const useAgentUsageList = () => {
+const useAgentUsageList = (settings: IUsageSettings) => {
+  const settingsRef = useRef(settings);
   const [usages, setUsages] = useState<Record<UsageProviderId, IAgentUsageState>>(() =>
     Object.fromEntries(USAGE_PROVIDERS.map((provider) => [provider.id, createAgentUsageState(provider.id)])) as Record<UsageProviderId, IAgentUsageState>,
   );
+  const [snapshots, setSnapshots] = useState<Partial<Record<UsageProviderId, IAgentUsageSnapshot>>>({});
+
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
 
   const refreshProvider = async (provider: IUsageProviderConfig) => {
     if (DEMO_MODE) {
@@ -1201,7 +1273,8 @@ const useAgentUsageList = () => {
 
     try {
       const snapshot = await invoke<IAgentUsageSnapshot>(provider.command);
-      setUsages((current) => ({ ...current, [provider.id]: parseAgentUsageSnapshot(provider.id, snapshot) }));
+      setSnapshots((current) => ({ ...current, [provider.id]: snapshot }));
+      setUsages((current) => ({ ...current, [provider.id]: parseAgentUsageSnapshot(provider.id, snapshot, settingsRef.current) }));
     } catch (error) {
       setUsages((current) => ({
         ...current,
@@ -1219,9 +1292,22 @@ const useAgentUsageList = () => {
 
   useEffect(() => {
     refresh();
-    const timer = window.setInterval(refresh, USAGE_POLL_MS);
+    const timer = window.setInterval(refresh, settings.refreshMs);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [settings.refreshMs]);
+
+  useEffect(() => {
+    if (Object.keys(snapshots).length === 0) return;
+    setUsages((current) => {
+      const next = { ...current };
+      for (const provider of USAGE_PROVIDERS) {
+        const snapshot = snapshots[provider.id];
+        if (!snapshot) continue;
+        next[provider.id] = parseAgentUsageSnapshot(provider.id, snapshot, settings);
+      }
+      return next;
+    });
+  }, [settings.resetMode, settings.timeFormat, settings.usageMode, snapshots]);
 
   return { refresh, usages };
 };
@@ -1230,7 +1316,7 @@ const UsageMeter = ({ metric }: { metric: IUsageMetric }) => (
   <div className="usage-meter" data-empty={metric.value === null}>
     <div className="usage-meter-head">
       <span className="usage-meter-label">{metric.label}</span>
-      <span className="usage-status-dot" data-level={metric.value !== null && metric.value <= 20 ? "danger" : metric.value !== null && metric.value <= 45 ? "warning" : "ok"} />
+      <span className="usage-status-dot" data-level={metric.statusLevel} />
     </div>
     <span className="usage-meter-track" aria-hidden="true">
       <span className="usage-meter-fill" style={{ width: `${metric.value ?? 0}%` }} />
@@ -1242,14 +1328,26 @@ const UsageMeter = ({ metric }: { metric: IUsageMetric }) => (
   </div>
 );
 
+const UsageProviderIcon = ({ provider, size = 14 }: { provider: IUsageProviderConfig; size?: number }) => (
+  <span
+    className="usage-provider-icon"
+    aria-hidden="true"
+    style={{
+      "--provider-icon": `url(${provider.iconPath})`,
+      "--provider-color": provider.color,
+      width: size,
+      height: size,
+    } as CSSProperties & Record<"--provider-icon" | "--provider-color", string>}
+  />
+);
+
 const UsageProviderDetail = ({ provider, usage }: { provider: IUsageProviderConfig; usage: IAgentUsageState }) => {
-  const Icon = provider.Icon;
   const statusText = usage.status === "loading" ? `Checking ${provider.label}` : usage.message ?? `${provider.label} usage unavailable`;
 
   return (
     <section className="usage-provider-card" data-status={usage.status}>
       <div className="usage-provider-head">
-        <span className="usage-provider-title"><Icon size={14} strokeWidth={2.2} />{provider.label}</span>
+        <span className="usage-provider-title"><UsageProviderIcon provider={provider} />{provider.label}</span>
         {usage.plan ? <span className="usage-plan">{usage.plan}</span> : null}
       </div>
       {usage.status === "online" && usage.metrics.length > 0 ? (
@@ -1272,19 +1370,119 @@ const UsageProviderDetail = ({ provider, usage }: { provider: IUsageProviderConf
   );
 };
 
-const AgentUsageList = ({ onRefresh, usages }: { onRefresh: () => void; usages: Record<UsageProviderId, IAgentUsageState> }) => {
-  const [selectedProviderId, setSelectedProviderId] = useState<UsageProviderId | null>(null);
-  const visibleProviders = USAGE_PROVIDERS.filter((provider) => {
-    const usage = usages[provider.id] ?? createAgentUsageState(provider.id);
-    return usage.status === "loading" || usage.status === "online";
-  });
-  const selectedProvider = visibleProviders.find((provider) => provider.id === selectedProviderId) ?? visibleProviders[0] ?? null;
+const SettingSegment = <T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: Array<{ label: string; value: T; sublabel?: string }>;
+  value: T;
+  onChange: (value: T) => void;
+}) => (
+  <div className="usage-setting-segment">
+    {options.map((option) => (
+      <button
+        className="usage-setting-option"
+        data-active={option.value === value}
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          onChange(option.value);
+        }}
+        data-tauri-drag-region="false"
+        key={option.value}
+      >
+        <span>{option.label}</span>
+        {option.sublabel ? <small>{option.sublabel}</small> : null}
+      </button>
+    ))}
+  </div>
+);
+
+const UsageSettingsPanel = ({ settings, onChange }: { settings: IUsageSettings; onChange: (settings: IUsageSettings) => void }) => {
+  const sampleReset = new Date(Date.now() + 5 * 60 * 60 * 1000 + 12 * 60_000).toISOString();
+  const set = (partial: Partial<IUsageSettings>) => onChange({ ...settings, ...partial });
+
+  return (
+    <section className="usage-settings-panel">
+      <div className="usage-provider-head">
+        <span className="usage-provider-title"><Settings size={14} strokeWidth={2.2} />Usage settings</span>
+      </div>
+      <div className="usage-setting-group">
+        <span className="usage-setting-title">Auto refresh</span>
+        <span className="usage-setting-desc">How often provider usage is refreshed</span>
+        <SettingSegment
+          value={`${settings.refreshMs}`}
+          onChange={(value) => set({ refreshMs: Number(value) })}
+          options={[
+            { label: "5 min", value: `${5 * 60_000}` },
+            { label: "15 min", value: `${15 * 60_000}` },
+            { label: "30 min", value: `${30 * 60_000}` },
+            { label: "1 hour", value: `${60 * 60_000}` },
+          ]}
+        />
+      </div>
+      <div className="usage-setting-group">
+        <span className="usage-setting-title">Usage mode</span>
+        <span className="usage-setting-desc">Whether bars show remaining or consumed quota</span>
+        <SettingSegment
+          value={settings.usageMode}
+          onChange={(value) => set({ usageMode: value })}
+          options={[{ label: "Left", value: "left" }, { label: "Used", value: "used" }]}
+        />
+      </div>
+      <div className="usage-setting-group">
+        <span className="usage-setting-title">Reset timers</span>
+        <span className="usage-setting-desc">Countdown or clock time</span>
+        <SettingSegment
+          value={settings.resetMode}
+          onChange={(value) => set({ resetMode: value })}
+          options={[
+            { label: "Relative", value: "relative", sublabel: formatResetLabel(sampleReset, { ...settings, resetMode: "relative" })?.replace("Resets in ", "") },
+            { label: "Absolute", value: "absolute", sublabel: formatResetLabel(sampleReset, { ...settings, resetMode: "absolute" })?.replace("Reset at ", "") },
+          ]}
+        />
+      </div>
+      <div className="usage-setting-group">
+        <span className="usage-setting-title">Time format</span>
+        <span className="usage-setting-desc">Used by absolute reset times</span>
+        <SettingSegment
+          value={settings.timeFormat}
+          onChange={(value) => set({ timeFormat: value })}
+          options={[
+            { label: "Auto", value: "auto", sublabel: formatAbsoluteTime(sampleReset, "auto") ?? undefined },
+            { label: "12-hour", value: "12h", sublabel: formatAbsoluteTime(sampleReset, "12h") ?? undefined },
+            { label: "24-hour", value: "24h", sublabel: formatAbsoluteTime(sampleReset, "24h") ?? undefined },
+          ]}
+        />
+      </div>
+    </section>
+  );
+};
+
+const AgentUsageList = ({ onRefresh, onSettingsChange, settings, usages }: {
+  onRefresh: () => void;
+  onSettingsChange: (settings: IUsageSettings) => void;
+  settings: IUsageSettings;
+  usages: Record<UsageProviderId, IAgentUsageState>;
+}) => {
+  const [selectedProviderId, setSelectedProviderId] = useState<UsageSidebarSelection | null>(null);
+  const visibleProviders = useMemo(
+    () => USAGE_PROVIDERS.filter((provider) => {
+      const usage = usages[provider.id] ?? createAgentUsageState(provider.id);
+      return usage.status === "loading" || usage.status === "online";
+    }),
+    [usages],
+  );
+  const selectedProvider = selectedProviderId === "settings" ? null : visibleProviders.find((provider) => provider.id === selectedProviderId) ?? visibleProviders[0] ?? null;
+  const activeSidebarId: UsageSidebarSelection = selectedProviderId === "settings" ? "settings" : selectedProvider?.id ?? "settings";
 
   useEffect(() => {
     if (visibleProviders.length === 0) {
-      setSelectedProviderId(null);
+      setSelectedProviderId("settings");
       return;
     }
+    if (selectedProviderId === "settings") return;
     if (!selectedProviderId || !visibleProviders.some((provider) => provider.id === selectedProviderId)) {
       setSelectedProviderId(visibleProviders[0].id);
     }
@@ -1298,21 +1496,17 @@ const AgentUsageList = ({ onRefresh, usages }: { onRefresh: () => void; usages: 
           <RefreshCw size={12} strokeWidth={2.2} />
         </button>
       </div>
-      {visibleProviders.length === 0 ? (
-        <div className="usage-empty">No local usage providers found</div>
-      ) : selectedProvider ? (
-        <div className="usage-layout">
+      <div className="usage-layout">
           <div className="usage-sidebar" role="tablist" aria-label="Usage providers">
             {visibleProviders.map((provider) => {
               const usage = usages[provider.id] ?? createAgentUsageState(provider.id);
-              const Icon = provider.Icon;
               return (
                 <button
                   className="usage-side-tab"
-                  data-active={selectedProvider.id === provider.id}
+                  data-active={activeSidebarId === provider.id}
                   type="button"
                   role="tab"
-                  aria-selected={selectedProvider.id === provider.id}
+                  aria-selected={activeSidebarId === provider.id}
                   onClick={(event) => {
                     event.stopPropagation();
                     setSelectedProviderId(provider.id);
@@ -1321,18 +1515,37 @@ const AgentUsageList = ({ onRefresh, usages }: { onRefresh: () => void; usages: 
                   key={provider.id}
                   title={provider.label}
                 >
-                  <Icon size={13} strokeWidth={2.2} />
+                  <UsageProviderIcon provider={provider} size={13} />
                   <span>{provider.label}</span>
                   {usage.status === "online" ? <span className="usage-side-dot" /> : null}
                 </button>
               );
             })}
+            <button
+              className="usage-side-tab usage-side-settings"
+              data-active={activeSidebarId === "settings"}
+              type="button"
+              role="tab"
+              aria-selected={activeSidebarId === "settings"}
+              onClick={(event) => {
+                event.stopPropagation();
+                setSelectedProviderId("settings");
+              }}
+              data-tauri-drag-region="false"
+              title="Usage settings"
+            >
+              <Settings size={13} strokeWidth={2.2} />
+              <span>Settings</span>
+            </button>
           </div>
           <div className="usage-detail-panel">
-            <UsageProviderDetail provider={selectedProvider} usage={usages[selectedProvider.id] ?? createAgentUsageState(selectedProvider.id)} />
+            {activeSidebarId === "settings" ? (
+              <UsageSettingsPanel settings={settings} onChange={onSettingsChange} />
+            ) : selectedProvider ? (
+              <UsageProviderDetail provider={selectedProvider} usage={usages[selectedProvider.id] ?? createAgentUsageState(selectedProvider.id)} />
+            ) : <div className="usage-empty">No local usage providers found</div>}
           </div>
         </div>
-      ) : null}
     </div>
   );
 };
@@ -1473,7 +1686,8 @@ const useAgentHaloPresence = () => {
 
 const App = () => {
   const { capabilities, connection, lastLiveEvent, now, presence, recentEvents, refreshCapabilities, sessionEvents, setSessionEventRegistry, view } = useAgentHaloPresence();
-  const { refresh: refreshAgentUsage, usages: agentUsages } = useAgentUsageList();
+  const [usageSettings, setUsageSettings] = useState<IUsageSettings>(readUsageSettings);
+  const { refresh: refreshAgentUsage, usages: agentUsages } = useAgentUsageList(usageSettings);
   const [acknowledgedConversationId, setAcknowledgedConversationId] = useState<string | null>(null);
   const [nativeAction, setNativeAction] = useState<INativeActionState>({ bridgeOnline: null, message: null });
   const [sessionAction, setSessionAction] = useState<ISessionActionState>({ ok: null, message: null });
@@ -1842,6 +2056,11 @@ const App = () => {
     setPanelOpen(true);
   };
 
+  const updateUsageSettings = (settings: IUsageSettings) => {
+    setUsageSettings(settings);
+    writeUsageSettings(settings);
+  };
+
   const backToSessions = () => {
     setSelectedSessionId(null);
     setSetupOpen(false);
@@ -2041,7 +2260,7 @@ const App = () => {
             )}
             <div className="sheet-divider" />
 
-            <div className="sheet-body">
+            <div className="sheet-body" data-view={activeMainTab === "usage" && !setupOpen && !selectedSession ? "usage" : "default"}>
               {setupOpen ? (
                 <div className="setup-body">
                   <div className="setup-row">
@@ -2130,7 +2349,7 @@ const App = () => {
                   )}
                 </div>
               ) : activeMainTab === "usage" ? (
-                <AgentUsageList usages={agentUsages} onRefresh={refreshAgentUsage} />
+                <AgentUsageList usages={agentUsages} onRefresh={refreshAgentUsage} settings={usageSettings} onSettingsChange={updateUsageSettings} />
               ) : sessions.length === 0 ? (
                 <div className="empty-state">
                   <div className="empty-glyph">◌</div>

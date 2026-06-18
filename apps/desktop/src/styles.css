@@ -595,13 +595,13 @@ button {
 }
 
 .usage-list {
-  min-height: 138px;
-  max-height: 336px;
+  min-height: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
   flex: 1;
-  overflow-y: auto;
-  padding: 12px 0 6px;
+  overflow: hidden;
+  padding: 12px 0 0;
   color: var(--text-2);
   background: transparent;
 }
@@ -630,6 +630,8 @@ button {
   grid-template-columns: 132px minmax(0, 1fr);
   gap: 12px;
   min-height: 0;
+  flex: 1;
+  overflow: hidden;
 }
 
 .usage-sidebar {
@@ -637,6 +639,8 @@ button {
   flex-direction: column;
   gap: 4px;
   min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
   padding-right: 10px;
   border-right: 1px solid rgba(255, 255, 255, 0.08);
 }
@@ -669,6 +673,12 @@ button {
   background: rgba(255, 255, 255, 0.07);
 }
 
+.usage-side-settings {
+  margin-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 0 0 8px 8px;
+}
+
 .usage-side-dot {
   width: 5px;
   height: 5px;
@@ -681,6 +691,78 @@ button {
 .usage-detail-panel {
   min-width: 0;
   min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 22px;
+}
+
+.usage-settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 2px 0 4px;
+}
+
+.usage-setting-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.usage-setting-title {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.usage-setting-desc {
+  color: var(--text-3);
+  font-size: 10px;
+  line-height: 1.1;
+}
+
+.usage-setting-segment {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.usage-setting-option {
+  min-width: 0;
+  min-height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 1px;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 7px;
+  color: var(--text-2);
+  background: transparent;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.usage-setting-option small {
+  color: var(--text-3);
+  font-size: 9px;
+  font-weight: 500;
+}
+
+.usage-setting-option[data-active="true"] {
+  color: #111;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.usage-setting-option[data-active="true"] small {
+  color: rgba(0, 0, 0, 0.58);
 }
 
 .usage-provider-card {
@@ -712,6 +794,14 @@ button {
 
 .usage-provider-title svg {
   color: var(--text-2);
+}
+
+.usage-provider-icon {
+  display: inline-block;
+  flex: none;
+  background: var(--provider-color, currentColor);
+  mask: var(--provider-icon) center / contain no-repeat;
+  -webkit-mask: var(--provider-icon) center / contain no-repeat;
 }
 
 .usage-plan {
@@ -869,6 +959,11 @@ button {
   min-height: 0;
   overflow-y: auto;
   padding: 0 36px 18px;
+}
+
+.sheet-body[data-view="usage"] {
+  overflow: hidden;
+  padding-bottom: 0;
 }
 
 .footer-actions {
