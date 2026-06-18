@@ -13,8 +13,7 @@ import {
   TriangleAlert,
   X,
 } from "lucide-react";
-import lottie from "lottie-web/build/player/lottie_light";
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createRoot } from "react-dom/client";
 import {
   createDefaultBridgeCapabilities,
@@ -703,409 +702,42 @@ const StatusGlyph = ({ status }: { status: ISessionSummary["status"] }) => {
   return <span className="status-slot"><span className={`status-dot status-${status}`} /></span>;
 };
 
-const ActivityMascot = ({ sessionId, status }: { sessionId?: string | null; status?: ISessionSummary["status"] }) => {
-  const variant = getMascotVariant(sessionId);
-  let earLeft: ReactNode = <path className="mascot-ear" d="M5.2 8.3 7.5 2.6l3.1 5.4" />;
-  let earRight: ReactNode = <path className="mascot-ear" d="m13.4 8 3.1-5.4 2.3 5.7" />;
-  let eyeLeft: ReactNode = <path className="mascot-eye" d="M9 9.7h.1" />;
-  let eyeRight: ReactNode = <path className="mascot-eye" d="M15 9.7h.1" />;
-  let mouth: ReactNode = <path className="mascot-mouth" d="M10.7 12.1c.7.6 1.9.6 2.6 0" />;
-  let detail: ReactNode = null;
+type SessionMascotAction = "idle" | "walk" | "work" | "coffee" | "hurt" | "dust";
 
-  if (variant === 1) {
-    earLeft = <path className="mascot-ear" d="M5.2 8.3c.6-2.1 1-3.1 1.8-3.3.8-.2 1.5 1.2 3.6 3" />;
-    earRight = <path className="mascot-ear" d="M13.4 8c2.1-1.8 2.8-3.2 3.6-3 .8.2 1.2 1.2 1.8 3.3" />;
-    detail = <path className="mascot-detail-line" d="M11 4.7v1.7M13 4.7v1.7" />;
-  } else if (variant === 2) {
-    earRight = <path className="mascot-ear" d="M13.4 8 15.9 3.6l.1 1.2.8-.3 2 3.8" />;
-    eyeLeft = <path className="mascot-eye-wink" d="M8 10.1q1 .9 2 0" />;
-    detail = <path className="mascot-tail" d="M18.8 13.8c1.2 0 2 .7 2 1.6s-.8 1.5-2 1.5" />;
-  } else if (variant === 3) {
-    detail = (
-      <>
-        <path className="mascot-detail-line" d="M7.5 4.5 8.5 7.3M16.5 4.5l-1 2.8" />
-        <path className="mascot-whisker" d="M3.1 11h2.2M18.7 11h2.2" />
-      </>
-    );
-  } else if (variant === 4) {
-    earLeft = <path className="mascot-ear" d="M5.2 8.3Q4 4 6 3.5q1.5-.4 4.6 4.5" />;
-    earRight = <path className="mascot-ear" d="M13.4 8q3.1-4.9 4.6-4.5 2 .5.8 4.8" />;
-    eyeLeft = <path className="mascot-eye-wink" d="M8 10.1q1 1 2 0" />;
-    eyeRight = <path className="mascot-eye-wink" d="M14 10.1q1 1 2 0" />;
-    mouth = <path className="mascot-mouth" d="M11.5 12.1h1" />;
-    detail = <path className="mascot-halo mascot-halo-double" d="M9 .7c.8-.5 1.8-.7 3-.7s2.2.2 3 .7" />;
-  } else if (variant === 5) {
-    earLeft = <path className="mascot-ear" d="M5.2 8.3 7.2 1.8l3.4 6.2" />;
-    earRight = <path className="mascot-ear" d="M13.4 8l3.4-6.2 2 6.5" />;
-    eyeLeft = <path className="mascot-eye-wink" d="M8.2 10.2l1.6-1" />;
-    eyeRight = <path className="mascot-eye-wink" d="M14.2 9.2l1.6 1" />;
-    detail = <path className="mascot-detail-line mascot-forehead-mark" d="m12 4 .8 1-.8 1-.8-1z" />;
+const getSessionMascotAction = (status?: ISessionSummary["status"]): SessionMascotAction => {
+  if (status === "working") {
+    return "work";
   }
 
+  if (status === "waiting") {
+    return "coffee";
+  }
+
+  if (status === "error") {
+    return "hurt";
+  }
+
+  return "idle";
+};
+
+const ActivityMascot = ({ sessionId, status }: { sessionId?: string | null; status?: ISessionSummary["status"] }) => {
+  const variant = getMascotVariant(sessionId);
+  const action = getSessionMascotAction(status);
+
   return (
-    <span className="activity-mascot" data-status={status} data-variant={variant} style={getMascotStyle(variant)} aria-hidden="true">
-      <svg viewBox="0 0 24 18" focusable="false">
-        {earLeft}
-        {earRight}
-        <path className="mascot-face" d="M4.2 8.4c0-3 2.5-5.3 7.8-5.3s7.8 2.3 7.8 5.3v1.7c0 3.3-2.8 5.5-7.8 5.5s-7.8-2.2-7.8-5.5z" />
-        <path className="mascot-halo mascot-halo-left" d="M8 1.7c1.2-.8 2.6-1.1 4-1.1" />
-        <path className="mascot-halo mascot-halo-right" d="M12 .6c1.4 0 2.8.3 4 1.1" />
-        {eyeLeft}
-        {eyeRight}
-        {mouth}
-        <path className="mascot-cheek mascot-cheek-left" d="M6.9 11.6h1.1" />
-        <path className="mascot-cheek mascot-cheek-right" d="M16 11.6h1.1" />
-        {detail}
-      </svg>
+    <span className="activity-mascot activity-mascot-sprite" data-status={status} data-action={action} data-variant={variant} style={getMascotStyle(variant)} aria-hidden="true">
+      <span className="activity-mascot-stage" />
     </span>
   );
 };
 
-type ILottieColor = [number, number, number, number];
-
-type ILottieKeyframe<T extends number[]> = {
-  t: number;
-  s: T;
-  e?: T;
-  i?: { x: number[]; y: number[] };
-  o?: { x: number[]; y: number[] };
-};
-
-type ILottieValue<T extends number[]> = { a: 0; k: T } | { a: 1; k: ILottieKeyframe<T>[] };
-
-type ILottieTransform = {
-  a: ILottieValue<[number, number, number]>;
-  o: ILottieValue<[number]>;
-  p: ILottieValue<[number, number, number]>;
-  r: ILottieValue<[number]>;
-  s: ILottieValue<[number, number, number]>;
-};
-
-type ILottieShape = Record<string, unknown>;
-
-type ILottieLayer = {
-  ddd: 0;
-  ind: number;
-  ty: 4;
-  nm: string;
-  sr: 1;
-  ks: ILottieTransform;
-  ao: 0;
-  shapes: ILottieShape[];
-  ip: 0;
-  op: number;
-  st: 0;
-  bm: 0;
-};
-
-type ILottieAnimationData = {
-  v: string;
-  fr: number;
-  ip: 0;
-  op: number;
-  w: number;
-  h: number;
-  nm: string;
-  ddd: 0;
-  assets: [];
-  layers: ILottieLayer[];
-};
-
-const LOTTIE_THEMES = [
-  { fur: [0.965, 0.965, 0.933, 1], line: [0.047, 0.047, 0.055, 0.78], accent: [1, 0.616, 0.239, 1] },
-  { fur: [0.933, 0.957, 1, 1], line: [0.051, 0.071, 0.11, 0.74], accent: [1, 0.698, 0.239, 1] },
-  { fur: [1, 0.941, 0.871, 1], line: [0.118, 0.063, 0.039, 0.74], accent: [0.984, 0.443, 0.522, 1] },
-  { fur: [0.918, 0.922, 0.937, 1], line: [0.063, 0.063, 0.078, 0.76], accent: [1, 0.616, 0.239, 1] },
-  { fur: [0.984, 0.984, 0.965, 1], line: [0.078, 0.078, 0.055, 0.74], accent: [0.98, 0.8, 0.082, 1] },
-  { fur: [0.949, 0.91, 1, 1], line: [0.09, 0.055, 0.118, 0.74], accent: [0.976, 0.451, 0.086, 1] },
-] as const satisfies { fur: ILottieColor; line: ILottieColor; accent: ILottieColor }[];
-
-const staticValue = <T extends number[]>(value: T): ILottieValue<T> => ({ a: 0, k: value });
-
-const ease = { x: [0.42], y: [1] };
-const easeOut = { x: [0.58], y: [0] };
-
-const animatedValue = <T extends number[]>(frames: ILottieKeyframe<T>[]): ILottieValue<T> => ({ a: 1, k: frames });
-
-const transform = (options: Partial<{
-  anchor: [number, number, number];
-  opacity: [number];
-  position: [number, number, number] | ILottieValue<[number, number, number]>;
-  rotation: [number] | ILottieValue<[number]>;
-  scale: [number, number, number] | ILottieValue<[number, number, number]>;
-}> = {}): ILottieTransform => ({
-  a: staticValue(options.anchor ?? [0, 0, 0]),
-  o: staticValue(options.opacity ?? [100]),
-  p: Array.isArray(options.position) ? staticValue(options.position) : options.position ?? staticValue([0, 0, 0]),
-  r: Array.isArray(options.rotation) ? staticValue(options.rotation) : options.rotation ?? staticValue([0]),
-  s: Array.isArray(options.scale) ? staticValue(options.scale) : options.scale ?? staticValue([100, 100, 100]),
-});
-
-const fill = (color: ILottieColor): ILottieShape => ({ ty: "fl", c: staticValue(color), o: staticValue([100]), r: 1, bm: 0, nm: "fill" });
-const stroke = (color: ILottieColor, width: number): ILottieShape => ({ ty: "st", c: staticValue(color), o: staticValue([100]), w: staticValue([width]), lc: 2, lj: 2, ml: 4, bm: 0, nm: "stroke" });
-const ellipse = (name: string, position: [number, number], size: [number, number]): ILottieShape => ({ ty: "el", p: staticValue(position), s: staticValue(size), d: 1, nm: name });
-const rect = (name: string, position: [number, number], size: [number, number], radius = 1): ILottieShape => ({ ty: "rc", p: staticValue(position), s: staticValue(size), r: staticValue([radius]), nm: name });
-const path = (
-  name: string,
-  vertices: [number, number][],
-  closed: boolean,
-  inTangents?: [number, number][],
-  outTangents?: [number, number][]
-): ILottieShape => ({
-  ty: "sh",
-  ks: {
-    a: 0,
-    k: {
-      i: inTangents ?? vertices.map(() => [0, 0]),
-      o: outTangents ?? vertices.map(() => [0, 0]),
-      v: vertices,
-      c: closed,
-    },
-  },
-  nm: name,
-});
-
-const layer = (index: number, name: string, shapes: ILottieShape[], ks: ILottieTransform, op: number): ILottieLayer => ({
-  ddd: 0,
-  ind: index,
-  ty: 4,
-  nm: name,
-  sr: 1,
-  ks,
-  ao: 0,
-  shapes,
-  ip: 0,
-  op,
-  st: 0,
-  bm: 0,
-});
-
-const statusOp = (status: ISessionSummary["status"] | undefined) => (status === "done" || status === "error" ? 36 : status === "waiting" ? 96 : 72);
-
-const buildLottieSessionCat = (variant: number, status: ISessionSummary["status"] | undefined): ILottieAnimationData => {
-  const theme = LOTTIE_THEMES[variant] ?? LOTTIE_THEMES[0];
-  const op = statusOp(status);
-  const isWorking = status === "working";
-  const isWaiting = status === "waiting";
-  const isDone = status === "done";
-  const isError = status === "error";
-
-  const bodyScale: ILottieValue<[number, number, number]> = isWorking
-    ? animatedValue([
-        { t: 0, s: [100, 100, 100], e: [98, 103, 100], i: ease, o: easeOut },
-        { t: 36, s: [98, 103, 100], e: [100, 100, 100], i: ease, o: easeOut },
-        { t: 72, s: [100, 100, 100] },
-      ])
-    : isWaiting
-      ? animatedValue([
-          { t: 0, s: [100, 100, 100], e: [99, 101.5, 100], i: ease, o: easeOut },
-          { t: 48, s: [99, 101.5, 100], e: [100, 100, 100], i: ease, o: easeOut },
-          { t: 96, s: [100, 100, 100] },
-        ])
-      : isDone
-        ? animatedValue([
-            { t: 0, s: [92, 92, 100], e: [108, 108, 100], i: ease, o: easeOut },
-            { t: 12, s: [108, 108, 100], e: [100, 100, 100], i: ease, o: easeOut },
-            { t: 24, s: [100, 100, 100] },
-          ])
-        : staticValue([100, 100, 100]);
-
-  const tailRotation: ILottieValue<[number]> = isWorking
-    ? animatedValue([
-        { t: 0, s: [-6], e: [8], i: ease, o: easeOut },
-        { t: 36, s: [8], e: [-6], i: ease, o: easeOut },
-        { t: 72, s: [-6] },
-      ])
-    : isWaiting
-      ? animatedValue([
-          { t: 0, s: [-2], e: [-2], i: ease, o: easeOut },
-          { t: 54, s: [-2], e: [6], i: ease, o: easeOut },
-          { t: 74, s: [6], e: [-2], i: ease, o: easeOut },
-          { t: 96, s: [-2] },
-        ])
-      : staticValue([variant === 4 ? 2 : 0]);
-
-  const blinkScale: ILottieValue<[number, number, number]> = isWaiting
-    ? animatedValue([
-        { t: 0, s: [100, 100, 100], e: [100, 100, 100], i: ease, o: easeOut },
-        { t: 70, s: [100, 100, 100], e: [100, 16, 100], i: ease, o: easeOut },
-        { t: 74, s: [100, 16, 100], e: [100, 100, 100], i: ease, o: easeOut },
-        { t: 82, s: [100, 100, 100] },
-      ])
-    : isWorking
-      ? animatedValue([
-          { t: 0, s: [100, 100, 100], e: [100, 100, 100], i: ease, o: easeOut },
-          { t: 50, s: [100, 100, 100], e: [100, 16, 100], i: ease, o: easeOut },
-          { t: 54, s: [100, 16, 100], e: [100, 100, 100], i: ease, o: easeOut },
-          { t: 62, s: [100, 100, 100] },
-        ])
-      : staticValue([100, 100, 100]);
-
-  const bodyWidth = variant === 1 || variant === 4 ? 28 : variant === 2 ? 23 : 25;
-  const bodyHeight = variant === 2 ? 13 : variant === 4 ? 10 : 15;
-  const bodyY = variant === 4 ? 32 : 29;
-  const headX = variant === 5 ? 29 : 27;
-
-  const headPosition: ILottieValue<[number, number, number]> = isWorking
-    ? animatedValue([
-        { t: 0, s: [headX, 19, 0], e: [headX, 19.6, 0], i: ease, o: easeOut },
-        { t: 36, s: [headX, 19.6, 0], e: [headX, 19, 0], i: ease, o: easeOut },
-        { t: 72, s: [headX, 19, 0] },
-      ])
-    : isError
-      ? animatedValue([
-          { t: 0, s: [headX, 19, 0], e: [headX - 1.5, 19, 0], i: ease, o: easeOut },
-          { t: 4, s: [headX - 1.5, 19, 0], e: [headX + 1.5, 19, 0], i: ease, o: easeOut },
-          { t: 8, s: [headX + 1.5, 19, 0], e: [headX - 1.2, 19, 0], i: ease, o: easeOut },
-          { t: 12, s: [headX - 1.2, 19, 0], e: [headX + 1.2, 19, 0], i: ease, o: easeOut },
-          { t: 16, s: [headX + 1.2, 19, 0], e: [headX - 0.8, 19, 0], i: ease, o: easeOut },
-          { t: 20, s: [headX - 0.8, 19, 0], e: [headX + 0.8, 19, 0], i: ease, o: easeOut },
-          { t: 24, s: [headX + 0.8, 19, 0], e: [headX, 19, 0], i: ease, o: easeOut },
-          { t: 36, s: [headX, 19, 0] },
-        ])
-      : staticValue([headX, 19, 0]);
-
-  const headRotation: ILottieValue<[number]> = isWaiting
-    ? animatedValue([
-        { t: 0, s: [0], e: [0], i: ease, o: easeOut },
-        { t: 30, s: [0], e: [-4], i: ease, o: easeOut },
-        { t: 50, s: [-4], e: [0], i: ease, o: easeOut },
-        { t: 96, s: [0] },
-      ])
-    : staticValue([0]);
-
-  const frontPawRotation: ILottieValue<[number]> = isWaiting
-    ? animatedValue([
-        { t: 0, s: [0], e: [0], i: ease, o: easeOut },
-        { t: 40, s: [0], e: [-35], i: ease, o: easeOut },
-        { t: 50, s: [-35], e: [-25], i: ease, o: easeOut },
-        { t: 54, s: [-25], e: [-40], i: ease, o: easeOut },
-        { t: 58, s: [-40], e: [-25], i: ease, o: easeOut },
-        { t: 62, s: [-25], e: [-40], i: ease, o: easeOut },
-        { t: 66, s: [-40], e: [0], i: ease, o: easeOut },
-        { t: 76, s: [0] },
-        { t: 96, s: [0] },
-      ])
-    : staticValue([0]);
-
-  const tailBase: [number, number, number] = variant === 4 ? [46, 33, 0] : variant === 2 ? [45, 26, 0] : [46, 29, 0];
-
-  let tailShape: ILottieShape;
-  if (variant === 4) {
-    tailShape = path(
-      "tail",
-      [[0, 0], [7, 2], [13, -1]],
-      false,
-      [[0, 0], [-3, -1], [-3, 1]],
-      [[3, 1], [3, -1], [0, 0]]
-    );
-  } else if (variant === 2) {
-    tailShape = path(
-      "tail",
-      [[0, 0], [6, -5], [5, -13], [10, -17]],
-      false,
-      [[0, 0], [-2.5, 2.5], [0, 3.5], [-2.5, 2]],
-      [[2.5, -2.5], [0, -3.5], [2.5, -2], [0, 0]]
-    );
-  } else if (variant === 1) {
-    tailShape = path(
-      "tail",
-      [[0, 0], [6, 1], [11, -3]],
-      false,
-      [[0, 0], [-3, -0.5], [-2.5, 2]],
-      [[3, 0.5], [2.5, -2], [0, 0]]
-    );
-  } else {
-    tailShape = path(
-      "tail",
-      [[0, 0], [6, -6], [6, -14], [12, -18]],
-      false,
-      [[0, 0], [-2.5, 2.5], [0, 4], [-3, 2]],
-      [[2.5, -2.5], [0, -4], [3, -2], [0, 0]]
-    );
-  }
-
-  let leftEarShape = path("left-ear", [[-9, -7], [-6.2, -14.5], [-2, -7]], true, [[0, 0], [-1.2, 0.8], [0, 0]], [[0, 0], [1.2, -0.8], [0, 0]]);
-  let rightEarShape = path("right-ear", [[4, -7], [7.8, -14.5], [10, -7]], true, [[0, 0], [-1.2, -0.8], [0, 0]], [[0, 0], [1.2, 0.8], [0, 0]]);
-
-  if (variant === 1) {
-    leftEarShape = path("left-ear", [[-9, -7], [-7.5, -12.5], [-2, -7]], true, [[0, 0], [-1.5, 0.8], [0, 0]], [[0, 0], [1.5, -0.8], [0, 0]]);
-    rightEarShape = path("right-ear", [[4, -7], [7.5, -12.5], [10, -7]], true, [[0, 0], [-1.5, -0.8], [0, 0]], [[0, 0], [1.5, 0.8], [0, 0]]);
-  } else if (variant === 2) {
-    rightEarShape = path("right-ear", [[4, -7], [7.2, -13.5], [7.6, -12.5], [8.2, -12.8], [10, -7]], true, [[0, 0], [-1, -0.5], [0, 0], [0, 0], [0, 0]], [[0, 0], [1, 0.5], [0, 0], [0, 0], [0, 0]]);
-  } else if (variant === 4) {
-    leftEarShape = path("left-ear", [[-9, -7], [-8, -13], [-3.5, -9.5]], true, [[0, 0], [-1.2, 1.2], [-1.5, 1.5]], [[0, 0], [1.2, -1.2], [1.5, -1.5]]);
-    rightEarShape = path("right-ear", [[4.5, -9.5], [8, -13], [10, -7]], true, [[-1.5, -1.5], [-1.2, -1.2], [0, 0]], [[1.5, 1.5], [1.2, 1.2], [0, 0]]);
-  } else if (variant === 5) {
-    leftEarShape = path("left-ear", [[-9, -7], [-6.5, -15.5], [-2, -7]], true, [[0, 0], [-0.8, 0.8], [0, 0]], [[0, 0], [0.8, -0.8], [0, 0]]);
-    rightEarShape = path("right-ear", [[4, -7], [7.5, -15.5], [10, -7]], true, [[0, 0], [-0.8, -0.8], [0, 0]], [[0, 0], [0.8, 0.8], [0, 0]]);
-  }
-
-  const haloShapes = [
-    path("halo-left", [[-5, -12], [-2, -14], [0, -14]], false),
-    stroke(theme.accent, 1.4),
-    path("halo-right", [[0, -14], [3, -14], [5, -12]], false),
-    stroke([0.29, 0.87, 0.5, 1], 1.4),
-  ];
-
-  if (variant === 4) {
-    haloShapes.push(
-      path("halo-double-left", [[-5, -15], [-2, -17], [0, -17]], false),
-      stroke(theme.accent, 1.0),
-      path("halo-double-right", [[0, -17], [3, -17], [5, -15]], false),
-      stroke([0.29, 0.87, 0.5, 1], 1.0)
-    );
-  }
-
-  const layers: ILottieLayer[] = [
-    layer(1, "tail", [tailShape, stroke(theme.line, 3.2)], transform({ position: tailBase, rotation: tailRotation }), op),
-    layer(2, "body", [ellipse("body", [0, 0], [bodyWidth, bodyHeight]), fill(theme.fur)], transform({ position: [29, bodyY, 0], scale: bodyScale }), op),
-    layer(3, "back-paw", [rect("back-paw", [0, 0], [2.4, 6], 1), stroke(theme.line, 1.15)], transform({ position: [31, 37, 0] }), op),
-    layer(4, "front-paw", [rect("front-paw", [0, 0], [2.4, 7], 1), stroke(theme.line, 1.15)], transform({ position: [24.5, 33.5, 0], anchor: [0, -3.5, 0], rotation: frontPawRotation }), op),
-    layer(5, "head", [ellipse("head", [0, 0], [20, 15]), fill(theme.fur)], transform({ position: headPosition, rotation: headRotation }), op),
-    layer(6, "ears", [leftEarShape, rightEarShape, fill(theme.fur)], transform({ position: headPosition }), op),
-    layer(7, "face", [ellipse("left-eye", [-4.2, -0.2], [1.4, 1.4]), ellipse("right-eye", [4.2, -0.2], [1.4, 1.4]), fill(theme.line)], transform({ position: headPosition, scale: blinkScale }), op),
-    layer(8, "mouth", [path("mouth", [[-2, 3], [0, 4], [2, 3]], false), stroke(theme.line, 1.1)], transform({ position: headPosition }), op),
-    layer(9, "halo", haloShapes, transform({ position: headPosition }), op),
-  ];
-
-  if (variant === 1 || variant === 5) {
-    layers.push(layer(10, "forehead", [path("mark", [[-1, -4], [0, -2.7], [1, -4]], false), stroke(theme.line, 0.9)], transform({ position: headPosition }), op));
-  }
-
-  return { v: "5.12.2", fr: 30, ip: 0, op, w: 64, h: 44, nm: "agent-halo-session-cat", ddd: 0, assets: [], layers };
-};
-
 const SessionMascot = ({ sessionId, status }: { sessionId?: string | null; status?: ISessionSummary["status"] }) => {
-  const containerRef = useRef<HTMLDivElement | null>(null);
   const variant = getMascotVariant(sessionId);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return undefined;
-
-    const shouldReduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const animation = lottie.loadAnimation({
-      container,
-      renderer: "svg",
-      loop: !shouldReduceMotion && (status === "working" || status === "waiting"),
-      autoplay: !shouldReduceMotion,
-      animationData: buildLottieSessionCat(variant, status),
-      rendererSettings: {
-        preserveAspectRatio: "xMidYMid meet",
-        progressiveLoad: false,
-        hideOnTransparent: true,
-      },
-    });
-
-    if (shouldReduceMotion) animation.goToAndStop(0, true);
-
-    return () => animation.destroy();
-  }, [status, variant]);
+  const action = getSessionMascotAction(status);
 
   return (
-    <span className="session-mascot session-mascot-lottie" data-status={status} data-variant={variant} style={getMascotStyle(variant)} aria-hidden="true">
-      <span className="session-mascot-stage" ref={containerRef} />
+    <span className="session-mascot session-mascot-sprite" data-status={status} data-action={action} data-variant={variant} style={getMascotStyle(variant)} aria-hidden="true">
+      <span className="session-mascot-stage" />
     </span>
   );
 };
@@ -1252,6 +884,7 @@ const useAgentUsageList = (settings: IUsageSettings) => {
     Object.fromEntries(USAGE_PROVIDERS.map((provider) => [provider.id, createAgentUsageState(provider.id)])) as Record<UsageProviderId, IAgentUsageState>,
   );
   const [snapshots, setSnapshots] = useState<Partial<Record<UsageProviderId, IAgentUsageSnapshot>>>({});
+  const [relativeResetTick, setRelativeResetTick] = useState(0);
 
   useEffect(() => {
     settingsRef.current = settings;
@@ -1264,6 +897,11 @@ const useAgentUsageList = (settings: IUsageSettings) => {
     }
 
     if (typeof window.__TAURI_INTERNALS__ === "undefined") {
+      setSnapshots((current) => {
+        const next = { ...current };
+        delete next[provider.id];
+        return next;
+      });
       setUsages((current) => ({
         ...current,
         [provider.id]: createAgentUsageState(provider.id, { status: "offline", message: "Agent Halo desktop runtime needed" }),
@@ -1276,6 +914,11 @@ const useAgentUsageList = (settings: IUsageSettings) => {
       setSnapshots((current) => ({ ...current, [provider.id]: snapshot }));
       setUsages((current) => ({ ...current, [provider.id]: parseAgentUsageSnapshot(provider.id, snapshot, settingsRef.current) }));
     } catch (error) {
+      setSnapshots((current) => {
+        const next = { ...current };
+        delete next[provider.id];
+        return next;
+      });
       setUsages((current) => ({
         ...current,
         [provider.id]: createAgentUsageState(provider.id, {
@@ -1297,6 +940,12 @@ const useAgentUsageList = (settings: IUsageSettings) => {
   }, [settings.refreshMs]);
 
   useEffect(() => {
+    if (settings.resetMode !== "relative") return undefined;
+    const timer = window.setInterval(() => setRelativeResetTick((tick) => tick + 1), 60_000);
+    return () => window.clearInterval(timer);
+  }, [settings.resetMode]);
+
+  useEffect(() => {
     if (Object.keys(snapshots).length === 0) return;
     setUsages((current) => {
       const next = { ...current };
@@ -1307,7 +956,7 @@ const useAgentUsageList = (settings: IUsageSettings) => {
       }
       return next;
     });
-  }, [settings.resetMode, settings.timeFormat, settings.usageMode, snapshots]);
+  }, [relativeResetTick, settings.resetMode, settings.timeFormat, settings.usageMode, snapshots]);
 
   return { refresh, usages };
 };
@@ -1343,6 +992,7 @@ const UsageProviderIcon = ({ provider, size = 14 }: { provider: IUsageProviderCo
 
 const UsageProviderDetail = ({ provider, usage }: { provider: IUsageProviderConfig; usage: IAgentUsageState }) => {
   const statusText = usage.status === "loading" ? `Checking ${provider.label}` : usage.message ?? `${provider.label} usage unavailable`;
+  const StatusIcon = usage.status === "loading" ? RefreshCw : TriangleAlert;
 
   return (
     <section className="usage-provider-card" data-status={usage.status}>
@@ -1356,7 +1006,7 @@ const UsageProviderDetail = ({ provider, usage }: { provider: IUsageProviderConf
         </div>
       ) : (
         <div className="usage-provider-message">
-          <TriangleAlert size={13} strokeWidth={2.2} />
+          <StatusIcon size={13} strokeWidth={2.2} />
           <span>{statusText}</span>
         </div>
       )}

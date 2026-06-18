@@ -178,20 +178,24 @@ button {
 }
 
 .activity-mascot {
-  width: 24px;
-  height: 18px;
+  width: 32px;
+  height: 24px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   transform-origin: 50% 80%;
   color: var(--mascot-fur, rgba(246, 246, 238, 0.96));
+  flex: none;
 }
 
-.activity-mascot svg {
+.activity-mascot-stage {
   width: 100%;
   height: 100%;
   display: block;
-  overflow: visible;
+  background-repeat: no-repeat;
+  background-position: 0 0;
+  image-rendering: pixelated;
+  pointer-events: none;
 }
 
 .mascot-face,
@@ -259,12 +263,46 @@ button {
   stroke-width: 0.9;
 }
 
-.notch-wing-right .activity-mascot[data-status="working"] {
-  animation: mascot-wriggle 0.82s ease-in-out infinite;
+.activity-mascot[data-action="idle"] .activity-mascot-stage {
+  background-image: image-set(url("/mascots/session-cat/idle.webp") type("image/webp"), url("/mascots/session-cat/idle.png") type("image/png"));
+  background-size: 128px 24px;
 }
 
-.notch-wing-right .activity-mascot[data-status="waiting"] {
-  animation: mascot-wait 1.8s ease-in-out infinite;
+.activity-mascot[data-action="walk"] .activity-mascot-stage {
+  background-image: image-set(url("/mascots/session-cat/walk.webp") type("image/webp"), url("/mascots/session-cat/walk.png") type("image/png"));
+  background-size: 192px 24px;
+}
+
+.activity-mascot[data-action="work"] .activity-mascot-stage {
+  background-image: image-set(url("/mascots/session-cat/work.webp") type("image/webp"), url("/mascots/session-cat/work.png") type("image/png"));
+  background-size: 256px 24px;
+}
+
+.activity-mascot[data-action="coffee"] .activity-mascot-stage {
+  background-image: image-set(url("/mascots/session-cat/coffee.webp") type("image/webp"), url("/mascots/session-cat/coffee.png") type("image/png"));
+  background-size: 192px 24px;
+}
+
+.activity-mascot[data-action="hurt"] .activity-mascot-stage {
+  background-image: image-set(url("/mascots/session-cat/hurt.webp") type("image/webp"), url("/mascots/session-cat/hurt.png") type("image/png"));
+  background-size: 128px 24px;
+}
+
+.activity-mascot[data-action="dust"] .activity-mascot-stage {
+  background-image: image-set(url("/mascots/session-cat/dust.webp") type("image/webp"), url("/mascots/session-cat/dust.png") type("image/png"));
+  background-size: 192px 24px;
+}
+
+.notch-wing-right .activity-mascot[data-status="working"][data-action="work"] .activity-mascot-stage {
+  animation: activity-cat-sprite-8 0.96s steps(8) infinite;
+}
+
+.notch-wing-right .activity-mascot[data-status="waiting"][data-action="coffee"] .activity-mascot-stage {
+  animation: activity-cat-sprite-6 1.35s steps(6) infinite;
+}
+
+.notch-wing-right .activity-mascot[data-status="error"][data-action="hurt"] .activity-mascot-stage {
+  animation: activity-cat-sprite-4 0.9s steps(4) infinite;
 }
 
 .session-mascot {
@@ -282,24 +320,52 @@ button {
   width: 100%;
   height: 100%;
   display: block;
+  background-repeat: no-repeat;
+  background-position: 0 0;
+  image-rendering: pixelated;
   pointer-events: none;
 }
 
-.session-mascot-stage svg {
-  width: 100% !important;
-  height: 100% !important;
-  display: block;
-  overflow: visible;
+.session-mascot[data-action="idle"] .session-mascot-stage {
+  background-image: image-set(url("/mascots/session-cat/idle.webp") type("image/webp"), url("/mascots/session-cat/idle.png") type("image/png"));
+  background-size: 160px 30px;
 }
 
-.session-mascot[data-status="working"] .session-mascot-stage {
-  animation: session-cat-work 0.92s ease-in-out infinite;
-  transform-origin: 50% 86%;
+.session-mascot[data-action="walk"] .session-mascot-stage {
+  background-image: image-set(url("/mascots/session-cat/walk.webp") type("image/webp"), url("/mascots/session-cat/walk.png") type("image/png"));
+  background-size: 240px 30px;
 }
 
-.session-mascot[data-status="waiting"] .session-mascot-stage {
-  animation: session-cat-wait 2.2s ease-in-out infinite;
-  transform-origin: 48% 86%;
+.session-mascot[data-action="work"] .session-mascot-stage {
+  background-image: image-set(url("/mascots/session-cat/work.webp") type("image/webp"), url("/mascots/session-cat/work.png") type("image/png"));
+  background-size: 320px 30px;
+}
+
+.session-mascot[data-action="coffee"] .session-mascot-stage {
+  background-image: image-set(url("/mascots/session-cat/coffee.webp") type("image/webp"), url("/mascots/session-cat/coffee.png") type("image/png"));
+  background-size: 240px 30px;
+}
+
+.session-mascot[data-action="hurt"] .session-mascot-stage {
+  background-image: image-set(url("/mascots/session-cat/hurt.webp") type("image/webp"), url("/mascots/session-cat/hurt.png") type("image/png"));
+  background-size: 160px 30px;
+}
+
+.session-mascot[data-action="dust"] .session-mascot-stage {
+  background-image: image-set(url("/mascots/session-cat/dust.webp") type("image/webp"), url("/mascots/session-cat/dust.png") type("image/png"));
+  background-size: 240px 30px;
+}
+
+.session-mascot[data-status="working"][data-action="work"] .session-mascot-stage {
+  animation: session-cat-sprite-8 0.96s steps(8) infinite;
+}
+
+.session-mascot[data-status="waiting"][data-action="coffee"] .session-mascot-stage {
+  animation: session-cat-sprite-6 1.35s steps(6) infinite;
+}
+
+.session-mascot[data-status="error"][data-action="hurt"] .session-mascot-stage {
+  animation: session-cat-sprite-4 0.9s steps(4) infinite;
 }
 
 .session-mascot::after {
@@ -409,38 +475,51 @@ button {
   }
 }
 
-@keyframes session-cat-work {
-  0%,
-  100% {
-    transform: translateY(0) rotate(0deg);
-  }
-  25% {
-    transform: translateY(-1px) rotate(-2deg);
-  }
-  50% {
-    transform: translateY(0.5px) rotate(1.5deg);
-  }
-  75% {
-    transform: translateY(-0.5px) rotate(-1deg);
+@keyframes session-cat-sprite-2 {
+  to {
+    background-position-x: -80px;
   }
 }
 
-@keyframes session-cat-wait {
-  0%,
-  62%,
-  100% {
-    transform: translateY(0) rotate(0deg);
+@keyframes session-cat-sprite-4 {
+  to {
+    background-position-x: -160px;
   }
-  72% {
-    transform: translateY(-1px) rotate(-3deg);
+}
+
+@keyframes session-cat-sprite-6 {
+  to {
+    background-position-x: -240px;
   }
-  82% {
-    transform: translateY(0.5px) rotate(2deg);
+}
+
+@keyframes session-cat-sprite-8 {
+  to {
+    background-position-x: -320px;
+  }
+}
+
+@keyframes activity-cat-sprite-4 {
+  to {
+    background-position-x: -128px;
+  }
+}
+
+@keyframes activity-cat-sprite-6 {
+  to {
+    background-position-x: -192px;
+  }
+}
+
+@keyframes activity-cat-sprite-8 {
+  to {
+    background-position-x: -256px;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .activity-mascot,
+  .activity-mascot-stage,
   .session-mascot-stage {
     animation: none !important;
     transform: none !important;
@@ -671,6 +750,14 @@ button {
 .usage-side-tab[data-active="true"] {
   color: rgba(255, 255, 255, 0.9);
   background: rgba(255, 255, 255, 0.07);
+}
+
+.usage-side-tab:focus-visible,
+.usage-refresh:focus-visible,
+.usage-setting-option:focus-visible,
+.header-tab:focus-visible {
+  outline: 1px solid rgba(255, 157, 61, 0.7);
+  outline-offset: 2px;
 }
 
 .usage-side-settings {
@@ -909,6 +996,17 @@ button {
 .usage-provider-message svg {
   flex: none;
   color: var(--waiting);
+}
+
+.usage-provider-card[data-status="loading"] .usage-provider-message svg {
+  color: var(--text-3);
+  animation: usage-loading-spin 1s linear infinite;
+}
+
+@keyframes usage-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .usage-provider-chips {
