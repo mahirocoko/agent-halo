@@ -1,5 +1,26 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+  ArrowRight,
+  BarChart3,
+  Bot,
+  Check,
+  ChevronLeft,
+  CircleDot,
+  Cloud,
+  Download,
+  Focus,
+  List,
+  MousePointer2,
+  RefreshCw,
+  Settings,
+  Sparkles,
+  Trash2,
+  TriangleAlert,
+  X,
+  type LucideIcon,
+} from "lucide-react";
+import lottie from "lottie-web/build/player/lottie_light";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import {
   createDefaultBridgeCapabilities,
@@ -14,6 +35,7 @@ import {
 import "./styles.css";
 
 const BRIDGE_URL = "http://127.0.0.1:47621";
+const USAGE_POLL_MS = 60_000;
 const STALE_AFTER_MS = 30_000;
 const MAX_RECENT_EVENTS = 80;
 const MAX_SESSION_EVENTS_PER_SESSION = 32;
@@ -25,7 +47,8 @@ const MAX_LIVE_ACTIVITY_WING_WIDTH = 110;
 const LIVE_ACTIVITY_TEXT_WIDTH_BUFFER = 52;
 const PILL_WINDOW_HEIGHT = 42;
 const PANEL_WINDOW_WIDTH = 560;
-const PANEL_WINDOW_HEIGHT = 440;
+const PANEL_MIN_HEIGHT = 218;
+const PANEL_MAX_HEIGHT = 440;
 const ACTIVITY_COLLAPSE_MS = 220;
 const HOVER_OPEN_DELAY_MS = 24;
 const HOVER_CLOSE_DELAY_MS = 170;
@@ -96,6 +119,65 @@ type SessionEventRegistry = Record<string, AgentHaloEvent[]>;
 type DismissedSessionRegistry = Record<string, number>;
 type DeletedSessionRegistry = Record<string, number>;
 
+type UsageProviderId = "codex" | "agy" | "claude" | "cursor" | "grok";
+type MainPanelTab = "sessions" | "usage";
+
+interface IUsageProviderConfig {
+  id: UsageProviderId;
+  label: string;
+  command: "codex_usage" | "agy_usage" | "claude_usage" | "cursor_usage" | "grok_usage";
+  Icon: LucideIcon;
+}
+
+interface IUsageMetricLine {
+  type: "text" | "progress" | "badge" | "barChart" | string;
+  label: string;
+  used?: number;
+  limit?: number;
+  value?: string;
+  text?: string;
+  resetsAt?: string;
+}
+
+interface IAgentUsageSnapshot {
+  providerId: string;
+  displayName?: string;
+  plan?: string | null;
+  lines?: IUsageMetricLine[];
+  fetchedAt?: string;
+}
+
+interface IUsageMetric {
+  label: string;
+  value: number | null;
+  remainingLabel: string | null;
+  resetLabel: string | null;
+}
+
+interface IAgentUsageState {
+  status: "loading" | "online" | "offline" | "error";
+  providerId: UsageProviderId;
+  message: string | null;
+  fetchedAt: string | null;
+  plan: string | null;
+  metrics: IUsageMetric[];
+  sessionPercent: number | null;
+  weeklyPercent: number | null;
+  reviewsPercent: number | null;
+  rateLimitResets: string | null;
+  credits: string | null;
+  today: string | null;
+  last30Days: string | null;
+}
+
+const USAGE_PROVIDERS: IUsageProviderConfig[] = [
+  { id: "codex", label: "Codex", command: "codex_usage", Icon: Bot },
+  { id: "agy", label: "Antigravity", command: "agy_usage", Icon: Sparkles },
+  { id: "claude", label: "Claude Code", command: "claude_usage", Icon: Cloud },
+  { id: "cursor", label: "Cursor", command: "cursor_usage", Icon: MousePointer2 },
+  { id: "grok", label: "Grok", command: "grok_usage", Icon: CircleDot },
+];
+
 const estimateLiveActivityWingWidth = (label: string): number => {
   const textWidth = Math.ceil(label.length * 5.6);
   return Math.min(MAX_LIVE_ACTIVITY_WING_WIDTH, Math.max(MIN_LIVE_ACTIVITY_WING_WIDTH, LIVE_ACTIVITY_TEXT_WIDTH_BUFFER + textWidth));
@@ -121,6 +203,8 @@ const buildNotchShapePath = (width: number, height: number, topRadius: number, b
 };
 
 const waitForNextPaint = () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+
+const clampPanelHeight = (value: number): number => Math.min(PANEL_MAX_HEIGHT, Math.max(PANEL_MIN_HEIGHT, Math.ceil(value)));
 
 interface IStatusView {
   status: AgentHaloPresenceStatus | "stale";
@@ -291,6 +375,98 @@ const formatTime = (timestamp: string | null): string => {
   }).format(new Date(timestamp));
 };
 
+
+const clampPercent = (value: number | null): number | null => {
+  if (value === null || !Number.isFinite(value)) return null;
+  return Math.max(0, Math.min(100, Math.round(value)));
+};
+
+const findUsageLine = (lines: IUsageMetricLine[], label: string): IUsageMetricLine | null =>
+  lines.find((line) => line.label.toLowerCase() === label.toLowerCase()) ?? null;
+
+const readProgressPercent = (line: IUsageMetricLine | null): number | null => {
+  if (!line || line.type !== "progress" || typeof line.used !== "number") return null;
+  if (typeof line.limit === "number" && line.limit > 0 && line.limit !== 100) return clampPercent((line.used / line.limit) * 100);
+  return clampPercent(line.used);
+};
+
+const readTextValue = (line: IUsageMetricLine | null): string | null => {
+  if (!line) return null;
+  if (typeof line.value === "string" && line.value.trim()) return line.value.trim();
+  if (typeof line.text === "string" && line.text.trim()) return line.text.trim();
+  return null;
+};
+
+
+const formatDurationShort = (ms: number): string => {
+  const totalMinutes = Math.max(0, Math.round(ms / 60_000));
+  const days = Math.floor(totalMinutes / 1_440);
+  const hours = Math.floor((totalMinutes % 1_440) / 60);
+  const minutes = totalMinutes % 60;
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+};
+
+const formatResetLabel = (resetsAt: string | undefined): string | null => {
+  if (!resetsAt) return null;
+  const resetMs = Date.parse(resetsAt);
+  if (!Number.isFinite(resetMs)) return null;
+  const delta = resetMs - Date.now();
+  if (delta <= 0) return "Reset soon";
+  return `Resets in ${formatDurationShort(delta)}`;
+};
+
+const createUsageMetric = (line: IUsageMetricLine): IUsageMetric => {
+  const used = readProgressPercent(line);
+  const left = used === null ? null : Math.max(0, 100 - used);
+  return {
+    label: line.label,
+    value: left,
+    remainingLabel: left === null ? null : `${left}% left`,
+    resetLabel: formatResetLabel(line.resetsAt),
+  };
+};
+
+const createAgentUsageState = (providerId: UsageProviderId, partial: Partial<IAgentUsageState> = {}): IAgentUsageState => ({
+  status: "loading",
+  providerId,
+  message: null,
+  fetchedAt: null,
+  plan: null,
+  metrics: [],
+  sessionPercent: null,
+  weeklyPercent: null,
+  reviewsPercent: null,
+  rateLimitResets: null,
+  credits: null,
+  today: null,
+  last30Days: null,
+  ...partial,
+});
+
+const parseAgentUsageSnapshot = (providerId: UsageProviderId, snapshot: IAgentUsageSnapshot): IAgentUsageState => {
+  const lines = Array.isArray(snapshot.lines) ? snapshot.lines : [];
+  const metrics = lines
+    .filter((line) => line.type === "progress")
+    .map(createUsageMetric);
+
+  return createAgentUsageState(providerId, {
+    status: "online",
+    message: null,
+    fetchedAt: snapshot.fetchedAt ?? new Date().toISOString(),
+    plan: snapshot.plan ?? null,
+    metrics,
+    sessionPercent: readProgressPercent(findUsageLine(lines, "Session")),
+    weeklyPercent: readProgressPercent(findUsageLine(lines, "Weekly")),
+    reviewsPercent: readProgressPercent(findUsageLine(lines, "Reviews")),
+    rateLimitResets: readTextValue(findUsageLine(lines, "Rate Limit Resets")),
+    credits: readTextValue(findUsageLine(lines, "Credits")),
+    today: readTextValue(findUsageLine(lines, "Today")),
+    last30Days: readTextValue(findUsageLine(lines, "Last 30 Days")),
+  });
+};
+
 const getEventDetail = (event: AgentHaloEvent): string => {
   switch (event.type) {
     case "bridge_ready":
@@ -427,11 +603,445 @@ const buildWorkspaceSessionGroups = (sessions: ISessionSummary[]): IWorkspaceSes
     });
 };
 
+const MASCOT_THEMES = [
+  { fur: "rgba(246, 246, 238, 0.96)", haloLeft: "#ff9d3d", haloRight: "#4ade80", line: "rgba(12, 12, 14, 0.75)" },
+  { fur: "rgba(238, 244, 255, 0.96)", haloLeft: "#ffb23d", haloRight: "#7dd3fc", line: "rgba(13, 18, 28, 0.72)" },
+  { fur: "rgba(255, 240, 222, 0.96)", haloLeft: "#fb7185", haloRight: "#4ade80", line: "rgba(30, 16, 10, 0.72)" },
+  { fur: "rgba(234, 235, 239, 0.96)", haloLeft: "#ff9d3d", haloRight: "#a78bfa", line: "rgba(16, 16, 20, 0.74)" },
+  { fur: "rgba(251, 251, 246, 0.96)", haloLeft: "#facc15", haloRight: "#22c55e", line: "rgba(20, 20, 14, 0.72)" },
+  { fur: "rgba(242, 232, 255, 0.96)", haloLeft: "#f97316", haloRight: "#34d399", line: "rgba(23, 14, 30, 0.72)" },
+] as const;
+
+const hashSessionId = (value: string): number => {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  return hash;
+};
+
+const getMascotVariant = (sessionId: string | null | undefined) => hashSessionId(sessionId || "agent-halo") % MASCOT_THEMES.length;
+
+const getMascotStyle = (variant: number) => {
+  const theme = MASCOT_THEMES[variant] ?? MASCOT_THEMES[0];
+  return {
+    "--mascot-fur": theme.fur,
+    "--mascot-halo-left": theme.haloLeft,
+    "--mascot-halo-right": theme.haloRight,
+    "--mascot-line": theme.line,
+  } as CSSProperties & Record<"--mascot-fur" | "--mascot-halo-left" | "--mascot-halo-right" | "--mascot-line", string>;
+};
+
 const StatusGlyph = ({ status }: { status: ISessionSummary["status"] }) => {
   if (status === "working") return <span className="status-slot"><span className="glyph-pulse">✱</span></span>;
   if (status === "waiting") return <span className="status-slot"><span className="glyph-waiting">!</span></span>;
   if (status === "done") return <span className="status-slot"><span className="glyph-check">✓</span></span>;
   return <span className="status-slot"><span className={`status-dot status-${status}`} /></span>;
+};
+
+const ActivityMascot = ({ sessionId, status }: { sessionId?: string | null; status?: ISessionSummary["status"] }) => {
+  const variant = getMascotVariant(sessionId);
+  let earLeft: ReactNode = <path className="mascot-ear" d="M5.2 8.3 7.5 2.6l3.1 5.4" />;
+  let earRight: ReactNode = <path className="mascot-ear" d="m13.4 8 3.1-5.4 2.3 5.7" />;
+  let eyeLeft: ReactNode = <path className="mascot-eye" d="M9 9.7h.1" />;
+  let eyeRight: ReactNode = <path className="mascot-eye" d="M15 9.7h.1" />;
+  let mouth: ReactNode = <path className="mascot-mouth" d="M10.7 12.1c.7.6 1.9.6 2.6 0" />;
+  let detail: ReactNode = null;
+
+  if (variant === 1) {
+    earLeft = <path className="mascot-ear" d="M5.2 8.3c.6-2.1 1-3.1 1.8-3.3.8-.2 1.5 1.2 3.6 3" />;
+    earRight = <path className="mascot-ear" d="M13.4 8c2.1-1.8 2.8-3.2 3.6-3 .8.2 1.2 1.2 1.8 3.3" />;
+    detail = <path className="mascot-detail-line" d="M11 4.7v1.7M13 4.7v1.7" />;
+  } else if (variant === 2) {
+    earRight = <path className="mascot-ear" d="M13.4 8 15.9 3.6l.1 1.2.8-.3 2 3.8" />;
+    eyeLeft = <path className="mascot-eye-wink" d="M8 10.1q1 .9 2 0" />;
+    detail = <path className="mascot-tail" d="M18.8 13.8c1.2 0 2 .7 2 1.6s-.8 1.5-2 1.5" />;
+  } else if (variant === 3) {
+    detail = (
+      <>
+        <path className="mascot-detail-line" d="M7.5 4.5 8.5 7.3M16.5 4.5l-1 2.8" />
+        <path className="mascot-whisker" d="M3.1 11h2.2M18.7 11h2.2" />
+      </>
+    );
+  } else if (variant === 4) {
+    earLeft = <path className="mascot-ear" d="M5.2 8.3Q4 4 6 3.5q1.5-.4 4.6 4.5" />;
+    earRight = <path className="mascot-ear" d="M13.4 8q3.1-4.9 4.6-4.5 2 .5.8 4.8" />;
+    eyeLeft = <path className="mascot-eye-wink" d="M8 10.1q1 1 2 0" />;
+    eyeRight = <path className="mascot-eye-wink" d="M14 10.1q1 1 2 0" />;
+    mouth = <path className="mascot-mouth" d="M11.5 12.1h1" />;
+    detail = <path className="mascot-halo mascot-halo-double" d="M9 .7c.8-.5 1.8-.7 3-.7s2.2.2 3 .7" />;
+  } else if (variant === 5) {
+    earLeft = <path className="mascot-ear" d="M5.2 8.3 7.2 1.8l3.4 6.2" />;
+    earRight = <path className="mascot-ear" d="M13.4 8l3.4-6.2 2 6.5" />;
+    eyeLeft = <path className="mascot-eye-wink" d="M8.2 10.2l1.6-1" />;
+    eyeRight = <path className="mascot-eye-wink" d="M14.2 9.2l1.6 1" />;
+    detail = <path className="mascot-detail-line mascot-forehead-mark" d="m12 4 .8 1-.8 1-.8-1z" />;
+  }
+
+  return (
+    <span className="activity-mascot" data-status={status} data-variant={variant} style={getMascotStyle(variant)} aria-hidden="true">
+      <svg viewBox="0 0 24 18" focusable="false">
+        {earLeft}
+        {earRight}
+        <path className="mascot-face" d="M4.2 8.4c0-3 2.5-5.3 7.8-5.3s7.8 2.3 7.8 5.3v1.7c0 3.3-2.8 5.5-7.8 5.5s-7.8-2.2-7.8-5.5z" />
+        <path className="mascot-halo mascot-halo-left" d="M8 1.7c1.2-.8 2.6-1.1 4-1.1" />
+        <path className="mascot-halo mascot-halo-right" d="M12 .6c1.4 0 2.8.3 4 1.1" />
+        {eyeLeft}
+        {eyeRight}
+        {mouth}
+        <path className="mascot-cheek mascot-cheek-left" d="M6.9 11.6h1.1" />
+        <path className="mascot-cheek mascot-cheek-right" d="M16 11.6h1.1" />
+        {detail}
+      </svg>
+    </span>
+  );
+};
+
+type ILottieColor = [number, number, number, number];
+
+type ILottieKeyframe<T extends number[]> = {
+  t: number;
+  s: T;
+  e?: T;
+  i?: { x: number[]; y: number[] };
+  o?: { x: number[]; y: number[] };
+};
+
+type ILottieValue<T extends number[]> = { a: 0; k: T } | { a: 1; k: ILottieKeyframe<T>[] };
+
+type ILottieTransform = {
+  a: ILottieValue<[number, number, number]>;
+  o: ILottieValue<[number]>;
+  p: ILottieValue<[number, number, number]>;
+  r: ILottieValue<[number]>;
+  s: ILottieValue<[number, number, number]>;
+};
+
+type ILottieShape = Record<string, unknown>;
+
+type ILottieLayer = {
+  ddd: 0;
+  ind: number;
+  ty: 4;
+  nm: string;
+  sr: 1;
+  ks: ILottieTransform;
+  ao: 0;
+  shapes: ILottieShape[];
+  ip: 0;
+  op: number;
+  st: 0;
+  bm: 0;
+};
+
+type ILottieAnimationData = {
+  v: string;
+  fr: number;
+  ip: 0;
+  op: number;
+  w: number;
+  h: number;
+  nm: string;
+  ddd: 0;
+  assets: [];
+  layers: ILottieLayer[];
+};
+
+const LOTTIE_THEMES = [
+  { fur: [0.965, 0.965, 0.933, 1], line: [0.047, 0.047, 0.055, 0.78], accent: [1, 0.616, 0.239, 1] },
+  { fur: [0.933, 0.957, 1, 1], line: [0.051, 0.071, 0.11, 0.74], accent: [1, 0.698, 0.239, 1] },
+  { fur: [1, 0.941, 0.871, 1], line: [0.118, 0.063, 0.039, 0.74], accent: [0.984, 0.443, 0.522, 1] },
+  { fur: [0.918, 0.922, 0.937, 1], line: [0.063, 0.063, 0.078, 0.76], accent: [1, 0.616, 0.239, 1] },
+  { fur: [0.984, 0.984, 0.965, 1], line: [0.078, 0.078, 0.055, 0.74], accent: [0.98, 0.8, 0.082, 1] },
+  { fur: [0.949, 0.91, 1, 1], line: [0.09, 0.055, 0.118, 0.74], accent: [0.976, 0.451, 0.086, 1] },
+] as const satisfies { fur: ILottieColor; line: ILottieColor; accent: ILottieColor }[];
+
+const staticValue = <T extends number[]>(value: T): ILottieValue<T> => ({ a: 0, k: value });
+
+const ease = { x: [0.42], y: [1] };
+const easeOut = { x: [0.58], y: [0] };
+
+const animatedValue = <T extends number[]>(frames: ILottieKeyframe<T>[]): ILottieValue<T> => ({ a: 1, k: frames });
+
+const transform = (options: Partial<{
+  anchor: [number, number, number];
+  opacity: [number];
+  position: [number, number, number] | ILottieValue<[number, number, number]>;
+  rotation: [number] | ILottieValue<[number]>;
+  scale: [number, number, number] | ILottieValue<[number, number, number]>;
+}> = {}): ILottieTransform => ({
+  a: staticValue(options.anchor ?? [0, 0, 0]),
+  o: staticValue(options.opacity ?? [100]),
+  p: Array.isArray(options.position) ? staticValue(options.position) : options.position ?? staticValue([0, 0, 0]),
+  r: Array.isArray(options.rotation) ? staticValue(options.rotation) : options.rotation ?? staticValue([0]),
+  s: Array.isArray(options.scale) ? staticValue(options.scale) : options.scale ?? staticValue([100, 100, 100]),
+});
+
+const fill = (color: ILottieColor): ILottieShape => ({ ty: "fl", c: staticValue(color), o: staticValue([100]), r: 1, bm: 0, nm: "fill" });
+const stroke = (color: ILottieColor, width: number): ILottieShape => ({ ty: "st", c: staticValue(color), o: staticValue([100]), w: staticValue([width]), lc: 2, lj: 2, ml: 4, bm: 0, nm: "stroke" });
+const ellipse = (name: string, position: [number, number], size: [number, number]): ILottieShape => ({ ty: "el", p: staticValue(position), s: staticValue(size), d: 1, nm: name });
+const rect = (name: string, position: [number, number], size: [number, number], radius = 1): ILottieShape => ({ ty: "rc", p: staticValue(position), s: staticValue(size), r: staticValue([radius]), nm: name });
+const path = (
+  name: string,
+  vertices: [number, number][],
+  closed: boolean,
+  inTangents?: [number, number][],
+  outTangents?: [number, number][]
+): ILottieShape => ({
+  ty: "sh",
+  ks: {
+    a: 0,
+    k: {
+      i: inTangents ?? vertices.map(() => [0, 0]),
+      o: outTangents ?? vertices.map(() => [0, 0]),
+      v: vertices,
+      c: closed,
+    },
+  },
+  nm: name,
+});
+
+const layer = (index: number, name: string, shapes: ILottieShape[], ks: ILottieTransform, op: number): ILottieLayer => ({
+  ddd: 0,
+  ind: index,
+  ty: 4,
+  nm: name,
+  sr: 1,
+  ks,
+  ao: 0,
+  shapes,
+  ip: 0,
+  op,
+  st: 0,
+  bm: 0,
+});
+
+const statusOp = (status: ISessionSummary["status"] | undefined) => (status === "done" || status === "error" ? 36 : status === "waiting" ? 96 : 72);
+
+const buildLottieSessionCat = (variant: number, status: ISessionSummary["status"] | undefined): ILottieAnimationData => {
+  const theme = LOTTIE_THEMES[variant] ?? LOTTIE_THEMES[0];
+  const op = statusOp(status);
+  const isWorking = status === "working";
+  const isWaiting = status === "waiting";
+  const isDone = status === "done";
+  const isError = status === "error";
+
+  const bodyScale: ILottieValue<[number, number, number]> = isWorking
+    ? animatedValue([
+        { t: 0, s: [100, 100, 100], e: [98, 103, 100], i: ease, o: easeOut },
+        { t: 36, s: [98, 103, 100], e: [100, 100, 100], i: ease, o: easeOut },
+        { t: 72, s: [100, 100, 100] },
+      ])
+    : isWaiting
+      ? animatedValue([
+          { t: 0, s: [100, 100, 100], e: [99, 101.5, 100], i: ease, o: easeOut },
+          { t: 48, s: [99, 101.5, 100], e: [100, 100, 100], i: ease, o: easeOut },
+          { t: 96, s: [100, 100, 100] },
+        ])
+      : isDone
+        ? animatedValue([
+            { t: 0, s: [92, 92, 100], e: [108, 108, 100], i: ease, o: easeOut },
+            { t: 12, s: [108, 108, 100], e: [100, 100, 100], i: ease, o: easeOut },
+            { t: 24, s: [100, 100, 100] },
+          ])
+        : staticValue([100, 100, 100]);
+
+  const tailRotation: ILottieValue<[number]> = isWorking
+    ? animatedValue([
+        { t: 0, s: [-6], e: [8], i: ease, o: easeOut },
+        { t: 36, s: [8], e: [-6], i: ease, o: easeOut },
+        { t: 72, s: [-6] },
+      ])
+    : isWaiting
+      ? animatedValue([
+          { t: 0, s: [-2], e: [-2], i: ease, o: easeOut },
+          { t: 54, s: [-2], e: [6], i: ease, o: easeOut },
+          { t: 74, s: [6], e: [-2], i: ease, o: easeOut },
+          { t: 96, s: [-2] },
+        ])
+      : staticValue([variant === 4 ? 2 : 0]);
+
+  const blinkScale: ILottieValue<[number, number, number]> = isWaiting
+    ? animatedValue([
+        { t: 0, s: [100, 100, 100], e: [100, 100, 100], i: ease, o: easeOut },
+        { t: 70, s: [100, 100, 100], e: [100, 16, 100], i: ease, o: easeOut },
+        { t: 74, s: [100, 16, 100], e: [100, 100, 100], i: ease, o: easeOut },
+        { t: 82, s: [100, 100, 100] },
+      ])
+    : isWorking
+      ? animatedValue([
+          { t: 0, s: [100, 100, 100], e: [100, 100, 100], i: ease, o: easeOut },
+          { t: 50, s: [100, 100, 100], e: [100, 16, 100], i: ease, o: easeOut },
+          { t: 54, s: [100, 16, 100], e: [100, 100, 100], i: ease, o: easeOut },
+          { t: 62, s: [100, 100, 100] },
+        ])
+      : staticValue([100, 100, 100]);
+
+  const bodyWidth = variant === 1 || variant === 4 ? 28 : variant === 2 ? 23 : 25;
+  const bodyHeight = variant === 2 ? 13 : variant === 4 ? 10 : 15;
+  const bodyY = variant === 4 ? 32 : 29;
+  const headX = variant === 5 ? 29 : 27;
+
+  const headPosition: ILottieValue<[number, number, number]> = isWorking
+    ? animatedValue([
+        { t: 0, s: [headX, 19, 0], e: [headX, 19.6, 0], i: ease, o: easeOut },
+        { t: 36, s: [headX, 19.6, 0], e: [headX, 19, 0], i: ease, o: easeOut },
+        { t: 72, s: [headX, 19, 0] },
+      ])
+    : isError
+      ? animatedValue([
+          { t: 0, s: [headX, 19, 0], e: [headX - 1.5, 19, 0], i: ease, o: easeOut },
+          { t: 4, s: [headX - 1.5, 19, 0], e: [headX + 1.5, 19, 0], i: ease, o: easeOut },
+          { t: 8, s: [headX + 1.5, 19, 0], e: [headX - 1.2, 19, 0], i: ease, o: easeOut },
+          { t: 12, s: [headX - 1.2, 19, 0], e: [headX + 1.2, 19, 0], i: ease, o: easeOut },
+          { t: 16, s: [headX + 1.2, 19, 0], e: [headX - 0.8, 19, 0], i: ease, o: easeOut },
+          { t: 20, s: [headX - 0.8, 19, 0], e: [headX + 0.8, 19, 0], i: ease, o: easeOut },
+          { t: 24, s: [headX + 0.8, 19, 0], e: [headX, 19, 0], i: ease, o: easeOut },
+          { t: 36, s: [headX, 19, 0] },
+        ])
+      : staticValue([headX, 19, 0]);
+
+  const headRotation: ILottieValue<[number]> = isWaiting
+    ? animatedValue([
+        { t: 0, s: [0], e: [0], i: ease, o: easeOut },
+        { t: 30, s: [0], e: [-4], i: ease, o: easeOut },
+        { t: 50, s: [-4], e: [0], i: ease, o: easeOut },
+        { t: 96, s: [0] },
+      ])
+    : staticValue([0]);
+
+  const frontPawRotation: ILottieValue<[number]> = isWaiting
+    ? animatedValue([
+        { t: 0, s: [0], e: [0], i: ease, o: easeOut },
+        { t: 40, s: [0], e: [-35], i: ease, o: easeOut },
+        { t: 50, s: [-35], e: [-25], i: ease, o: easeOut },
+        { t: 54, s: [-25], e: [-40], i: ease, o: easeOut },
+        { t: 58, s: [-40], e: [-25], i: ease, o: easeOut },
+        { t: 62, s: [-25], e: [-40], i: ease, o: easeOut },
+        { t: 66, s: [-40], e: [0], i: ease, o: easeOut },
+        { t: 76, s: [0] },
+        { t: 96, s: [0] },
+      ])
+    : staticValue([0]);
+
+  const tailBase: [number, number, number] = variant === 4 ? [46, 33, 0] : variant === 2 ? [45, 26, 0] : [46, 29, 0];
+
+  let tailShape: ILottieShape;
+  if (variant === 4) {
+    tailShape = path(
+      "tail",
+      [[0, 0], [7, 2], [13, -1]],
+      false,
+      [[0, 0], [-3, -1], [-3, 1]],
+      [[3, 1], [3, -1], [0, 0]]
+    );
+  } else if (variant === 2) {
+    tailShape = path(
+      "tail",
+      [[0, 0], [6, -5], [5, -13], [10, -17]],
+      false,
+      [[0, 0], [-2.5, 2.5], [0, 3.5], [-2.5, 2]],
+      [[2.5, -2.5], [0, -3.5], [2.5, -2], [0, 0]]
+    );
+  } else if (variant === 1) {
+    tailShape = path(
+      "tail",
+      [[0, 0], [6, 1], [11, -3]],
+      false,
+      [[0, 0], [-3, -0.5], [-2.5, 2]],
+      [[3, 0.5], [2.5, -2], [0, 0]]
+    );
+  } else {
+    tailShape = path(
+      "tail",
+      [[0, 0], [6, -6], [6, -14], [12, -18]],
+      false,
+      [[0, 0], [-2.5, 2.5], [0, 4], [-3, 2]],
+      [[2.5, -2.5], [0, -4], [3, -2], [0, 0]]
+    );
+  }
+
+  let leftEarShape = path("left-ear", [[-9, -7], [-6.2, -14.5], [-2, -7]], true, [[0, 0], [-1.2, 0.8], [0, 0]], [[0, 0], [1.2, -0.8], [0, 0]]);
+  let rightEarShape = path("right-ear", [[4, -7], [7.8, -14.5], [10, -7]], true, [[0, 0], [-1.2, -0.8], [0, 0]], [[0, 0], [1.2, 0.8], [0, 0]]);
+
+  if (variant === 1) {
+    leftEarShape = path("left-ear", [[-9, -7], [-7.5, -12.5], [-2, -7]], true, [[0, 0], [-1.5, 0.8], [0, 0]], [[0, 0], [1.5, -0.8], [0, 0]]);
+    rightEarShape = path("right-ear", [[4, -7], [7.5, -12.5], [10, -7]], true, [[0, 0], [-1.5, -0.8], [0, 0]], [[0, 0], [1.5, 0.8], [0, 0]]);
+  } else if (variant === 2) {
+    rightEarShape = path("right-ear", [[4, -7], [7.2, -13.5], [7.6, -12.5], [8.2, -12.8], [10, -7]], true, [[0, 0], [-1, -0.5], [0, 0], [0, 0], [0, 0]], [[0, 0], [1, 0.5], [0, 0], [0, 0], [0, 0]]);
+  } else if (variant === 4) {
+    leftEarShape = path("left-ear", [[-9, -7], [-8, -13], [-3.5, -9.5]], true, [[0, 0], [-1.2, 1.2], [-1.5, 1.5]], [[0, 0], [1.2, -1.2], [1.5, -1.5]]);
+    rightEarShape = path("right-ear", [[4.5, -9.5], [8, -13], [10, -7]], true, [[-1.5, -1.5], [-1.2, -1.2], [0, 0]], [[1.5, 1.5], [1.2, 1.2], [0, 0]]);
+  } else if (variant === 5) {
+    leftEarShape = path("left-ear", [[-9, -7], [-6.5, -15.5], [-2, -7]], true, [[0, 0], [-0.8, 0.8], [0, 0]], [[0, 0], [0.8, -0.8], [0, 0]]);
+    rightEarShape = path("right-ear", [[4, -7], [7.5, -15.5], [10, -7]], true, [[0, 0], [-0.8, -0.8], [0, 0]], [[0, 0], [0.8, 0.8], [0, 0]]);
+  }
+
+  const haloShapes = [
+    path("halo-left", [[-5, -12], [-2, -14], [0, -14]], false),
+    stroke(theme.accent, 1.4),
+    path("halo-right", [[0, -14], [3, -14], [5, -12]], false),
+    stroke([0.29, 0.87, 0.5, 1], 1.4),
+  ];
+
+  if (variant === 4) {
+    haloShapes.push(
+      path("halo-double-left", [[-5, -15], [-2, -17], [0, -17]], false),
+      stroke(theme.accent, 1.0),
+      path("halo-double-right", [[0, -17], [3, -17], [5, -15]], false),
+      stroke([0.29, 0.87, 0.5, 1], 1.0)
+    );
+  }
+
+  const layers: ILottieLayer[] = [
+    layer(1, "tail", [tailShape, stroke(theme.line, 3.2)], transform({ position: tailBase, rotation: tailRotation }), op),
+    layer(2, "body", [ellipse("body", [0, 0], [bodyWidth, bodyHeight]), fill(theme.fur)], transform({ position: [29, bodyY, 0], scale: bodyScale }), op),
+    layer(3, "back-paw", [rect("back-paw", [0, 0], [2.4, 6], 1), stroke(theme.line, 1.15)], transform({ position: [31, 37, 0] }), op),
+    layer(4, "front-paw", [rect("front-paw", [0, 0], [2.4, 7], 1), stroke(theme.line, 1.15)], transform({ position: [24.5, 33.5, 0], anchor: [0, -3.5, 0], rotation: frontPawRotation }), op),
+    layer(5, "head", [ellipse("head", [0, 0], [20, 15]), fill(theme.fur)], transform({ position: headPosition, rotation: headRotation }), op),
+    layer(6, "ears", [leftEarShape, rightEarShape, fill(theme.fur)], transform({ position: headPosition }), op),
+    layer(7, "face", [ellipse("left-eye", [-4.2, -0.2], [1.4, 1.4]), ellipse("right-eye", [4.2, -0.2], [1.4, 1.4]), fill(theme.line)], transform({ position: headPosition, scale: blinkScale }), op),
+    layer(8, "mouth", [path("mouth", [[-2, 3], [0, 4], [2, 3]], false), stroke(theme.line, 1.1)], transform({ position: headPosition }), op),
+    layer(9, "halo", haloShapes, transform({ position: headPosition }), op),
+  ];
+
+  if (variant === 1 || variant === 5) {
+    layers.push(layer(10, "forehead", [path("mark", [[-1, -4], [0, -2.7], [1, -4]], false), stroke(theme.line, 0.9)], transform({ position: headPosition }), op));
+  }
+
+  return { v: "5.12.2", fr: 30, ip: 0, op, w: 64, h: 44, nm: "agent-halo-session-cat", ddd: 0, assets: [], layers };
+};
+
+const SessionMascot = ({ sessionId, status }: { sessionId?: string | null; status?: ISessionSummary["status"] }) => {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const variant = getMascotVariant(sessionId);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return undefined;
+
+    const shouldReduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const animation = lottie.loadAnimation({
+      container,
+      renderer: "svg",
+      loop: !shouldReduceMotion && (status === "working" || status === "waiting"),
+      autoplay: !shouldReduceMotion,
+      animationData: buildLottieSessionCat(variant, status),
+      rendererSettings: {
+        preserveAspectRatio: "xMidYMid meet",
+        progressiveLoad: false,
+        hideOnTransparent: true,
+      },
+    });
+
+    if (shouldReduceMotion) animation.goToAndStop(0, true);
+
+    return () => animation.destroy();
+  }, [status, variant]);
+
+  return (
+    <span className="session-mascot session-mascot-lottie" data-status={status} data-variant={variant} style={getMascotStyle(variant)} aria-hidden="true">
+      <span className="session-mascot-stage" ref={containerRef} />
+    </span>
+  );
 };
 
 const createDemoEvent = (index: number): AgentHaloEvent => {
@@ -544,6 +1154,188 @@ const applyEvent = (presence: IAgentHaloPresence, event: AgentHaloEvent) => redu
 
 const appendRecentEvent = (events: AgentHaloEvent[], event: AgentHaloEvent): AgentHaloEvent[] =>
   [event, ...events].slice(0, MAX_RECENT_EVENTS);
+
+const demoUsageForProvider = (provider: IUsageProviderConfig): IAgentUsageState =>
+  createAgentUsageState(provider.id, {
+    status: "online",
+    fetchedAt: new Date().toISOString(),
+    plan: provider.id === "codex" ? "Pro" : "Max",
+    metrics: provider.id === "codex"
+      ? [
+          { label: "Session", value: 73, remainingLabel: "73% left", resetLabel: "Resets in 2h 18m" },
+          { label: "Weekly", value: 91, remainingLabel: "91% left", resetLabel: "Resets in 4d 7h" },
+          { label: "Reviews", value: 96, remainingLabel: "96% left", resetLabel: null },
+        ]
+      : [
+          { label: "Gemini Pro", value: 82, remainingLabel: "82% left", resetLabel: "Resets in 4h 31m" },
+          { label: "Gemini Flash", value: 93, remainingLabel: "93% left", resetLabel: "Resets in 4h 31m" },
+          { label: "Claude", value: 42, remainingLabel: "42% left", resetLabel: "Resets in 1d 19h" },
+        ],
+    sessionPercent: provider.id === "codex" ? 27 : null,
+    weeklyPercent: provider.id === "codex" ? 9 : null,
+    reviewsPercent: provider.id === "codex" ? 4 : null,
+    rateLimitResets: provider.id === "codex" ? "1 available" : null,
+    credits: provider.id === "codex" ? "$0.00 · 0 credits" : null,
+    today: null,
+    last30Days: null,
+  });
+
+const useAgentUsageList = () => {
+  const [usages, setUsages] = useState<Record<UsageProviderId, IAgentUsageState>>(() =>
+    Object.fromEntries(USAGE_PROVIDERS.map((provider) => [provider.id, createAgentUsageState(provider.id)])) as Record<UsageProviderId, IAgentUsageState>,
+  );
+
+  const refreshProvider = async (provider: IUsageProviderConfig) => {
+    if (DEMO_MODE) {
+      setUsages((current) => ({ ...current, [provider.id]: demoUsageForProvider(provider) }));
+      return;
+    }
+
+    if (typeof window.__TAURI_INTERNALS__ === "undefined") {
+      setUsages((current) => ({
+        ...current,
+        [provider.id]: createAgentUsageState(provider.id, { status: "offline", message: "Agent Halo desktop runtime needed" }),
+      }));
+      return;
+    }
+
+    try {
+      const snapshot = await invoke<IAgentUsageSnapshot>(provider.command);
+      setUsages((current) => ({ ...current, [provider.id]: parseAgentUsageSnapshot(provider.id, snapshot) }));
+    } catch (error) {
+      setUsages((current) => ({
+        ...current,
+        [provider.id]: createAgentUsageState(provider.id, {
+          status: "offline",
+          message: error instanceof Error ? error.message : String(error || `${provider.label} usage unavailable`),
+        }),
+      }));
+    }
+  };
+
+  const refresh = () => {
+    for (const provider of USAGE_PROVIDERS) void refreshProvider(provider);
+  };
+
+  useEffect(() => {
+    refresh();
+    const timer = window.setInterval(refresh, USAGE_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  return { refresh, usages };
+};
+
+const UsageMeter = ({ metric }: { metric: IUsageMetric }) => (
+  <div className="usage-meter" data-empty={metric.value === null}>
+    <div className="usage-meter-head">
+      <span className="usage-meter-label">{metric.label}</span>
+      <span className="usage-status-dot" data-level={metric.value !== null && metric.value <= 20 ? "danger" : metric.value !== null && metric.value <= 45 ? "warning" : "ok"} />
+    </div>
+    <span className="usage-meter-track" aria-hidden="true">
+      <span className="usage-meter-fill" style={{ width: `${metric.value ?? 0}%` }} />
+    </span>
+    <div className="usage-meter-foot">
+      <span>{metric.remainingLabel ?? "—"}</span>
+      {metric.resetLabel ? <span>{metric.resetLabel}</span> : null}
+    </div>
+  </div>
+);
+
+const UsageProviderDetail = ({ provider, usage }: { provider: IUsageProviderConfig; usage: IAgentUsageState }) => {
+  const Icon = provider.Icon;
+  const statusText = usage.status === "loading" ? `Checking ${provider.label}` : usage.message ?? `${provider.label} usage unavailable`;
+
+  return (
+    <section className="usage-provider-card" data-status={usage.status}>
+      <div className="usage-provider-head">
+        <span className="usage-provider-title"><Icon size={14} strokeWidth={2.2} />{provider.label}</span>
+        {usage.plan ? <span className="usage-plan">{usage.plan}</span> : null}
+      </div>
+      {usage.status === "online" && usage.metrics.length > 0 ? (
+        <div className="usage-provider-metrics">
+          {usage.metrics.map((metric) => <UsageMeter metric={metric} key={metric.label} />)}
+        </div>
+      ) : (
+        <div className="usage-provider-message">
+          <TriangleAlert size={13} strokeWidth={2.2} />
+          <span>{statusText}</span>
+        </div>
+      )}
+      {(usage.credits || usage.rateLimitResets) ? (
+        <div className="usage-provider-chips">
+          {usage.credits ? <span className="usage-chip" title="Credits">{usage.credits}</span> : null}
+          {usage.rateLimitResets ? <span className="usage-chip" title="Rate limit resets">{usage.rateLimitResets}</span> : null}
+        </div>
+      ) : null}
+    </section>
+  );
+};
+
+const AgentUsageList = ({ onRefresh, usages }: { onRefresh: () => void; usages: Record<UsageProviderId, IAgentUsageState> }) => {
+  const [selectedProviderId, setSelectedProviderId] = useState<UsageProviderId | null>(null);
+  const visibleProviders = USAGE_PROVIDERS.filter((provider) => {
+    const usage = usages[provider.id] ?? createAgentUsageState(provider.id);
+    return usage.status === "loading" || usage.status === "online";
+  });
+  const selectedProvider = visibleProviders.find((provider) => provider.id === selectedProviderId) ?? visibleProviders[0] ?? null;
+
+  useEffect(() => {
+    if (visibleProviders.length === 0) {
+      setSelectedProviderId(null);
+      return;
+    }
+    if (!selectedProviderId || !visibleProviders.some((provider) => provider.id === selectedProviderId)) {
+      setSelectedProviderId(visibleProviders[0].id);
+    }
+  }, [selectedProviderId, visibleProviders]);
+
+  return (
+    <div className="usage-list" aria-label="Usage providers">
+      <div className="usage-list-topline">
+        <span>Usage</span>
+        <button className="usage-refresh" type="button" onClick={(event) => { event.stopPropagation(); onRefresh(); }} data-tauri-drag-region="false" title="Refresh usage">
+          <RefreshCw size={12} strokeWidth={2.2} />
+        </button>
+      </div>
+      {visibleProviders.length === 0 ? (
+        <div className="usage-empty">No local usage providers found</div>
+      ) : selectedProvider ? (
+        <div className="usage-layout">
+          <div className="usage-sidebar" role="tablist" aria-label="Usage providers">
+            {visibleProviders.map((provider) => {
+              const usage = usages[provider.id] ?? createAgentUsageState(provider.id);
+              const Icon = provider.Icon;
+              return (
+                <button
+                  className="usage-side-tab"
+                  data-active={selectedProvider.id === provider.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={selectedProvider.id === provider.id}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setSelectedProviderId(provider.id);
+                  }}
+                  data-tauri-drag-region="false"
+                  key={provider.id}
+                  title={provider.label}
+                >
+                  <Icon size={13} strokeWidth={2.2} />
+                  <span>{provider.label}</span>
+                  {usage.status === "online" ? <span className="usage-side-dot" /> : null}
+                </button>
+              );
+            })}
+          </div>
+          <div className="usage-detail-panel">
+            <UsageProviderDetail provider={selectedProvider} usage={usages[selectedProvider.id] ?? createAgentUsageState(selectedProvider.id)} />
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+};
 
 const useAgentHaloPresence = () => {
   const [presence, setPresence] = useState<IAgentHaloPresence>(() => createInitialPresence());
@@ -681,12 +1473,15 @@ const useAgentHaloPresence = () => {
 
 const App = () => {
   const { capabilities, connection, lastLiveEvent, now, presence, recentEvents, refreshCapabilities, sessionEvents, setSessionEventRegistry, view } = useAgentHaloPresence();
+  const { refresh: refreshAgentUsage, usages: agentUsages } = useAgentUsageList();
   const [acknowledgedConversationId, setAcknowledgedConversationId] = useState<string | null>(null);
   const [nativeAction, setNativeAction] = useState<INativeActionState>({ bridgeOnline: null, message: null });
   const [sessionAction, setSessionAction] = useState<ISessionActionState>({ ok: null, message: null });
   const [panelOpen, setPanelOpen] = useState(DEMO_MODE);
   const [renderPanel, setRenderPanel] = useState(DEMO_MODE);
+  const [panelHeight, setPanelHeight] = useState(PANEL_MIN_HEIGHT);
   const [hoverExpandSuppressed, setHoverExpandSuppressed] = useState(false);
+  const [activeMainTab, setActiveMainTab] = useState<MainPanelTab>("sessions");
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [setupOpen, setSetupOpen] = useState(false);
   const [modStatus, setModStatus] = useState<IModStatus>({ path: null, installed: null });
@@ -695,6 +1490,7 @@ const App = () => {
   const [dismissedSessionIds, setDismissedSessionIds] = useState<DismissedSessionRegistry>(readDismissedSessionIds);
   const [deletedSessionIds, setDeletedSessionIds] = useState<DeletedSessionRegistry>(readDeletedSessionIds);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
+  const sheetInnerRef = useRef<HTMLDivElement | null>(null);
   const hoverOpenTimerRef = useRef<number | null>(null);
   const hoverCloseTimerRef = useRef<number | null>(null);
   const displayView =
@@ -755,11 +1551,13 @@ const App = () => {
     ? "Setup"
     : selectedSession
       ? selectedSession.project
-      : sessionGroups.length === 0
-        ? "Agent Halo"
-        : sessionGroups.length === 1
-          ? sessionGroups[0].sessions.length === 1 ? "1 session" : `${sessionGroups[0].sessions.length} sessions`
-          : `${sessionGroups.length} workspaces`;
+      : activeMainTab === "usage"
+        ? "Usage"
+        : sessionGroups.length === 0
+          ? "Agent Halo"
+          : sessionGroups.length === 1
+            ? sessionGroups[0].sessions.length === 1 ? "1 session" : `${sessionGroups[0].sessions.length} sessions`
+            : `${sessionGroups.length} workspaces`;
   const activitySession =
     sessions.find((session) => session.status === "working") ??
     sessions.find((session) => session.status === "waiting") ??
@@ -790,12 +1588,13 @@ const App = () => {
     "--closed-width": `${closedSurfaceWidth}px`,
     "--closed-height": `${closedSurfaceHeight}px`,
     "--camera-width": `${Math.round(notchMetrics.cameraWidth)}px`,
+    "--panel-height": `${panelHeight}px`,
     "--pill-text-width": `${Math.max(0, liveActivityWingWidth - LIVE_ACTIVITY_TEXT_WIDTH_BUFFER)}px`,
-  } as CSSProperties & Record<"--closed-width" | "--closed-height" | "--camera-width" | "--pill-text-width", string>;
+  } as CSSProperties & Record<"--closed-width" | "--closed-height" | "--camera-width" | "--panel-height" | "--pill-text-width", string>;
   const shouldAutoOpen = activityStatus === "error";
   const surfaceState = renderPanel ? (panelOpen ? "open" : "closing") : "closed";
   const shapeMetrics = surfaceState === "open"
-    ? { width: PANEL_WINDOW_WIDTH, height: PANEL_WINDOW_HEIGHT, topRadius: OPEN_TOP_SHOULDER_RADIUS, bottomRadius: PANEL_BOTTOM_RADIUS }
+    ? { width: PANEL_WINDOW_WIDTH, height: panelHeight, topRadius: OPEN_TOP_SHOULDER_RADIUS, bottomRadius: PANEL_BOTTOM_RADIUS }
     : { width: closedSurfaceWidth, height: closedSurfaceHeight, topRadius: CLOSED_TOP_SHOULDER_RADIUS, bottomRadius: CLOSED_BOTTOM_RADIUS };
   const notchShapePath = buildNotchShapePath(shapeMetrics.width, shapeMetrics.height, shapeMetrics.topRadius, shapeMetrics.bottomRadius);
   const setupGuidance = (() => {
@@ -867,6 +1666,46 @@ const App = () => {
   }, [canUseNativeControls]);
 
   useEffect(() => {
+    if (!renderPanel) {
+      setPanelHeight(PANEL_MIN_HEIGHT);
+      return;
+    }
+
+    if (activeMainTab === "usage" && !setupOpen && !selectedSessionId) {
+      setPanelHeight(PANEL_MAX_HEIGHT);
+      return;
+    }
+
+    const target = sheetInnerRef.current;
+    if (!target) return;
+
+    const measureContentHeight = () => Array.from(target.children).reduce((total, child) => {
+      const element = child as HTMLElement;
+      if (element.classList.contains("sheet-body")) {
+        const style = window.getComputedStyle(element);
+        const padding = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
+        const bodyContent = Array.from(element.children).reduce((bodyTotal, bodyChild) => bodyTotal + Math.ceil((bodyChild as HTMLElement).scrollHeight), 0);
+        return total + padding + bodyContent;
+      }
+      return total + Math.ceil(element.getBoundingClientRect().height);
+    }, 0);
+
+    const updateHeight = () => {
+      const measured = measureContentHeight();
+      setPanelHeight((current) => {
+        const next = clampPanelHeight(measured);
+        return Math.abs(next - current) < 2 ? current : next;
+      });
+    };
+
+    updateHeight();
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(target);
+    for (const child of Array.from(target.children)) observer.observe(child);
+    return () => observer.disconnect();
+  }, [activeMainTab, agentUsages, renderPanel, selectedSessionId, sessionGroups.length, setupOpen]);
+
+  useEffect(() => {
     let cancelled = false;
 
     const resizeNativePanel = async (open: boolean) => {
@@ -874,7 +1713,7 @@ const App = () => {
       await invoke("set_panel_open", {
         open,
         width: open ? PANEL_WINDOW_WIDTH : nativeClosedSurfaceWidth,
-        height: open ? PANEL_WINDOW_HEIGHT : closedSurfaceHeight,
+        height: open ? panelHeight : closedSurfaceHeight,
       });
     };
 
@@ -906,7 +1745,7 @@ const App = () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [canUseNativeControls, closedSurfaceHeight, nativeClosedSurfaceWidth, panelOpen, renderPanel]);
+  }, [canUseNativeControls, closedSurfaceHeight, nativeClosedSurfaceWidth, panelHeight, panelOpen, renderPanel]);
 
   useEffect(
     () => () => {
@@ -989,6 +1828,7 @@ const App = () => {
     clearHoverOpenTimer();
     clearHoverCloseTimer();
     setSetupOpen(false);
+    setActiveMainTab("sessions");
     setSessionAction({ ok: null, message: null });
     setSelectedSessionId(conversationId);
     setPanelOpen(true);
@@ -1005,6 +1845,7 @@ const App = () => {
   const backToSessions = () => {
     setSelectedSessionId(null);
     setSetupOpen(false);
+    setActiveMainTab("sessions");
   };
 
   const dismissSession = (conversationId: string) => {
@@ -1153,17 +1994,17 @@ const App = () => {
             </div>
             <div className="camera-spacer" aria-hidden="true" />
             <div className="notch-wing notch-wing-right" aria-hidden="true">
-              {hasLiveActivity ? <span className="activity-bars"><span /><span /><span /></span> : null}
+              {hasLiveActivity ? <ActivityMascot sessionId={activitySession?.conversationId ?? presence.conversationId} status={activityStatus} /> : null}
             </div>
           </div>
 
-          {renderPanel ? <div className="sheet-inner">
+          {renderPanel ? <div className="sheet-inner" ref={sheetInnerRef}>
             {setupOpen ? (
               <div className="sheet-header detail-header" data-tauri-drag-region="false">
                 <button className="gear-btn" type="button" onClick={backToSessions} data-tauri-drag-region="false" title="Back to sessions">
-                  ‹
+                  <ChevronLeft size={14} strokeWidth={2.3} />
                 </button>
-                <span className="status-slot"><span className="setup-glyph">⌁</span></span>
+                <span className="status-slot"><Settings className="setup-icon" size={14} strokeWidth={2.3} /></span>
                 <span className="header-title">{headerLabel}</span>
                 <span className="spacer" />
                 {DEMO_MODE ? <span className="agent-badge">DEMO</span> : null}
@@ -1171,7 +2012,7 @@ const App = () => {
             ) : selectedSession ? (
               <div className="sheet-header detail-header" data-tauri-drag-region="false">
                 <button className="gear-btn" type="button" onClick={backToSessions} data-tauri-drag-region="false" title="Back to sessions">
-                  ‹
+                  <ChevronLeft size={14} strokeWidth={2.3} />
                 </button>
                 <StatusGlyph status={selectedSession.status} />
                 <span className="header-title">{headerLabel}</span>
@@ -1185,9 +2026,17 @@ const App = () => {
                 {DEMO_MODE ? <span className="agent-badge">DEMO</span> : null}
                 <span className="spacer" />
                 <span className="bridge-dot" data-connected={isConnected} title={connectionTitle} />
-                <button className="gear-btn" type="button" onClick={(event) => { event.stopPropagation(); openSetup(); }} data-tauri-drag-region="false" title="Setup">
-                  ⌁
-                </button>
+                <div className="header-tabs" role="tablist" aria-label="Agent Halo sections">
+                  <button className="header-tab" data-active={activeMainTab === "sessions"} type="button" role="tab" aria-selected={activeMainTab === "sessions"} onClick={(event) => { event.stopPropagation(); setSetupOpen(false); setSelectedSessionId(null); setActiveMainTab("sessions"); }} data-tauri-drag-region="false" title="Sessions">
+                    <List size={13} strokeWidth={2.3} />
+                  </button>
+                  <button className="header-tab" data-active={activeMainTab === "usage"} type="button" role="tab" aria-selected={activeMainTab === "usage"} onClick={(event) => { event.stopPropagation(); setSetupOpen(false); setSelectedSessionId(null); setActiveMainTab("usage"); setPanelOpen(true); }} data-tauri-drag-region="false" title="Usage">
+                    <BarChart3 size={13} strokeWidth={2.3} />
+                  </button>
+                  <button className="header-tab" type="button" onClick={(event) => { event.stopPropagation(); openSetup(); }} data-tauri-drag-region="false" title="Setup">
+                    <Settings size={13} strokeWidth={2.3} />
+                  </button>
+                </div>
               </div>
             )}
             <div className="sheet-divider" />
@@ -1202,11 +2051,12 @@ const App = () => {
                       <span className="setup-detail">{connectionTitle}</span>
                     </span>
                     <button className="pill-btn" type="button" onClick={() => void checkBridge()} data-tauri-drag-region="false">
+                      <Check size={12} strokeWidth={2.3} />
                       Check
                     </button>
                   </div>
                   <div className="setup-row">
-                    <span className="status-slot"><span className="setup-glyph">◆</span></span>
+                    <span className="status-slot"><Download className="setup-icon" size={14} strokeWidth={2.3} /></span>
                     <span className="setup-copy">
                       <span className="setup-title">Letta mod</span>
                       <span className="setup-detail">
@@ -1220,18 +2070,19 @@ const App = () => {
                       </span>
                     </span>
                     <button className="pill-btn accent" type="button" onClick={() => void installMod()} data-tauri-drag-region="false">
+                      <Download size={12} strokeWidth={2.3} />
                       {modStatus.installed ? "Reinstall" : "Install"}
                     </button>
                   </div>
                   <div className="setup-row passive">
-                    <span className="status-slot"><span className="setup-glyph">➜</span></span>
+                    <span className="status-slot"><ArrowRight className="setup-icon" size={14} strokeWidth={2.3} /></span>
                     <span className="setup-copy">
                       <span className="setup-title">{setupGuidance.title}</span>
                       <span className="setup-detail">{setupGuidance.detail}</span>
                     </span>
                   </div>
                   <div className="setup-row passive">
-                    <span className="status-slot"><span className="setup-glyph">↗</span></span>
+                    <span className="status-slot"><Focus className="setup-icon" size={14} strokeWidth={2.3} /></span>
                     <span className="setup-copy">
                       <span className="setup-title">Session controls</span>
                       <span className="setup-detail">
@@ -1278,11 +2129,14 @@ const App = () => {
                     </div>
                   )}
                 </div>
+              ) : activeMainTab === "usage" ? (
+                <AgentUsageList usages={agentUsages} onRefresh={refreshAgentUsage} />
               ) : sessions.length === 0 ? (
                 <div className="empty-state">
                   <div className="empty-glyph">◌</div>
                   <div className="empty-text">Waiting for Letta Code</div>
                   <button className="btn accent" type="button" onClick={(event) => { event.stopPropagation(); openSetup(); }} data-tauri-drag-region="false">
+                    <Settings size={13} strokeWidth={2.3} />
                     Open setup
                   </button>
                 </div>
@@ -1296,7 +2150,7 @@ const App = () => {
 
                       return (
                       <li className={`session-row ${isGrouped ? "session-group" : ""} ${group.status === "done" ? "ended" : ""}`} key={group.key} title={rowTitle} onClick={() => openSession(session.conversationId)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") openSession(session.conversationId); }} role="button" tabIndex={0}>
-                        <StatusGlyph status={group.status} />
+                        <SessionMascot sessionId={session.conversationId} status={group.status} />
                         <span className="session-label">
                           <span className="session-main-line">
                             <span className="agent-badge">{isGrouped ? `×${group.sessions.length}` : "LC"}</span>
@@ -1317,6 +2171,7 @@ const App = () => {
                           data-tauri-drag-region="false"
                           title="Focus session in Ghostty"
                         >
+                          <Focus size={11} strokeWidth={2.4} />
                           Focus
                         </button>
                         {group.status === "done" ? (
@@ -1329,10 +2184,10 @@ const App = () => {
                               else dismissSession(session.conversationId);
                             }}
                             data-tauri-drag-region="false"
-                            title={isGrouped ? "Dismiss workspace sessions" : "Dismiss session"}
-                          >
-                            ×
-                          </button>
+                          title={isGrouped ? "Dismiss workspace sessions" : "Dismiss session"}
+                        >
+                            <X size={12} strokeWidth={2.5} />
+                        </button>
                         ) : null}
                       </li>
                       );
@@ -1361,29 +2216,35 @@ const App = () => {
                 {setupOpen ? (
                   <div className="footer-actions">
                     <button className="pill-btn" type="button" onClick={backToSessions} data-tauri-drag-region="false">
+                      <List size={12} strokeWidth={2.3} />
                       Sessions
                     </button>
                   </div>
                 ) : selectedSession ? (
                   <div className="footer-actions">
                     <button className="pill-btn accent" type="button" onClick={() => void focusSelectedSession(selectedSession)} data-tauri-drag-region="false">
+                      <Focus size={12} strokeWidth={2.3} />
                       Focus
                     </button>
                     {selectedSession.status === "done" ? (
                       <button className="pill-btn danger" type="button" onClick={() => dismissSession(selectedSession.conversationId)} data-tauri-drag-region="false">
+                        <X size={12} strokeWidth={2.4} />
                         Dismiss
                       </button>
                     ) : null}
                     <button className="pill-btn danger" type="button" onClick={() => deleteSession(selectedSession.conversationId)} data-tauri-drag-region="false" title="Delete stuck session locally">
+                      <Trash2 size={12} strokeWidth={2.3} />
                       Delete
                     </button>
                     <button className="pill-btn" type="button" onClick={backToSessions} data-tauri-drag-region="false">
+                      <List size={12} strokeWidth={2.3} />
                       Sessions
                     </button>
                   </div>
                 ) : null}
                 {activitySession?.status === "done" ? (
                   <button className="pill-btn accent" type="button" onClick={(event) => { event.stopPropagation(); acknowledgeDone(); }} data-tauri-drag-region="false">
+                    <Check size={12} strokeWidth={2.4} />
                     Acknowledge
                   </button>
                 ) : null}
