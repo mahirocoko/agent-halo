@@ -1,11 +1,13 @@
 use std::{
+    collections::BTreeMap,
     fs,
     io::Write,
     net::{SocketAddr, TcpStream},
     path::{Path, PathBuf},
     process::Command,
     sync::mpsc,
-    time::Duration,
+    thread,
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use tauri::{
@@ -14,7 +16,6 @@ use tauri::{
     LogicalSize, Manager, Size,
 };
 
-use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -33,15 +34,7 @@ const CODEX_REFRESH_URL: &str = "https://auth.openai.com/oauth/token";
 const CODEX_CLIENT_ID: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
 const CODEX_KEYCHAIN_SERVICE: &str = "Codex Auth";
 const CODEX_CREDIT_USD_RATE: f64 = 0.04;
-const AGY_KEYCHAIN_SERVICE: &str = "gemini";
-const AGY_KEYCHAIN_ACCOUNT: &str = "antigravity";
-const AGY_LOAD_CODE_ASSIST_PATH: &str = "/v1internal:loadCodeAssist";
-const AGY_RETRIEVE_QUOTA_PATH: &str = "/v1internal:retrieveUserQuota";
 const AGY_LS_SERVICE: &str = "exa.language_server_pb.LanguageServerService";
-const AGY_CLOUD_CODE_URLS: [&str; 2] = [
-    "https://daily-cloudcode-pa.googleapis.com",
-    "https://cloudcode-pa.googleapis.com",
-];
 const CLAUDE_USAGE_URL: &str = "https://api.anthropic.com/api/oauth/usage";
 const CLAUDE_REFRESH_URL: &str = "https://platform.claude.com/v1/oauth/token";
 const CLAUDE_CLIENT_ID: &str = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
@@ -128,9 +121,16 @@ enum CodexProgressFormat {
 struct CodexUsageEnvelope {
     plan_type: Option<String>,
     rate_limit: Option<CodexRateLimit>,
+    additional_rate_limits: Option<Vec<CodexAdditionalRateLimit>>,
     code_review_rate_limit: Option<CodexReviewRateLimit>,
     credits: Option<CodexCredits>,
     rate_limit_reset_credits: Option<CodexResetCredits>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CodexAdditionalRateLimit {
+    limit_name: Option<String>,
+    rate_limit: Option<CodexRateLimit>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -251,59 +251,11 @@ fn agy_usage() -> Result<CodexUsageSnapshot, String> {
     if let Some(snapshot) = probe_antigravity_ls_usage() {
         return Ok(snapshot);
     }
-
-    let token = load_agy_keychain_token().ok_or_else(|| {
-        "Antigravity auth not found. Start Antigravity or run `agy` and try again.".to_string()
-    })?;
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(12))
-        .user_agent("Agent Halo")
-        .build()
-        .map_err(|error| format!("Failed to create Antigravity usage client: {error}"))?;
-
-    let load_data = request_agy_cloud_code_json(
-        &client,
-        AGY_LOAD_CODE_ASSIST_PATH,
-        &token,
-        "agy",
-        Value::Object(Default::default()),
-    )?;
-    let plan = read_agy_plan(&load_data);
-    let project = load_data
-        .get("cloudaicompanionProject")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned);
-
-    let quota_body = project
-        .as_ref()
-        .map(|project| serde_json::json!({ "project": project }))
-        .unwrap_or_else(|| Value::Object(Default::default()));
-    let quota_data =
-        request_agy_cloud_code_json(&client, AGY_RETRIEVE_QUOTA_PATH, &token, "agy", quota_body)
-            .or_else(|_| {
-                request_agy_cloud_code_json(
-                    &client,
-                    AGY_RETRIEVE_QUOTA_PATH,
-                    &token,
-                    "agy",
-                    Value::Object(Default::default()),
-                )
-            })?;
-    let lines = build_agy_usage_lines(&quota_data);
-
-    if lines.is_empty() {
-        return Err("Antigravity quota data unavailable. Try again later.".to_string());
+    if let Some(snapshot) = probe_antigravity_usage_with_ephemeral_agy() {
+        return Ok(snapshot);
     }
 
-    Ok(CodexUsageSnapshot {
-        provider_id: "agy".to_string(),
-        display_name: "Antigravity".to_string(),
-        plan,
-        lines,
-        fetched_at: now_iso(),
-    })
+    Err("Antigravity usage unavailable. Start `agy` or Antigravity, then refresh.".to_string())
 }
 
 #[tauri::command]
@@ -387,6 +339,40 @@ fn grok_usage() -> Result<CodexUsageSnapshot, String> {
         .map_err(|error| format!("Grok billing response invalid: {error}"))?;
     let plan = fetch_grok_plan(&client, &token);
     build_grok_usage_snapshot(billing, plan)
+}
+
+#[tauri::command]
+fn open_external_url(url: String) -> Result<(), String> {
+    let trimmed = url.trim();
+    if !(trimmed.starts_with("https://") || trimmed.starts_with("http://")) {
+        return Err("Only http(s) URLs can be opened".to_string());
+    }
+
+    #[cfg(target_os = "macos")]
+    let mut command = {
+        let mut command = Command::new("open");
+        command.arg(trimmed);
+        command
+    };
+
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        let mut command = Command::new("cmd");
+        command.args(["/C", "start", "", trimmed]);
+        command
+    };
+
+    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+    let mut command = {
+        let mut command = Command::new("xdg-open");
+        command.arg(trimmed);
+        command
+    };
+
+    command
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("Failed to open link: {error}"))
 }
 
 #[derive(Debug)]
@@ -685,6 +671,34 @@ fn build_codex_usage_snapshot(
             Some(7 * 24 * 60 * 60 * 1000),
         ));
     }
+    if let Some(additional_limits) = usage.additional_rate_limits.as_ref() {
+        for entry in additional_limits {
+            let Some(limit) = entry.rate_limit.as_ref() else {
+                continue;
+            };
+            let label = codex_additional_limit_label(entry.limit_name.as_deref());
+            if let Some(window) = limit.primary_window.as_ref() {
+                if let Some(value) = value_to_f64(window.used_percent.as_ref()) {
+                    lines.push(progress_line(
+                        &label,
+                        value,
+                        Some(window),
+                        Some(5 * 60 * 60 * 1000),
+                    ));
+                }
+            }
+            if let Some(window) = limit.secondary_window.as_ref() {
+                if let Some(value) = value_to_f64(window.used_percent.as_ref()) {
+                    lines.push(progress_line(
+                        &format!("{label} Weekly"),
+                        value,
+                        Some(window),
+                        Some(7 * 24 * 60 * 60 * 1000),
+                    ));
+                }
+            }
+        }
+    }
     if let Some(window) = usage
         .code_review_rate_limit
         .as_ref()
@@ -739,6 +753,23 @@ fn build_codex_usage_snapshot(
         plan: usage.plan_type.and_then(format_codex_plan),
         lines,
         fetched_at: now_iso(),
+    }
+}
+
+fn codex_additional_limit_label(limit_name: Option<&str>) -> String {
+    let Some(name) = limit_name.map(str::trim).filter(|value| !value.is_empty()) else {
+        return "Model".to_string();
+    };
+    let short = name
+        .strip_prefix("GPT-")
+        .and_then(|value| value.split_once("-Codex-"))
+        .map(|(_, suffix)| suffix)
+        .unwrap_or(name)
+        .trim();
+    if short.is_empty() {
+        "Model".to_string()
+    } else {
+        short.to_string()
     }
 }
 
@@ -1377,33 +1408,6 @@ fn build_grok_usage_snapshot(
     })
 }
 
-fn load_agy_keychain_token() -> Option<String> {
-    #[cfg(target_os = "macos")]
-    {
-        let output = Command::new("security")
-            .args([
-                "find-generic-password",
-                "-s",
-                AGY_KEYCHAIN_SERVICE,
-                "-a",
-                AGY_KEYCHAIN_ACCOUNT,
-                "-w",
-            ])
-            .output()
-            .ok()?;
-        if !output.status.success() {
-            return None;
-        }
-        let text = String::from_utf8(output.stdout).ok()?;
-        extract_agy_access_token(text.trim())
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    {
-        None
-    }
-}
-
 #[derive(Debug, Clone)]
 struct AntigravityLsDiscovery {
     pid: String,
@@ -1436,6 +1440,124 @@ fn probe_antigravity_ls_usage() -> Option<CodexUsageSnapshot> {
     }
 
     None
+}
+
+fn probe_antigravity_usage_with_ephemeral_agy() -> Option<CodexUsageSnapshot> {
+    let agy_path = find_agy_binary()?;
+    let tmux_path = find_tmux_binary()?;
+    let session = format!(
+        "agent-halo-agy-usage-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .ok()?
+            .as_millis()
+    );
+    let cwd = std::env::current_dir()
+        .ok()
+        .filter(|path| path.is_dir())
+        .or_else(home_dir)?;
+    let command = format!(
+        "exec {} --dangerously-skip-permissions",
+        shell_quote(agy_path.to_string_lossy().as_ref())
+    );
+    let status = Command::new(&tmux_path)
+        .args([
+            "new-session",
+            "-d",
+            "-s",
+            &session,
+            "-c",
+            cwd.to_string_lossy().as_ref(),
+            &command,
+        ])
+        .status()
+        .ok()?;
+    if !status.success() {
+        return None;
+    }
+
+    let deadline = Instant::now() + Duration::from_secs(12);
+    let mut snapshot = None;
+
+    while Instant::now() < deadline {
+        snapshot = probe_antigravity_ls_usage();
+        if snapshot.is_some() {
+            break;
+        }
+        thread::sleep(Duration::from_millis(350));
+    }
+
+    let _ = Command::new(&tmux_path)
+        .args(["kill-session", "-t", &session])
+        .status();
+    snapshot
+}
+
+fn find_agy_binary() -> Option<PathBuf> {
+    if let Some(path) = std::env::var_os("AGENT_HALO_AGY_PATH").map(PathBuf::from) {
+        if path.is_file() {
+            return Some(path);
+        }
+    }
+
+    let mut candidates = Vec::new();
+    if let Some(home) = home_dir() {
+        candidates.push(home.join(".local/bin/agy"));
+        candidates.push(home.join(".bun/bin/agy"));
+    }
+    candidates.push(PathBuf::from("/opt/homebrew/bin/agy"));
+    candidates.push(PathBuf::from("/usr/local/bin/agy"));
+
+    for candidate in candidates {
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+
+    let output = Command::new("sh")
+        .args(["-lc", "command -v agy"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let path = String::from_utf8(output.stdout).ok()?;
+    let path = PathBuf::from(path.trim());
+    path.is_file().then_some(path)
+}
+
+fn find_tmux_binary() -> Option<PathBuf> {
+    for candidate in [
+        PathBuf::from("/opt/homebrew/bin/tmux"),
+        PathBuf::from("/usr/local/bin/tmux"),
+        PathBuf::from("/usr/bin/tmux"),
+    ] {
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+
+    let output = Command::new("sh")
+        .args(["-lc", "command -v tmux"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let path = String::from_utf8(output.stdout).ok()?;
+    let path = PathBuf::from(path.trim());
+    path.is_file().then_some(path)
+}
+
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\\''"))
+}
+
+fn home_dir() -> Option<PathBuf> {
+    std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .filter(|path| path.is_dir())
 }
 
 fn discover_antigravity_ls_processes() -> Vec<AntigravityLsDiscovery> {
@@ -1577,6 +1699,10 @@ fn fetch_antigravity_ls_snapshot(
     port: u16,
     csrf: &str,
 ) -> Option<CodexUsageSnapshot> {
+    if let Some(snapshot) = fetch_antigravity_quota_summary_snapshot(client, scheme, port, csrf) {
+        return Some(snapshot);
+    }
+
     let user_status = call_antigravity_ls(client, scheme, port, csrf, "GetUserStatus");
     let (configs, plan) = if let Some(data) = user_status {
         let plan = data
@@ -1622,8 +1748,111 @@ fn fetch_antigravity_ls_snapshot(
     })
 }
 
+fn fetch_antigravity_quota_summary_snapshot(
+    client: &reqwest::blocking::Client,
+    scheme: &str,
+    port: u16,
+    csrf: &str,
+) -> Option<CodexUsageSnapshot> {
+    let data = call_antigravity_ls(client, scheme, port, csrf, "RetrieveUserQuotaSummary")?;
+    let response = data.get("response")?;
+    let lines = build_antigravity_quota_summary_lines(response);
+    if lines.is_empty() {
+        return None;
+    }
+    let plan = call_antigravity_ls(client, scheme, port, csrf, "GetUserStatus")
+        .and_then(|status| read_antigravity_user_status_plan(&status));
+
+    Some(CodexUsageSnapshot {
+        provider_id: "agy".to_string(),
+        display_name: "Antigravity".to_string(),
+        plan,
+        lines,
+        fetched_at: now_iso(),
+    })
+}
+
+fn read_antigravity_user_status_plan(data: &Value) -> Option<String> {
+    data.get("userStatus")
+        .and_then(|status| status.get("userTier"))
+        .and_then(|tier| tier.get("name"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .or_else(|| {
+            data.get("userStatus")
+                .and_then(|status| status.get("planStatus"))
+                .and_then(|plan_status| plan_status.get("planInfo"))
+                .and_then(|info| info.get("planName"))
+                .and_then(Value::as_str)
+                .map(format_plan_label)
+        })
+}
+
+fn build_antigravity_quota_summary_lines(response: &Value) -> Vec<CodexMetricLine> {
+    let Some(groups) = response.get("groups").and_then(Value::as_array) else {
+        return Vec::new();
+    };
+
+    let mut lines = Vec::new();
+    for group in groups {
+        let group_label = group
+            .get("displayName")
+            .and_then(Value::as_str)
+            .map(normalize_antigravity_group_name)
+            .unwrap_or_else(|| "Antigravity models".to_string());
+        let Some(buckets) = group.get("buckets").and_then(Value::as_array) else {
+            continue;
+        };
+        for bucket in buckets {
+            let limit_label = bucket
+                .get("displayName")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .unwrap_or("Limit");
+            let remaining = value_to_f64(bucket.get("remainingFraction"))
+                .unwrap_or(0.0)
+                .clamp(0.0, 1.0);
+            let reset_time = bucket
+                .get("resetTime")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned);
+
+            lines.push(CodexMetricLine::Progress {
+                label: format!("{group_label} {limit_label}"),
+                used: ((1.0 - remaining) * 100.0).round().clamp(0.0, 100.0),
+                limit: 100.0,
+                format: CodexProgressFormat::Percent,
+                resets_at: reset_time,
+                period_duration_ms: Some(if limit_label.to_lowercase().contains("five") {
+                    5 * 60 * 60 * 1000
+                } else {
+                    7 * 24 * 60 * 60 * 1000
+                }),
+            });
+        }
+    }
+
+    lines
+}
+
+fn normalize_antigravity_group_name(name: &str) -> String {
+    let lower = name.to_lowercase();
+    if lower.contains("gemini") {
+        "Gemini models".to_string()
+    } else if lower.contains("claude") || lower.contains("gpt") {
+        "Claude and GPT models".to_string()
+    } else {
+        name.trim().to_string()
+    }
+}
+
 fn build_antigravity_config_lines(configs: &[Value]) -> Vec<CodexMetricLine> {
-    let mut entries = Vec::new();
+    let mut groups: BTreeMap<&'static str, (f64, Option<String>)> = BTreeMap::new();
     for config in configs {
         let Some(label) = config
             .get("label")
@@ -1651,13 +1880,51 @@ fn build_antigravity_config_lines(configs: &[Value]) -> Vec<CodexMetricLine> {
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(ToOwned::to_owned);
-        entries.push((label.to_string(), remaining, reset_time));
+        add_antigravity_quota_group(
+            &mut groups,
+            antigravity_quota_group_label(label),
+            remaining,
+            reset_time,
+        );
     }
-    entries.sort_by(|a, b| agy_model_sort_key(&a.0).cmp(&agy_model_sort_key(&b.0)));
-    entries
+    build_antigravity_group_lines(groups)
+}
+
+fn antigravity_quota_group_label(label: &str) -> &'static str {
+    let lower = label.to_lowercase();
+    if lower.contains("gemini") {
+        "Gemini models"
+    } else {
+        "Claude and GPT models"
+    }
+}
+
+fn add_antigravity_quota_group(
+    groups: &mut BTreeMap<&'static str, (f64, Option<String>)>,
+    label: &'static str,
+    remaining: f64,
+    reset_time: Option<String>,
+) {
+    match groups.get(label) {
+        Some((current_remaining, _)) if *current_remaining <= remaining => {}
+        _ => {
+            groups.insert(label, (remaining, reset_time));
+        }
+    }
+}
+
+fn build_antigravity_group_lines(
+    groups: BTreeMap<&'static str, (f64, Option<String>)>,
+) -> Vec<CodexMetricLine> {
+    ["Gemini models", "Claude and GPT models"]
         .into_iter()
+        .filter_map(|label| {
+            groups
+                .get(label)
+                .map(|(remaining, reset_time)| (label, *remaining, reset_time.clone()))
+        })
         .map(|(label, remaining, reset_time)| CodexMetricLine::Progress {
-            label,
+            label: label.to_string(),
             used: ((1.0 - remaining) * 100.0).round().clamp(0.0, 100.0),
             limit: 100.0,
             format: CodexProgressFormat::Percent,
@@ -1682,218 +1949,6 @@ fn is_antigravity_blacklisted_model(model_id: &str) -> bool {
     )
 }
 
-fn extract_agy_access_token(raw: &str) -> Option<String> {
-    let mut text = raw.trim().to_string();
-    if let Some(encoded) = text.strip_prefix("go-keyring-base64:") {
-        text = String::from_utf8(BASE64_STANDARD.decode(encoded.trim()).ok()?).ok()?;
-    }
-    let text = text.trim();
-    if text.is_empty() {
-        return None;
-    }
-
-    if let Ok(value) = serde_json::from_str::<Value>(text) {
-        if let Some(token) = extract_token_from_value(&value) {
-            return Some(token);
-        }
-    }
-
-    Some(
-        text.strip_prefix("Bearer ")
-            .unwrap_or(text)
-            .trim()
-            .to_string(),
-    )
-}
-
-fn extract_token_from_value(value: &Value) -> Option<String> {
-    if let Some(text) = value
-        .as_str()
-        .map(str::trim)
-        .filter(|text| !text.is_empty())
-    {
-        return Some(
-            text.strip_prefix("Bearer ")
-                .unwrap_or(text)
-                .trim()
-                .to_string(),
-        );
-    }
-
-    let object = value.as_object()?;
-    for key in [
-        "access_token",
-        "accessToken",
-        "token",
-        "id_token",
-        "idToken",
-        "bearerToken",
-        "auth_token",
-        "authToken",
-    ] {
-        if let Some(token) = object
-            .get(key)
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|text| !text.is_empty())
-        {
-            return Some(
-                token
-                    .strip_prefix("Bearer ")
-                    .unwrap_or(token)
-                    .trim()
-                    .to_string(),
-            );
-        }
-    }
-
-    for key in ["token", "tokens", "oauth", "oauth2", "credentials", "auth"] {
-        if let Some(token) = object.get(key).and_then(extract_token_from_value) {
-            return Some(token);
-        }
-    }
-
-    None
-}
-
-fn request_agy_cloud_code_json(
-    client: &reqwest::blocking::Client,
-    path: &str,
-    token: &str,
-    user_agent: &str,
-    body: Value,
-) -> Result<Value, String> {
-    let mut last_error = None;
-    for base_url in AGY_CLOUD_CODE_URLS {
-        let response = client
-            .post(format!("{base_url}{path}"))
-            .bearer_auth(token)
-            .header(reqwest::header::ACCEPT, "application/json")
-            .header(reqwest::header::CONTENT_TYPE, "application/json")
-            .header(reqwest::header::USER_AGENT, user_agent)
-            .json(&body)
-            .send();
-
-        match response {
-            Ok(response) if response.status().is_success() => {
-                return response
-                    .json::<Value>()
-                    .map_err(|error| format!("Antigravity usage response invalid: {error}"));
-            }
-            Ok(response)
-                if response.status() == reqwest::StatusCode::UNAUTHORIZED
-                    || response.status() == reqwest::StatusCode::FORBIDDEN =>
-            {
-                return Err(
-                    "Antigravity session expired. Start Antigravity or run `agy` and try again."
-                        .to_string(),
-                );
-            }
-            Ok(response) => {
-                last_error = Some(format!(
-                    "Antigravity usage request failed (HTTP {})",
-                    response.status().as_u16()
-                ));
-            }
-            Err(error) => {
-                last_error = Some(format!("Antigravity usage request failed: {error}"));
-            }
-        }
-    }
-
-    Err(last_error.unwrap_or_else(|| "Antigravity usage request failed".to_string()))
-}
-
-fn read_agy_plan(load_data: &Value) -> Option<String> {
-    ["paidTier", "currentTier"].into_iter().find_map(|key| {
-        load_data
-            .get(key)
-            .and_then(|tier| tier.get("name"))
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(ToOwned::to_owned)
-    })
-}
-
-fn build_agy_usage_lines(quota_data: &Value) -> Vec<CodexMetricLine> {
-    let Some(buckets) = quota_data.get("buckets").and_then(Value::as_array) else {
-        return Vec::new();
-    };
-
-    let mut entries = Vec::new();
-    for bucket in buckets {
-        let Some(model_id) = bucket
-            .get("modelId")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-        else {
-            continue;
-        };
-        let remaining = value_to_f64(bucket.get("remainingFraction"))
-            .unwrap_or(0.0)
-            .clamp(0.0, 1.0);
-        let reset_time = bucket
-            .get("resetTime")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(ToOwned::to_owned);
-
-        entries.push((format_agy_model_label(model_id), remaining, reset_time));
-    }
-
-    entries.sort_by(|a, b| agy_model_sort_key(&a.0).cmp(&agy_model_sort_key(&b.0)));
-
-    entries
-        .into_iter()
-        .map(|(label, remaining, reset_time)| CodexMetricLine::Progress {
-            label,
-            used: ((1.0 - remaining) * 100.0).round().clamp(0.0, 100.0),
-            limit: 100.0,
-            format: CodexProgressFormat::Percent,
-            resets_at: reset_time,
-            period_duration_ms: Some(5 * 60 * 60 * 1000),
-        })
-        .collect()
-}
-
-fn format_agy_model_label(model_id: &str) -> String {
-    model_id
-        .split(['-', '_'])
-        .filter(|part| !part.is_empty())
-        .map(|part| match part {
-            "gemini" => "Gemini".to_string(),
-            "flash" => "Flash".to_string(),
-            "lite" => "Lite".to_string(),
-            "pro" => "Pro".to_string(),
-            "preview" => "Preview".to_string(),
-            "claude" => "Claude".to_string(),
-            "opus" => "Opus".to_string(),
-            "sonnet" => "Sonnet".to_string(),
-            value => value.to_string(),
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-fn agy_model_sort_key(label: &str) -> String {
-    let lower = label.to_lowercase();
-    let family = if lower.contains("gemini") && lower.contains("pro") {
-        "0"
-    } else if lower.contains("gemini") && lower.contains("flash") && !lower.contains("lite") {
-        "1"
-    } else if lower.contains("gemini") && lower.contains("flash") && lower.contains("lite") {
-        "2"
-    } else if lower.contains("claude") {
-        "3"
-    } else {
-        "4"
-    };
-    format!("{family}_{lower}")
-}
-
 fn read_percent_header(headers: &reqwest::header::HeaderMap, name: &str) -> Option<f64> {
     headers
         .get(name)
@@ -1906,6 +1961,12 @@ fn format_codex_plan(plan: String) -> Option<String> {
     let trimmed = plan.trim();
     if trimmed.is_empty() {
         return None;
+    }
+    if trimmed.eq_ignore_ascii_case("prolite") {
+        return Some("Pro 5x".to_string());
+    }
+    if trimmed.eq_ignore_ascii_case("pro") {
+        return Some("Pro 20x".to_string());
     }
 
     Some(
@@ -2395,6 +2456,7 @@ pub fn run() {
             grok_usage,
             install_agent_halo_mod,
             notch_metrics,
+            open_external_url,
             set_panel_open
         ])
         .setup(|app| {

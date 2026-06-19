@@ -5,6 +5,7 @@ import {
   Check,
   ChevronLeft,
   Download,
+  ExternalLink,
   Focus,
   List,
   RefreshCw,
@@ -97,6 +98,29 @@ interface ISessionDetail extends ISessionSummary {
   events: AgentHaloEvent[];
 }
 
+type ActivityKind =
+  | "session"
+  | "thinking"
+  | "planning"
+  | "tool"
+  | "shell"
+  | "editing"
+  | "delegating"
+  | "visual"
+  | "memory"
+  | "asking"
+  | "skill"
+  | "goal"
+  | "done"
+  | "error"
+  | "bridge";
+
+interface IActivityDescriptor {
+  kind: ActivityKind;
+  label: string;
+  detail: string;
+}
+
 interface IWorkspaceSessionGroup {
   key: string;
   project: string;
@@ -126,6 +150,7 @@ interface IUsageProviderConfig {
   command: "codex_usage" | "agy_usage" | "claude_usage" | "cursor_usage" | "grok_usage";
   iconPath: string;
   color: string;
+  links?: Array<{ label: string; url: string }>;
 }
 
 interface IUsageSettings {
@@ -155,10 +180,19 @@ interface IAgentUsageSnapshot {
 
 interface IUsageMetric {
   label: string;
+  groupLabel: string | null;
+  groupModels: string[];
+  limitLabel: string | null;
   value: number | null;
   statusLevel: "ok" | "warning" | "danger";
   remainingLabel: string | null;
   resetLabel: string | null;
+}
+
+interface IUsageMetricGroup {
+  label: string;
+  models: string[];
+  metrics: IUsageMetric[];
 }
 
 interface IAgentUsageState {
@@ -174,15 +208,55 @@ interface IAgentUsageState {
   rateLimitResets: string | null;
   credits: string | null;
   today: string | null;
+  yesterday: string | null;
   last30Days: string | null;
 }
 
 const USAGE_PROVIDERS: IUsageProviderConfig[] = [
-  { id: "codex", label: "Codex", command: "codex_usage", iconPath: "/provider-icons/codex.svg", color: "#10a37f" },
+  {
+    id: "codex",
+    label: "Codex",
+    command: "codex_usage",
+    iconPath: "/provider-icons/codex.svg",
+    color: "#10a37f",
+    links: [
+      { label: "Status", url: "https://status.openai.com/" },
+      { label: "Usage dashboard", url: "https://chatgpt.com/codex/settings/usage" },
+    ],
+  },
   { id: "agy", label: "Antigravity", command: "agy_usage", iconPath: "/provider-icons/antigravity.svg", color: "#4285f4" },
-  { id: "claude", label: "Claude Code", command: "claude_usage", iconPath: "/provider-icons/claude.svg", color: "#d97757" },
-  { id: "cursor", label: "Cursor", command: "cursor_usage", iconPath: "/provider-icons/cursor.svg", color: "#ffffff" },
-  { id: "grok", label: "Grok", command: "grok_usage", iconPath: "/provider-icons/grok.svg", color: "#d9d9d9" },
+  {
+    id: "claude",
+    label: "Claude Code",
+    command: "claude_usage",
+    iconPath: "/provider-icons/claude.svg",
+    color: "#d97757",
+    links: [
+      { label: "Status", url: "https://status.anthropic.com/" },
+      { label: "Console", url: "https://console.anthropic.com/" },
+    ],
+  },
+  {
+    id: "cursor",
+    label: "Cursor",
+    command: "cursor_usage",
+    iconPath: "/provider-icons/cursor.svg",
+    color: "#ffffff",
+    links: [
+      { label: "Status", url: "https://status.cursor.com/" },
+      { label: "Dashboard", url: "https://www.cursor.com/dashboard" },
+    ],
+  },
+  {
+    id: "grok",
+    label: "Grok",
+    command: "grok_usage",
+    iconPath: "/provider-icons/grok.svg",
+    color: "#d9d9d9",
+    links: [
+      { label: "Usage", url: "https://grok.com/?_s=usage" },
+    ],
+  },
 ];
 
 const DEFAULT_USAGE_SETTINGS: IUsageSettings = {
@@ -418,6 +492,71 @@ const formatTime = (timestamp: string | null): string => {
   }).format(new Date(timestamp));
 };
 
+const getToolActivityKind = (toolName: string): ActivityKind => {
+  if (toolName === "UpdatePlan") return "planning";
+  if (toolName === "exec_command" || toolName === "write_stdin" || toolName === "TaskOutput" || toolName === "TaskStop") return "shell";
+  if (toolName === "ApplyPatch") return "editing";
+  if (toolName === "Agent") return "delegating";
+  if (toolName === "ViewImage") return "visual";
+  if (toolName === "memory_apply_patch") return "memory";
+  if (toolName === "AskUserQuestion") return "asking";
+  if (toolName === "Skill") return "skill";
+  if (toolName === "CreateGoal" || toolName === "UpdateGoal" || toolName === "GetGoal") return "goal";
+  return "tool";
+};
+
+const getToolActivityLabel = (kind: ActivityKind): string => {
+  switch (kind) {
+    case "planning":
+      return "plan";
+    case "shell":
+      return "shell";
+    case "editing":
+      return "edit";
+    case "delegating":
+      return "agent";
+    case "visual":
+      return "visual";
+    case "memory":
+      return "memory";
+    case "asking":
+      return "ask";
+    case "skill":
+      return "skill";
+    case "goal":
+      return "goal";
+    default:
+      return "tool";
+  }
+};
+
+const getEventActivity = (event: AgentHaloEvent): IActivityDescriptor => {
+  switch (event.type) {
+    case "bridge_ready":
+      return { kind: "bridge", label: "bridge", detail: `:${event.data.port}` };
+    case "conversation_open":
+      return { kind: "session", label: "open", detail: event.data.reason };
+    case "conversation_close":
+      return { kind: "done", label: "closed", detail: event.data.reason };
+    case "turn_start":
+      return { kind: "thinking", label: "thinking", detail: `${event.data.inputCount} input` };
+    case "turn_stop":
+      return { kind: "done", label: "done", detail: event.data.message ?? "turn complete" };
+    case "tool_start": {
+      const kind = getToolActivityKind(event.data.toolName);
+      return { kind, label: getToolActivityLabel(kind), detail: event.data.toolName };
+    }
+    case "bridge_error":
+      return { kind: "error", label: "error", detail: event.data.message };
+  }
+};
+
+const getUniqueSortedEvents = (events: AgentHaloEvent[]): AgentHaloEvent[] => {
+  const byId = new Map<string, AgentHaloEvent>();
+  for (const event of events) byId.set(event.id, event);
+  return sortEventsNewestFirst([...byId.values()]);
+};
+
 
 const clampPercent = (value: number | null): number | null => {
   if (value === null || !Number.isFinite(value)) return null;
@@ -475,10 +614,35 @@ const formatResetLabel = (resetsAt: string | undefined, settings: IUsageSettings
   return `Resets in ${formatDurationShort(delta)}`;
 };
 
+const ANTIGRAVITY_USAGE_GROUPS: IUsageMetricGroup[] = [
+  { label: "Gemini models", models: ["Gemini Flash", "Gemini Pro"], metrics: [] },
+  { label: "Claude and GPT models", models: ["Claude Opus", "Claude Sonnet", "GPT-OSS"], metrics: [] },
+];
+
+const normalizeUsageGroupLabel = (label: string): string | null => {
+  const lower = label.toLowerCase();
+  if (lower.includes("gemini")) return "Gemini models";
+  if (lower.includes("claude") || lower.includes("gpt")) return "Claude and GPT models";
+  return null;
+};
+
+const modelsForUsageGroup = (groupLabel: string | null): string[] =>
+  ANTIGRAVITY_USAGE_GROUPS.find((group) => group.label === groupLabel)?.models ?? [];
+
+const limitLabelForUsageLine = (line: IUsageMetricLine, groupLabel: string | null): string | null => {
+  if (!groupLabel) return null;
+  const lower = line.label.toLowerCase();
+  if (lower.includes("five") || lower.includes("5h")) return "Five Hour Limit";
+  return "Weekly Limit";
+};
+
 const createUsageMetric = (line: IUsageMetricLine, settings: IUsageSettings): IUsageMetric => {
   const used = readProgressPercent(line);
   const left = used === null ? null : Math.max(0, 100 - used);
   const value = settings.usageMode === "used" ? used : left;
+  const groupLabel = normalizeUsageGroupLabel(line.label);
+  const limitLabel = limitLabelForUsageLine(line, groupLabel);
+  const isQuotaAvailable = groupLabel !== null && limitLabel === "Five Hour Limit" && settings.usageMode === "left" && left === 100;
   const statusLevel = used === null
     ? "ok"
     : settings.usageMode === "used"
@@ -486,10 +650,13 @@ const createUsageMetric = (line: IUsageMetricLine, settings: IUsageSettings): IU
       : left !== null && left <= 20 ? "danger" : left !== null && left <= 45 ? "warning" : "ok";
   return {
     label: line.label,
+    groupLabel,
+    groupModels: modelsForUsageGroup(groupLabel),
+    limitLabel,
     value,
     statusLevel,
-    remainingLabel: value === null ? null : `${value}% ${settings.usageMode}`,
-    resetLabel: formatResetLabel(line.resetsAt, settings),
+    remainingLabel: isQuotaAvailable ? "Quota available" : value === null ? null : `${value}% ${groupLabel && settings.usageMode === "left" ? "remaining" : settings.usageMode}`,
+    resetLabel: isQuotaAvailable ? null : formatResetLabel(line.resetsAt, settings),
   };
 };
 
@@ -506,6 +673,7 @@ const createAgentUsageState = (providerId: UsageProviderId, partial: Partial<IAg
   rateLimitResets: null,
   credits: null,
   today: null,
+  yesterday: null,
   last30Days: null,
   ...partial,
 });
@@ -528,27 +696,14 @@ const parseAgentUsageSnapshot = (providerId: UsageProviderId, snapshot: IAgentUs
     rateLimitResets: readTextValue(findUsageLine(lines, "Rate Limit Resets")),
     credits: readTextValue(findUsageLine(lines, "Credits")),
     today: readTextValue(findUsageLine(lines, "Today")),
+    yesterday: readTextValue(findUsageLine(lines, "Yesterday")),
     last30Days: readTextValue(findUsageLine(lines, "Last 30 Days")),
   });
 };
 
 const getEventDetail = (event: AgentHaloEvent): string => {
-  switch (event.type) {
-    case "bridge_ready":
-      return `bridge :${event.data.port}`;
-    case "conversation_open":
-      return `open · ${event.data.reason}`;
-    case "conversation_close":
-      return `closed · ${event.data.reason}`;
-    case "turn_start":
-      return `turn · ${event.data.inputCount} input`;
-    case "turn_stop":
-      return event.data.message ? `done · ${event.data.message}` : "done";
-    case "tool_start":
-      return `tool · ${event.data.toolName}`;
-    case "bridge_error":
-      return `error · ${event.data.message}`;
-  }
+  const activity = getEventActivity(event);
+  return `${activity.label} · ${activity.detail}`;
 };
 
 const getStatusCopy = (view: IStatusView): string => {
@@ -600,7 +755,7 @@ const getEventSessionStatus = (event: AgentHaloEvent, now: Date = new Date()): I
 const getEventSessionDetail = (event: AgentHaloEvent): string => {
   switch (event.type) {
     case "tool_start":
-      return event.data.toolName;
+      return getEventActivity(event).label;
     case "turn_start":
       return "thinking";
     case "turn_stop":
@@ -853,6 +1008,20 @@ const applyEvent = (presence: IAgentHaloPresence, event: AgentHaloEvent) => redu
 const appendRecentEvent = (events: AgentHaloEvent[], event: AgentHaloEvent): AgentHaloEvent[] =>
   [event, ...events].slice(0, MAX_RECENT_EVENTS);
 
+const createDemoMetric = (label: string, value: number, remainingLabel: string, resetLabel: string | null, statusLevel: IUsageMetric["statusLevel"] = "ok"): IUsageMetric => {
+  const groupLabel = normalizeUsageGroupLabel(label);
+  return {
+    label,
+    groupLabel,
+    groupModels: modelsForUsageGroup(groupLabel),
+    limitLabel: groupLabel ? "Weekly Limit" : null,
+    value,
+    statusLevel,
+    remainingLabel,
+    resetLabel,
+  };
+};
+
 const demoUsageForProvider = (provider: IUsageProviderConfig): IAgentUsageState =>
   createAgentUsageState(provider.id, {
     status: "online",
@@ -860,14 +1029,13 @@ const demoUsageForProvider = (provider: IUsageProviderConfig): IAgentUsageState 
     plan: provider.id === "codex" ? "Pro" : "Max",
     metrics: provider.id === "codex"
       ? [
-          { label: "Session", value: 73, statusLevel: "ok", remainingLabel: "73% left", resetLabel: "Resets in 2h 18m" },
-          { label: "Weekly", value: 91, statusLevel: "ok", remainingLabel: "91% left", resetLabel: "Resets in 4d 7h" },
-          { label: "Reviews", value: 96, statusLevel: "ok", remainingLabel: "96% left", resetLabel: null },
+          createDemoMetric("Session", 73, "73% left", "Resets in 2h 18m"),
+          createDemoMetric("Weekly", 91, "91% left", "Resets in 4d 7h"),
+          createDemoMetric("Reviews", 96, "96% left", null),
         ]
       : [
-          { label: "Gemini Pro", value: 82, statusLevel: "ok", remainingLabel: "82% left", resetLabel: "Resets in 4h 31m" },
-          { label: "Gemini Flash", value: 93, statusLevel: "ok", remainingLabel: "93% left", resetLabel: "Resets in 4h 31m" },
-          { label: "Claude", value: 42, statusLevel: "warning", remainingLabel: "42% left", resetLabel: "Resets in 1d 19h" },
+          createDemoMetric("Gemini models", 82, "82% left", "Resets in 4h 31m"),
+          createDemoMetric("Claude and GPT models", 42, "42% left", "Resets in 1d 19h", "warning"),
         ],
     sessionPercent: provider.id === "codex" ? 27 : null,
     weeklyPercent: provider.id === "codex" ? 9 : null,
@@ -964,7 +1132,7 @@ const useAgentUsageList = (settings: IUsageSettings) => {
 const UsageMeter = ({ metric }: { metric: IUsageMetric }) => (
   <div className="usage-meter" data-empty={metric.value === null}>
     <div className="usage-meter-head">
-      <span className="usage-meter-label">{metric.label}</span>
+      <span className="usage-meter-label">{metric.limitLabel ?? metric.label}</span>
       <span className="usage-status-dot" data-level={metric.statusLevel} />
     </div>
     <span className="usage-meter-track" aria-hidden="true">
@@ -975,6 +1143,85 @@ const UsageMeter = ({ metric }: { metric: IUsageMetric }) => (
       {metric.resetLabel ? <span>{metric.resetLabel}</span> : null}
     </div>
   </div>
+);
+
+const getAntigravityMetricGroups = (metrics: IUsageMetric[]): IUsageMetricGroup[] => {
+  const grouped = ANTIGRAVITY_USAGE_GROUPS.map((group) => ({ ...group, metrics: [] as IUsageMetric[] }));
+  for (const metric of metrics) {
+    const group = grouped.find((item) => item.label === metric.groupLabel);
+    if (group) group.metrics.push(metric);
+  }
+  return grouped;
+};
+
+const UsageMetricGroupCard = ({ group }: { group: IUsageMetricGroup }) => (
+  <section className="usage-metric-group">
+    <div className="usage-group-title">{group.label}</div>
+    <div className="usage-group-models">Models within this group: {group.models.join(", ")}</div>
+    {group.metrics.length > 0 ? (
+      <div className="usage-group-meters">
+        {group.metrics.map((metric) => <UsageMeter metric={metric} key={`${group.label}-${metric.limitLabel ?? metric.label}`} />)}
+      </div>
+    ) : (
+      <div className="usage-group-empty">No quota data from current source</div>
+    )}
+  </section>
+);
+
+const AntigravityUsageGroups = ({ metrics }: { metrics: IUsageMetric[] }) => (
+  <div className="usage-group-list">
+    {getAntigravityMetricGroups(metrics).map((group) => <UsageMetricGroupCard group={group} key={group.label} />)}
+  </div>
+);
+
+const UsageProviderLinks = ({ links }: { links: IUsageProviderConfig["links"] }) => {
+  if (!links || links.length === 0) return null;
+  const openLink = (url: string) => {
+    if (typeof window.__TAURI_INTERNALS__ === "undefined") {
+      window.open(url, "_blank", "noopener,noreferrer");
+      return;
+    }
+    void invoke("open_external_url", { url }).catch(() => {
+      window.open(url, "_blank", "noopener,noreferrer");
+    });
+  };
+  return (
+    <div className="usage-provider-links">
+      {links.map((link) => (
+        <button className="usage-provider-link" type="button" onClick={(event) => { event.stopPropagation(); openLink(link.url); }} data-tauri-drag-region="false" key={link.url}>
+          <span>{link.label}</span>
+          <ExternalLink size={10} strokeWidth={2.4} />
+        </button>
+      ))}
+    </div>
+  );
+};
+
+const UsageTextRows = ({ rows }: { rows: Array<{ label: string; value: string | null }> }) => {
+  const visibleRows = rows.filter((row) => row.value);
+  if (visibleRows.length === 0) return null;
+  return (
+    <div className="usage-text-rows">
+      {visibleRows.map((row) => (
+        <div className="usage-text-row" key={row.label}>
+          <span>{row.label}</span>
+          <strong>{row.value}</strong>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const CodexUsageDetails = ({ usage }: { usage: IAgentUsageState }) => (
+  <UsageTextRows
+    rows={[
+      { label: "Credits", value: usage.credits },
+      { label: "Rate Limit Resets", value: usage.rateLimitResets },
+      { label: "Today", value: usage.today },
+      { label: "Yesterday", value: usage.yesterday },
+      { label: "Last 30 Days", value: usage.last30Days },
+    ]}
+  />
 );
 
 const UsageProviderIcon = ({ provider, size = 14 }: { provider: IUsageProviderConfig; size?: number }) => (
@@ -1000,9 +1247,10 @@ const UsageProviderDetail = ({ provider, usage }: { provider: IUsageProviderConf
         <span className="usage-provider-title"><UsageProviderIcon provider={provider} />{provider.label}</span>
         {usage.plan ? <span className="usage-plan">{usage.plan}</span> : null}
       </div>
+      <UsageProviderLinks links={provider.links} />
       {usage.status === "online" && usage.metrics.length > 0 ? (
         <div className="usage-provider-metrics">
-          {usage.metrics.map((metric) => <UsageMeter metric={metric} key={metric.label} />)}
+          {provider.id === "agy" ? <AntigravityUsageGroups metrics={usage.metrics} /> : usage.metrics.map((metric) => <UsageMeter metric={metric} key={metric.label} />)}
         </div>
       ) : (
         <div className="usage-provider-message">
@@ -1010,8 +1258,9 @@ const UsageProviderDetail = ({ provider, usage }: { provider: IUsageProviderConf
           <span>{statusText}</span>
         </div>
       )}
+      {provider.id === "codex" && usage.status === "online" ? <CodexUsageDetails usage={usage} /> : null}
       {(usage.credits || usage.rateLimitResets) ? (
-        <div className="usage-provider-chips">
+        <div className="usage-provider-chips" data-hidden={provider.id === "codex"}>
           {usage.credits ? <span className="usage-chip" title="Credits">{usage.credits}</span> : null}
           {usage.rateLimitResets ? <span className="usage-chip" title="Rate limit resets">{usage.rateLimitResets}</span> : null}
         </div>
@@ -1382,6 +1631,11 @@ const App = () => {
     () => buildSessionDetail(selectedSessionId, sessions, sessionEvents, presence),
     [presence, selectedSessionId, sessionEvents, sessions],
   );
+  const selectedSessionActivityEvents = useMemo(() => {
+    if (!selectedSession) return [];
+    const fallbackEvents = recentEvents.filter((event) => event.conversationId === selectedSession.conversationId);
+    return getUniqueSortedEvents([...selectedSession.events, ...fallbackEvents]).slice(0, 16);
+  }, [recentEvents, selectedSession]);
   const sessionGroups = useMemo(() => buildWorkspaceSessionGroups(sessions), [sessions]);
 
   useEffect(() => {
@@ -1984,17 +2238,21 @@ const App = () => {
                     <div className="notice-row compact" data-online={sessionAction.ok === true}>{sessionAction.message}</div>
                   ) : null}
                   <div className="detail-section-label">Recent activity</div>
-                  {selectedSession.events.length === 0 ? (
+                  {selectedSessionActivityEvents.length === 0 ? (
                     <div className="empty-text small">No events captured yet</div>
                   ) : (
                     <div className="action-list">
-                      {selectedSession.events.slice(0, 16).map((event) => (
-                        <div className="action-row" key={event.id}>
-                          <span className="action-tool">{event.type}</span>
-                          <span className="action-detail">{getEventDetail(event)}</span>
-                          <span className="session-time">{formatTime(event.timestamp)}</span>
-                        </div>
-                      ))}
+                      {selectedSessionActivityEvents.map((event) => {
+                        const activity = getEventActivity(event);
+
+                        return (
+                          <div className="action-row" data-kind={activity.kind} key={event.id}>
+                            <span className="action-tool">{activity.label}</span>
+                            <span className="action-detail">{activity.detail}</span>
+                            <span className="session-time">{formatTime(event.timestamp)}</span>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>

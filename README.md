@@ -80,7 +80,7 @@ Currently supported providers:
 - Cursor
 - Grok
 
-Antigravity is read from the Antigravity/`agy` language server when it is running, so it can show the actual Antigravity model list. If the language server is not available, Agent Halo falls back to the local Cloud Code quota path when possible.
+Antigravity usage is read from the local Antigravity/`agy` language server when it is running, using the same quota-summary surface as `/usage`. If the language server is not available, the provider stays hidden instead of showing partial Cloud Code fallback data.
 
 ## Development
 
