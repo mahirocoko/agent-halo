@@ -115,6 +115,10 @@ The browser demo is useful for layout checks, but native features such as mod in
 
 Agent Halo should feel like a quiet companion, not an AI dashboard. The UI follows a dark hardware-notch direction with compact rows, restrained accents, and local controls. See `docs/notchcode-parity.md` for the current design reference notes.
 
+Runtime mascot strips live in `apps/desktop/public/mascots/session-cat/`, with QA previews and notes in `apps/desktop/assets/mascots/`. Generated source sheets are not kept in the repo; the checked-in runtime strips and previews are the maintained asset set.
+
 ## Credits
 
-Notch geometry and sheet anatomy are inspired by Notchcode. See `CREDITS.md` and `THIRD_PARTY_LICENSES.md` for attribution and licenses.
+Notch geometry and sheet anatomy are inspired by [Notchcode](https://github.com/billxby/notchcode) by Bill Xu, including its documented [DynamicNotchKit](https://github.com/MrKai77/DynamicNotchKit) lineage by Kai Azim. Both projects are MIT-licensed; see their upstream repositories for full license text.
+
+The local usage-provider research and quota-reading approach is informed by [OpenUsage](https://github.com/robinebers/openusage) by Robin Ebers. Agent Halo implements its own local desktop integration, but OpenUsage was a useful reference for understanding provider credential locations and usage/quota surfaces.

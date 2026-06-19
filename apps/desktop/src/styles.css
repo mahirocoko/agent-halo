@@ -273,6 +273,11 @@ button {
   background-size: 192px 24px;
 }
 
+.activity-mascot[data-action="plan"] .activity-mascot-stage {
+  background-image: image-set(url("/mascots/session-cat/plan.webp") type("image/webp"), url("/mascots/session-cat/plan.png") type("image/png"));
+  background-size: 192px 24px;
+}
+
 .activity-mascot[data-action="work"] .activity-mascot-stage {
   background-image: image-set(url("/mascots/session-cat/work.webp") type("image/webp"), url("/mascots/session-cat/work.png") type("image/png"));
   background-size: 256px 24px;
@@ -297,12 +302,22 @@ button {
   animation: activity-cat-sprite-8 0.96s steps(8) infinite;
 }
 
+.notch-wing-right .activity-mascot[data-action="plan"] .activity-mascot-stage {
+  animation: activity-cat-sprite-6 1.15s steps(6) infinite;
+}
+
+.notch-wing-right .activity-mascot[data-status="working"][data-action="idle"] .activity-mascot-stage,
 .notch-wing-right .activity-mascot[data-status="idle"][data-action="idle"] .activity-mascot-stage {
   animation: activity-cat-sprite-6 3.6s steps(6) infinite;
 }
 
+.notch-wing-right .activity-mascot[data-action="coffee"] .activity-mascot-stage,
 .notch-wing-right .activity-mascot[data-status="waiting"][data-action="coffee"] .activity-mascot-stage {
   animation: activity-cat-sprite-6 1.35s steps(6) infinite;
+}
+
+.notch-wing-right .activity-mascot[data-action="dust"] .activity-mascot-stage {
+  animation: activity-cat-sprite-6 0.72s steps(6) infinite;
 }
 
 .notch-wing-right .activity-mascot[data-status="error"][data-action="hurt"] .activity-mascot-stage {
@@ -340,6 +355,11 @@ button {
   background-size: 240px 30px;
 }
 
+.session-mascot[data-action="plan"] .session-mascot-stage {
+  background-image: image-set(url("/mascots/session-cat/plan.webp") type("image/webp"), url("/mascots/session-cat/plan.png") type("image/png"));
+  background-size: 240px 30px;
+}
+
 .session-mascot[data-action="work"] .session-mascot-stage {
   background-image: image-set(url("/mascots/session-cat/work.webp") type("image/webp"), url("/mascots/session-cat/work.png") type("image/png"));
   background-size: 320px 30px;
@@ -364,12 +384,22 @@ button {
   animation: session-cat-sprite-8 0.96s steps(8) infinite;
 }
 
+.session-mascot[data-action="plan"] .session-mascot-stage {
+  animation: session-cat-sprite-6 1.15s steps(6) infinite;
+}
+
+.session-mascot[data-status="working"][data-action="idle"] .session-mascot-stage,
 .session-mascot[data-status="idle"][data-action="idle"] .session-mascot-stage {
   animation: session-cat-sprite-6 3.6s steps(6) infinite;
 }
 
+.session-mascot[data-action="coffee"] .session-mascot-stage,
 .session-mascot[data-status="waiting"][data-action="coffee"] .session-mascot-stage {
   animation: session-cat-sprite-6 1.35s steps(6) infinite;
+}
+
+.session-mascot[data-action="dust"] .session-mascot-stage {
+  animation: session-cat-sprite-6 0.72s steps(6) infinite;
 }
 
 .session-mascot[data-status="error"][data-action="hurt"] .session-mascot-stage {

@@ -1,0 +1,138 @@
+{
+  "name": "Agent Halo session cat",
+  "version": 2,
+  "frame": {
+    "source": {
+      "width": 80,
+      "height": 60
+    },
+    "rowDisplay": {
+      "width": 40,
+      "height": 30
+    },
+    "compactDisplay": {
+      "width": 32,
+      "height": 24
+    },
+    "anchor": {
+      "x": 40,
+      "y": 58,
+      "semantic": "foot-baseline"
+    },
+    "background": "transparent"
+  },
+  "runtimePath": "/mascots/session-cat/",
+  "actions": {
+    "idle": {
+      "frames": 6,
+      "fps": 4,
+      "role": "idle/done base pose",
+      "sheet": {
+        "width": 480,
+        "height": 60,
+        "columns": 6,
+        "rows": 1
+      },
+      "source": "apps/desktop/public/mascots/session-cat/idle.png",
+      "provenance": "Codex imagegen idle-character source extracted from inline image_generation payload + component-cut/chroma-clean; original generated source sheet not retained in repo",
+      "normalization": "character-first 6-frame calm idle loop, compact target height 50px, stable foot-baseline y=58"
+    },
+    "walk": {
+      "frames": 6,
+      "fps": 8,
+      "role": "locomotion vocabulary/reference",
+      "sheet": {
+        "width": 480,
+        "height": 60,
+        "columns": 6,
+        "rows": 1
+      },
+      "source": "apps/desktop/public/mascots/session-cat/walk.png",
+      "provenance": "Codex imagegen walk-character v2 source extracted from inline image_generation payload + section/component-aware chroma cleanup; original generated source sheet not retained in repo",
+      "normalization": "creative 3/4 purposeful walk, compact target height 48px, stable bottom-baseline y=58"
+    },
+    "plan": {
+      "frames": 6,
+      "fps": 6,
+      "role": "planning/update-plan state",
+      "sheet": {
+        "width": 480,
+        "height": 60,
+        "columns": 6,
+        "rows": 1
+      },
+      "source": "apps/desktop/public/mascots/session-cat/plan.png",
+      "provenance": "Codex imagegen plan-character source extracted from inline image_generation payload + component-cut/chroma-clean with nearby planning board/tile components merged per frame; original generated source sheet not retained in repo",
+      "normalization": "creative side/3/4 planning pose, compact target height 50px, stable bottom-baseline y=58"
+    },
+    "work": {
+      "frames": 8,
+      "fps": 8,
+      "role": "active working state",
+      "sheet": {
+        "width": 640,
+        "height": 60,
+        "columns": 8,
+        "rows": 1
+      },
+      "source": "apps/desktop/public/mascots/session-cat/work.png",
+      "provenance": "Codex imagegen work-laptop source recut character-first after Mahiro clarified position can change; newer Codex work-character imagegen rendered inline but exposed no extractable payload/file, so no fake source was saved; original generated source sheet not retained in repo",
+      "normalization": "character-first recut: keep recognizable white/orange-collar cat while allowing different working posture; compact target height 50px, stable foot-baseline y=58"
+    },
+    "coffee": {
+      "frames": 6,
+      "fps": 6,
+      "role": "waiting/cozy break state",
+      "sheet": {
+        "width": 480,
+        "height": 60,
+        "columns": 6,
+        "rows": 1
+      },
+      "source": "apps/desktop/public/mascots/session-cat/coffee.png",
+      "provenance": "Codex imagegen boss-coffee v2 source extracted from inline image_generation payload + section/component-aware chroma cleanup; original generated source sheet not retained in repo",
+      "normalization": "creative like-a-boss seated coffee pose, compact target height 52px, simple lower-body silhouette to avoid extra legs, stable bottom-baseline y=58"
+    },
+    "hurt": {
+      "frames": 6,
+      "fps": 4,
+      "role": "error state",
+      "sheet": {
+        "width": 480,
+        "height": 60,
+        "columns": 6,
+        "rows": 1
+      },
+      "source": "apps/desktop/public/mascots/session-cat/hurt.png",
+      "provenance": "Codex imagegen hurt-character source extracted from inline image_generation payload + component-cut/chroma-clean with tiny local fluster/sweat cues for compact readability; original generated source sheet not retained in repo",
+      "normalization": "character-first 6-frame readable error/fluster loop, compact target height 50px, stable foot-baseline y=58"
+    },
+    "dust": {
+      "frames": 6,
+      "fps": 8,
+      "role": "settle/dust transition reference",
+      "sheet": {
+        "width": 480,
+        "height": 60,
+        "columns": 6,
+        "rows": 1
+      },
+      "source": "apps/desktop/public/mascots/session-cat/dust.png",
+      "provenance": "Codex imagegen dust-character v2 source extracted from inline image_generation payload + section/component-aware chroma cleanup preserving intentional dust puffs; original generated source sheet not retained in repo",
+      "normalization": "creative transition-poof/dash sequence, compact target height 46px, stable bottom-baseline y=58"
+    }
+  },
+  "statusMapping": {
+    "working": "work",
+    "waiting": "coffee",
+    "error": "hurt",
+    "idle": "idle",
+    "done": "idle",
+    "planning": "plan"
+  },
+  "identity": {
+    "preferred": "dust-shape-v2",
+    "anchor": "apps/desktop/assets/mascots/session-cat-identity-anchor-v2.png",
+    "note": "Mahiro prefers creative character-preserving action design over literal pose preservation. Runtime mascot source sheets are not retained; use checked-in runtime strips, previews, and this manifest as the maintained contract."
+  }
+}

@@ -12,3 +12,5 @@ coverage/
 .letta/
 test-results/
 playwright-report/
+# CocoIndex Code (ccc)
+/.cocoindex_code/

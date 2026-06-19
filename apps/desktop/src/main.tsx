@@ -86,6 +86,7 @@ interface ISessionSummary {
   workspace: string;
   workspacePath: string | null;
   detail: string;
+  activityKind: ActivityKind;
   status: "idle" | "working" | "waiting" | "done" | "error";
   lastActivityAt: string;
 }
@@ -127,6 +128,7 @@ interface IWorkspaceSessionGroup {
   workspace: string;
   workspacePath: string | null;
   status: ISessionSummary["status"];
+  activityKind: ActivityKind;
   detail: string;
   lastActivityAt: string;
   primarySession: ISessionSummary;
@@ -496,7 +498,7 @@ const getToolActivityKind = (toolName: string): ActivityKind => {
   if (toolName === "UpdatePlan") return "planning";
   if (toolName === "exec_command" || toolName === "write_stdin" || toolName === "TaskOutput" || toolName === "TaskStop") return "shell";
   if (toolName === "ApplyPatch") return "editing";
-  if (toolName === "Agent") return "delegating";
+  if (toolName === "Agent" || toolName === "Task") return "delegating";
   if (toolName === "ViewImage") return "visual";
   if (toolName === "memory_apply_patch") return "memory";
   if (toolName === "AskUserQuestion") return "asking";
@@ -530,6 +532,42 @@ const getToolActivityLabel = (kind: ActivityKind): string => {
   }
 };
 
+const getToolActivityDetail = (toolName: string): string => {
+  switch (toolName) {
+    case "UpdatePlan":
+      return "update plan";
+    case "UpdateGoal":
+      return "update goal";
+    case "GetGoal":
+      return "read goal";
+    case "CreateGoal":
+      return "create goal";
+    case "exec_command":
+      return "command";
+    case "write_stdin":
+      return "terminal input";
+    case "TaskOutput":
+      return "task output";
+    case "TaskStop":
+      return "stop task";
+    case "ApplyPatch":
+      return "patch files";
+    case "Agent":
+    case "Task":
+      return "subagent task";
+    case "ViewImage":
+      return "inspect image";
+    case "memory_apply_patch":
+      return "write memory";
+    case "AskUserQuestion":
+      return "ask user";
+    case "Skill":
+      return "run skill";
+    default:
+      return toolName;
+  }
+};
+
 const getEventActivity = (event: AgentHaloEvent): IActivityDescriptor => {
   switch (event.type) {
     case "bridge_ready":
@@ -544,7 +582,7 @@ const getEventActivity = (event: AgentHaloEvent): IActivityDescriptor => {
       return { kind: "done", label: "done", detail: event.data.message ?? "turn complete" };
     case "tool_start": {
       const kind = getToolActivityKind(event.data.toolName);
-      return { kind, label: getToolActivityLabel(kind), detail: event.data.toolName };
+      return { kind, label: getToolActivityLabel(kind), detail: getToolActivityDetail(event.data.toolName) };
     }
     case "bridge_error":
       return { kind: "error", label: "error", detail: event.data.message };
@@ -752,22 +790,6 @@ const getEventSessionStatus = (event: AgentHaloEvent, now: Date = new Date()): I
   }
 };
 
-const getEventSessionDetail = (event: AgentHaloEvent): string => {
-  switch (event.type) {
-    case "tool_start":
-      return getEventActivity(event).label;
-    case "turn_start":
-      return "thinking";
-    case "turn_stop":
-    case "conversation_close":
-      return "done";
-    case "bridge_error":
-      return "error";
-    default:
-      return "idle";
-  }
-};
-
 const sessionStatusPriority: Record<ISessionSummary["status"], number> = {
   error: 5,
   working: 4,
@@ -811,6 +833,7 @@ const buildWorkspaceSessionGroups = (sessions: ISessionSummary[]): IWorkspaceSes
         workspace: primarySession.workspace,
         workspacePath: primarySession.workspacePath,
         status,
+        activityKind: primarySession.activityKind,
         detail,
         lastActivityAt: latestSession.lastActivityAt,
         primarySession,
@@ -857,9 +880,22 @@ const StatusGlyph = ({ status }: { status: ISessionSummary["status"] }) => {
   return <span className="status-slot"><span className={`status-dot status-${status}`} /></span>;
 };
 
-type SessionMascotAction = "idle" | "walk" | "work" | "coffee" | "hurt" | "dust";
+type SessionMascotAction = "idle" | "walk" | "plan" | "work" | "coffee" | "hurt" | "dust";
 
-const getSessionMascotAction = (status?: ISessionSummary["status"]): SessionMascotAction => {
+const getSessionMascotAction = (status?: ISessionSummary["status"], activityKind?: ActivityKind): SessionMascotAction => {
+  if (activityKind === "error" || status === "error") {
+    return "hurt";
+  }
+
+  if (activityKind === "planning" || activityKind === "memory" || activityKind === "goal" || activityKind === "asking") {
+    if (activityKind === "planning") return "plan";
+    return "coffee";
+  }
+
+  if (activityKind === "thinking" || activityKind === "visual") {
+    return "idle";
+  }
+
   if (status === "working") {
     return "work";
   }
@@ -868,30 +904,26 @@ const getSessionMascotAction = (status?: ISessionSummary["status"]): SessionMasc
     return "coffee";
   }
 
-  if (status === "error") {
-    return "hurt";
-  }
-
   return "idle";
 };
 
-const ActivityMascot = ({ sessionId, status }: { sessionId?: string | null; status?: ISessionSummary["status"] }) => {
+const ActivityMascot = ({ activityKind, sessionId, status }: { activityKind?: ActivityKind; sessionId?: string | null; status?: ISessionSummary["status"] }) => {
   const variant = getMascotVariant(sessionId);
-  const action = getSessionMascotAction(status);
+  const action = getSessionMascotAction(status, activityKind);
 
   return (
-    <span className="activity-mascot activity-mascot-sprite" data-status={status} data-action={action} data-variant={variant} style={getMascotStyle(variant)} aria-hidden="true">
+    <span className="activity-mascot activity-mascot-sprite" data-status={status} data-kind={activityKind} data-action={action} data-variant={variant} style={getMascotStyle(variant)} aria-hidden="true">
       <span className="activity-mascot-stage" />
     </span>
   );
 };
 
-const SessionMascot = ({ sessionId, status }: { sessionId?: string | null; status?: ISessionSummary["status"] }) => {
+const SessionMascot = ({ activityKind, sessionId, status }: { activityKind?: ActivityKind; sessionId?: string | null; status?: ISessionSummary["status"] }) => {
   const variant = getMascotVariant(sessionId);
-  const action = getSessionMascotAction(status);
+  const action = getSessionMascotAction(status, activityKind);
 
   return (
-    <span className="session-mascot session-mascot-sprite" data-status={status} data-action={action} data-variant={variant} style={getMascotStyle(variant)} aria-hidden="true">
+    <span className="session-mascot session-mascot-sprite" data-status={status} data-kind={activityKind} data-action={action} data-variant={variant} style={getMascotStyle(variant)} aria-hidden="true">
       <span className="session-mascot-stage" />
     </span>
   );
@@ -942,13 +974,15 @@ const buildSessionSummaries = (events: AgentHaloEvent[], presence: IAgentHaloPre
     if (conversationId === "default" && isInternalOnlySession(sessionEvents)) continue;
     const latestEvent = sessionEvents[0];
     if (!latestEvent) continue;
+    const activity = getEventActivity(latestEvent);
     const workspacePath = getSessionWorkspacePath(sessionEvents, latestEvent.cwd);
     sessions.set(conversationId, {
       conversationId,
       project: projectName(workspacePath ?? latestEvent.cwd),
       workspace: shortenPath(workspacePath ?? latestEvent.cwd),
       workspacePath,
-      detail: getEventSessionDetail(latestEvent),
+      detail: activity.detail,
+      activityKind: activity.kind,
       status: getEventSessionStatus(latestEvent, now),
       lastActivityAt: latestEvent.timestamp,
     });
@@ -966,6 +1000,7 @@ const buildSessionSummaries = (events: AgentHaloEvent[], presence: IAgentHaloPre
       workspace: shortenPath(workspacePath ?? presence.cwd),
       workspacePath,
       detail: "idle",
+      activityKind: "session",
       status: "idle",
       lastActivityAt: presence.lastEventAt ?? new Date(0).toISOString(),
     });
@@ -1682,6 +1717,7 @@ const App = () => {
     sessions.find((session) => session.status === "done" && session.conversationId !== acknowledgedConversationId) ??
     null;
   const activityStatus = activitySession?.status ?? getGlyphStatus(displayView.status);
+  const activityKind: ActivityKind = activitySession?.activityKind ?? (displayView.status === "thinking" ? "thinking" : displayView.status === "stale" ? "tool" : displayView.status === "error" ? "error" : displayView.status === "closed" ? "done" : "session");
   const activityViewStatus: IStatusView["status"] = (() => {
     if (activityStatus === "working") return "tool-running";
     if (activityStatus === "waiting") return "stale";
@@ -2117,7 +2153,7 @@ const App = () => {
             </div>
             <div className="camera-spacer" aria-hidden="true" />
             <div className="notch-wing notch-wing-right" aria-hidden="true">
-              {hasLiveActivity ? <ActivityMascot sessionId={activitySession?.conversationId ?? presence.conversationId} status={activityStatus} /> : null}
+              {hasLiveActivity ? <ActivityMascot activityKind={activityKind} sessionId={activitySession?.conversationId ?? presence.conversationId} status={activityStatus} /> : null}
             </div>
           </div>
 
@@ -2277,7 +2313,7 @@ const App = () => {
 
                       return (
                       <li className={`session-row ${isGrouped ? "session-group" : ""} ${group.status === "done" ? "ended" : ""}`} key={group.key} title={rowTitle} onClick={() => openSession(session.conversationId)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") openSession(session.conversationId); }} role="button" tabIndex={0}>
-                        <SessionMascot sessionId={session.conversationId} status={group.status} />
+                        <SessionMascot activityKind={group.activityKind} sessionId={session.conversationId} status={group.status} />
                         <span className="session-label">
                           <span className="session-main-line">
                             <span className="agent-badge">{isGrouped ? `×${group.sessions.length}` : "LC"}</span>

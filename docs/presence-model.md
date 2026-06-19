@@ -40,19 +40,19 @@ The desktop UI derives a smaller “activity kind” from raw bridge events for 
 
 Current raw events:
 
-| Raw event | Activity kind | Meaning for UI/mascot direction |
-| --- | --- | --- |
-| `turn_start` | `thinking` | Model turn started; candidate for attentive/listening/thinking mascot state. |
-| `tool_start` + `UpdatePlan` | `planning` | Planning changed; candidate for notebook/planning animation. |
-| `tool_start` + shell/task tools | `shell` | Command/task lane activity; candidate for terminal/typing/tool-use animation. |
-| `tool_start` + `ApplyPatch` | `editing` | Code/file edit; candidate for focused work animation. |
-| `tool_start` + `Agent` | `delegating` | Subagent dispatched; candidate for handoff/companion/team animation. |
-| `tool_start` + `ViewImage` | `visual` | Visual inspection; candidate for looking/magnifier animation. |
-| `tool_start` + `memory_apply_patch` | `memory` | Learning/memory write; candidate for archive/spark animation. |
-| `tool_start` + `Skill` | `skill` | Skill invoked; candidate for tool-belt animation. |
-| `tool_start` + goal tools | `goal` | Goal tracking; candidate for checkpoint animation. |
-| `turn_stop` / `conversation_close` | `done` | Turn/session completed; candidate for settle/idle/done animation. |
-| `bridge_error` | `error` | Bridge or stream issue; candidate for hurt/fluster animation. |
+| Raw event | Activity kind | Current mascot action | Meaning for UI/mascot direction |
+| --- | --- | --- | --- |
+| `turn_start` | `thinking` | `idle` | Model turn started; candidate for attentive/listening/thinking mascot state. |
+| `tool_start` + `UpdatePlan` | `planning` | `coffee` | Planning changed; next custom candidate should be notebook/planning animation. |
+| `tool_start` + shell/task tools | `shell` | `work` | Command/task lane activity; next custom candidate should be terminal/tool-use animation. |
+| `tool_start` + `ApplyPatch` | `editing` | `work` | Code/file edit; candidate for focused work animation. |
+| `tool_start` + `Agent`/`Task` | `delegating` | `work` | Subagent dispatched; next custom candidate should be handoff/companion/team animation. |
+| `tool_start` + `ViewImage` | `visual` | `idle` | Visual inspection; next custom candidate should be looking/magnifier animation. |
+| `tool_start` + `memory_apply_patch` | `memory` | `coffee` | Learning/memory write; next custom candidate should be archive/spark animation. |
+| `tool_start` + `Skill` | `skill` | `work` | Skill invoked; next custom candidate should be tool-belt animation. |
+| `tool_start` + goal tools | `goal` | `coffee` | Goal tracking; next custom candidate should be checkpoint animation. |
+| `turn_stop` / `conversation_close` | `done` | `idle` | Turn/session completed; candidate for settle/idle/done animation. |
+| `bridge_error` | `error` | `hurt` | Bridge or stream issue; candidate for hurt/fluster animation. |
 
 Important limitation: there is no native `plan_start`, `thinking_delta`, `tool_end`, or assistant-text event in the current protocol. “Plan” is inferred from the `UpdatePlan` tool, “thinking” is inferred from `turn_start`, and active work is inferred from `tool_start` until `turn_stop` or staleness.
 
