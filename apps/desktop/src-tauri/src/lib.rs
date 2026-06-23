@@ -18,6 +18,7 @@ use tauri::{
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 
 #[cfg(target_os = "macos")]
 use objc2::MainThreadMarker;
@@ -41,10 +42,13 @@ const AGY_LS_SERVICE: &str = "exa.language_server_pb.LanguageServerService";
 const CLAUDE_USAGE_URL: &str = "https://api.anthropic.com/api/oauth/usage";
 const CLAUDE_REFRESH_URL: &str = "https://platform.claude.com/v1/oauth/token";
 const CLAUDE_CLIENT_ID: &str = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
+const CLAUDE_NON_PROD_CLIENT_ID: &str = "22422756-60c9-4084-8eb7-27705fd5cf9a";
 const CLAUDE_SCOPES: &str =
     "user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload";
-const CLAUDE_KEYCHAIN_SERVICE: &str = "Claude Code-credentials";
-const CLAUDE_CREDENTIALS_PATH: &str = ".claude/.credentials.json";
+const CLAUDE_KEYCHAIN_SERVICE_PREFIX: &str = "Claude Code";
+const CLAUDE_DEFAULT_HOME: &str = ".claude";
+const CLAUDE_CREDENTIALS_FILE: &str = ".credentials.json";
+const CLAUDE_REFRESH_BUFFER_MS: i64 = 5 * 60 * 1000;
 const CURSOR_STATE_DB: &str = "Library/Application Support/Cursor/User/globalStorage/state.vscdb";
 const CURSOR_USAGE_URL: &str =
     "https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage";
@@ -239,6 +243,9 @@ struct ClaudeOauth {
     expires_at: Option<i64>,
     #[serde(rename = "subscriptionType")]
     subscription_type: Option<String>,
+    #[serde(rename = "rateLimitTier")]
+    rate_limit_tier: Option<String>,
+    scopes: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone)]
@@ -246,6 +253,16 @@ struct ClaudeAuthState {
     credentials: ClaudeCredentialsFile,
     service_name: Option<String>,
     file_path: Option<PathBuf>,
+    inference_only: bool,
+    oauth_config: ClaudeOauthConfig,
+}
+
+#[derive(Debug, Clone)]
+struct ClaudeOauthConfig {
+    usage_url: String,
+    refresh_url: String,
+    client_id: String,
+    oauth_file_suffix: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -324,19 +341,40 @@ fn claude_usage() -> Result<CodexUsageSnapshot, String> {
     let mut auth = load_claude_auth()
         .ok_or_else(|| "Claude Code auth not found. Run `claude` to log in.".to_string())?;
     let client = usage_client("Claude Code")?;
+
+    if !claude_can_fetch_live_usage(&auth) {
+        return Ok(build_claude_status_snapshot(
+            &auth,
+            "Live usage unavailable for this Claude token.".to_string(),
+        ));
+    }
+
+    if claude_needs_refresh(&auth) {
+        if let Err(message) = refresh_claude_token(&client, &mut auth) {
+            return Ok(build_claude_status_snapshot(&auth, message));
+        }
+    }
+
     match fetch_claude_usage(&client, &auth) {
         Ok(usage) => Ok(build_claude_usage_snapshot(usage, &auth)),
         Err(CodexUsageFetchError::Auth) => {
-            refresh_claude_token(&client, &mut auth)?;
-            let usage = fetch_claude_usage(&client, &auth).map_err(|error| match error {
-                CodexUsageFetchError::Auth => {
-                    "Claude Code session expired. Run `claude` to log in again.".to_string()
+            if let Err(message) = refresh_claude_token(&client, &mut auth) {
+                return Ok(build_claude_status_snapshot(&auth, message));
+            }
+            match fetch_claude_usage(&client, &auth) {
+                Ok(usage) => Ok(build_claude_usage_snapshot(usage, &auth)),
+                Err(CodexUsageFetchError::Auth) => Ok(build_claude_status_snapshot(
+                    &auth,
+                    "Claude Code session expired. Run `claude` to log in again.".to_string(),
+                )),
+                Err(CodexUsageFetchError::Other(message)) => {
+                    Ok(build_claude_status_snapshot(&auth, message))
                 }
-                CodexUsageFetchError::Other(message) => message,
-            })?;
-            Ok(build_claude_usage_snapshot(usage, &auth))
+            }
         }
-        Err(CodexUsageFetchError::Other(message)) => Err(message),
+        Err(CodexUsageFetchError::Other(message)) => {
+            Ok(build_claude_status_snapshot(&auth, message))
+        }
     }
 }
 
@@ -1522,37 +1560,177 @@ fn progress_metric(
 }
 
 fn load_claude_auth() -> Option<ClaudeAuthState> {
-    if let Some(text) = read_keychain_password(CLAUDE_KEYCHAIN_SERVICE, None) {
-        if let Some(credentials) = parse_json_or_hex::<ClaudeCredentialsFile>(&text) {
-            if credentials
-                .claude_ai_oauth
-                .as_ref()?
-                .access_token
-                .as_ref()
-                .is_some()
-            {
-                return Some(ClaudeAuthState {
-                    credentials,
-                    service_name: Some(CLAUDE_KEYCHAIN_SERVICE.to_string()),
-                    file_path: None,
-                });
-            }
-        }
-    }
+    let oauth_config = claude_oauth_config();
+    let stored = load_stored_claude_auth(&oauth_config);
+    let env_access_token = env_text("CLAUDE_CODE_OAUTH_TOKEN");
+    let Some(env_access_token) = env_access_token else {
+        return stored;
+    };
 
-    let path = home_path(CLAUDE_CREDENTIALS_PATH)?;
+    let mut credentials = stored
+        .as_ref()
+        .map(|state| state.credentials.clone())
+        .unwrap_or(ClaudeCredentialsFile {
+            claude_ai_oauth: Some(ClaudeOauth {
+                access_token: None,
+                refresh_token: None,
+                expires_at: None,
+                subscription_type: None,
+                rate_limit_tier: None,
+                scopes: None,
+            }),
+        });
+    let oauth = credentials.claude_ai_oauth.get_or_insert(ClaudeOauth {
+        access_token: None,
+        refresh_token: None,
+        expires_at: None,
+        subscription_type: None,
+        rate_limit_tier: None,
+        scopes: None,
+    });
+    oauth.access_token = Some(env_access_token);
+
+    Some(ClaudeAuthState {
+        credentials,
+        service_name: stored.as_ref().and_then(|state| state.service_name.clone()),
+        file_path: stored.as_ref().and_then(|state| state.file_path.clone()),
+        inference_only: true,
+        oauth_config,
+    })
+}
+
+fn load_stored_claude_auth(oauth_config: &ClaudeOauthConfig) -> Option<ClaudeAuthState> {
+    load_claude_keychain_auth(oauth_config).or_else(|| load_claude_file_auth(oauth_config))
+}
+
+fn load_claude_keychain_auth(oauth_config: &ClaudeOauthConfig) -> Option<ClaudeAuthState> {
+    for service in claude_keychain_service_candidates(oauth_config) {
+        let Some(text) = read_keychain_password(&service, None) else {
+            continue;
+        };
+        let Some(credentials) = parse_json_or_hex::<ClaudeCredentialsFile>(&text) else {
+            continue;
+        };
+        if !claude_credentials_have_access_token(&credentials) {
+            continue;
+        }
+        return Some(ClaudeAuthState {
+            credentials,
+            service_name: Some(service),
+            file_path: None,
+            inference_only: false,
+            oauth_config: oauth_config.clone(),
+        });
+    }
+    None
+}
+
+fn load_claude_file_auth(oauth_config: &ClaudeOauthConfig) -> Option<ClaudeAuthState> {
+    let path = claude_credentials_path()?;
     let text = fs::read_to_string(&path).ok()?;
     let credentials = parse_json_or_hex::<ClaudeCredentialsFile>(&text)?;
-    credentials
-        .claude_ai_oauth
-        .as_ref()?
-        .access_token
-        .as_ref()?;
+    if !claude_credentials_have_access_token(&credentials) {
+        return None;
+    }
     Some(ClaudeAuthState {
         credentials,
         service_name: None,
         file_path: Some(path),
+        inference_only: false,
+        oauth_config: oauth_config.clone(),
     })
+}
+
+fn claude_credentials_have_access_token(credentials: &ClaudeCredentialsFile) -> bool {
+    credentials
+        .claude_ai_oauth
+        .as_ref()
+        .and_then(|oauth| oauth.access_token.as_deref())
+        .map(str::trim)
+        .is_some_and(|token| !token.is_empty())
+}
+
+fn claude_oauth_config() -> ClaudeOauthConfig {
+    let mut base_api = CLAUDE_USAGE_URL
+        .strip_suffix("/api/oauth/usage")
+        .unwrap_or("https://api.anthropic.com")
+        .to_string();
+    let mut refresh_url = CLAUDE_REFRESH_URL.to_string();
+    let mut client_id = CLAUDE_CLIENT_ID.to_string();
+    let mut oauth_file_suffix = String::new();
+
+    let is_ant_user = env_text("USER_TYPE").as_deref() == Some("ant");
+    if is_ant_user && env_flag("USE_LOCAL_OAUTH") {
+        base_api = env_text("CLAUDE_LOCAL_OAUTH_API_BASE")
+            .unwrap_or_else(|| "http://localhost:8000".to_string())
+            .trim_end_matches('/')
+            .to_string();
+        refresh_url = format!("{base_api}/v1/oauth/token");
+        client_id = CLAUDE_NON_PROD_CLIENT_ID.to_string();
+        oauth_file_suffix = "-local-oauth".to_string();
+    } else if is_ant_user && env_flag("USE_STAGING_OAUTH") {
+        base_api = "https://api-staging.anthropic.com".to_string();
+        refresh_url = "https://platform.staging.ant.dev/v1/oauth/token".to_string();
+        client_id = CLAUDE_NON_PROD_CLIENT_ID.to_string();
+        oauth_file_suffix = "-staging-oauth".to_string();
+    }
+
+    if let Some(custom) = env_text("CLAUDE_CODE_CUSTOM_OAUTH_URL") {
+        base_api = custom.trim_end_matches('/').to_string();
+        refresh_url = format!("{base_api}/v1/oauth/token");
+        oauth_file_suffix = "-custom-oauth".to_string();
+    }
+    if let Some(override_client_id) = env_text("CLAUDE_CODE_OAUTH_CLIENT_ID") {
+        client_id = override_client_id;
+    }
+
+    ClaudeOauthConfig {
+        usage_url: format!("{base_api}/api/oauth/usage"),
+        refresh_url,
+        client_id,
+        oauth_file_suffix,
+    }
+}
+
+fn claude_keychain_service_candidates(oauth_config: &ClaudeOauthConfig) -> Vec<String> {
+    let base = format!(
+        "{}{}-credentials",
+        CLAUDE_KEYCHAIN_SERVICE_PREFIX, oauth_config.oauth_file_suffix
+    );
+    let mut candidates = Vec::new();
+    if let Some(config_dir) = env_text("CLAUDE_CONFIG_DIR") {
+        let mut hasher = Sha256::new();
+        hasher.update(config_dir.as_bytes());
+        let digest = format!("{:x}", hasher.finalize());
+        candidates.push(format!("{}-{}", base, &digest[..8]));
+    }
+    candidates.push(base);
+    candidates
+}
+
+fn claude_credentials_path() -> Option<PathBuf> {
+    if let Some(config_dir) = env_text("CLAUDE_CONFIG_DIR") {
+        return Some(PathBuf::from(config_dir).join(CLAUDE_CREDENTIALS_FILE));
+    }
+    home_dir().map(|home| home.join(CLAUDE_DEFAULT_HOME).join(CLAUDE_CREDENTIALS_FILE))
+}
+
+fn env_text(name: &str) -> Option<String> {
+    std::env::var(name)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn env_flag(name: &str) -> bool {
+    env_text(name)
+        .map(|value| {
+            !matches!(
+                value.to_ascii_lowercase().as_str(),
+                "0" | "false" | "no" | "off"
+            )
+        })
+        .unwrap_or(false)
 }
 
 fn claude_access_token(auth: &ClaudeAuthState) -> Result<String, String> {
@@ -1566,12 +1744,40 @@ fn claude_access_token(auth: &ClaudeAuthState) -> Result<String, String> {
         .ok_or_else(|| "Claude Code access token missing. Run `claude` to log in.".to_string())
 }
 
+fn claude_can_fetch_live_usage(auth: &ClaudeAuthState) -> bool {
+    if auth.inference_only {
+        return false;
+    }
+    let Some(scopes) = auth
+        .credentials
+        .claude_ai_oauth
+        .as_ref()
+        .and_then(|oauth| oauth.scopes.as_ref())
+    else {
+        return true;
+    };
+    scopes.is_empty() || scopes.iter().any(|scope| scope == "user:profile")
+}
+
+fn claude_needs_refresh(auth: &ClaudeAuthState) -> bool {
+    let Some(expires_at) = auth
+        .credentials
+        .claude_ai_oauth
+        .as_ref()
+        .and_then(|oauth| oauth.expires_at)
+    else {
+        return false;
+    };
+    let now_ms = time::OffsetDateTime::now_utc().unix_timestamp() * 1000;
+    expires_at - now_ms <= CLAUDE_REFRESH_BUFFER_MS
+}
+
 fn fetch_claude_usage(
     client: &reqwest::blocking::Client,
     auth: &ClaudeAuthState,
 ) -> Result<Value, CodexUsageFetchError> {
     let response = client
-        .get(CLAUDE_USAGE_URL)
+        .get(&auth.oauth_config.usage_url)
         .bearer_auth(claude_access_token(auth).map_err(CodexUsageFetchError::Other)?)
         .header(reqwest::header::ACCEPT, "application/json")
         .header(reqwest::header::CONTENT_TYPE, "application/json")
@@ -1615,11 +1821,11 @@ fn refresh_claude_token(
             "Claude Code refresh token missing. Run `claude` to log in again.".to_string()
         })?;
     let response = client
-        .post(CLAUDE_REFRESH_URL)
+        .post(&auth.oauth_config.refresh_url)
         .json(&serde_json::json!({
             "grant_type": "refresh_token",
             "refresh_token": refresh_token,
-            "client_id": CLAUDE_CLIENT_ID,
+            "client_id": auth.oauth_config.client_id,
             "scope": CLAUDE_SCOPES,
         }))
         .send()
@@ -1717,15 +1923,52 @@ fn build_claude_usage_snapshot(usage: Value, auth: &ClaudeAuthState) -> CodexUsa
     CodexUsageSnapshot {
         provider_id: "claude".to_string(),
         display_name: "Claude Code".to_string(),
-        plan: auth
-            .credentials
-            .claude_ai_oauth
-            .as_ref()
-            .and_then(|oauth| oauth.subscription_type.as_deref())
-            .map(format_plan_label),
+        plan: claude_plan_label(auth),
         lines,
         fetched_at: now_iso(),
     }
+}
+
+fn build_claude_status_snapshot(auth: &ClaudeAuthState, message: String) -> CodexUsageSnapshot {
+    CodexUsageSnapshot {
+        provider_id: "claude".to_string(),
+        display_name: "Claude Code".to_string(),
+        plan: claude_plan_label(auth),
+        lines: vec![CodexMetricLine::Text {
+            label: "Status".to_string(),
+            value: message,
+        }],
+        fetched_at: now_iso(),
+    }
+}
+
+fn claude_plan_label(auth: &ClaudeAuthState) -> Option<String> {
+    let oauth = auth.credentials.claude_ai_oauth.as_ref()?;
+    let base = oauth.subscription_type.as_deref().map(format_plan_label)?;
+    let Some(tier) = oauth.rate_limit_tier.as_deref() else {
+        return Some(base);
+    };
+    let Some(multiplier) = first_rate_limit_multiplier(tier) else {
+        return Some(base);
+    };
+    Some(format!("{base} {multiplier}"))
+}
+
+fn first_rate_limit_multiplier(value: &str) -> Option<String> {
+    let bytes = value.as_bytes();
+    for start in 0..bytes.len() {
+        if !bytes[start].is_ascii_digit() {
+            continue;
+        }
+        let mut end = start;
+        while end < bytes.len() && bytes[end].is_ascii_digit() {
+            end += 1;
+        }
+        if end < bytes.len() && bytes[end].eq_ignore_ascii_case(&b'x') {
+            return Some(value[start..=end].to_string());
+        }
+    }
+    None
 }
 
 fn read_cursor_state_value(key: &str) -> Option<String> {

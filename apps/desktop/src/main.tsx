@@ -756,7 +756,7 @@ const parseAgentUsageSnapshot = (providerId: UsageProviderId, snapshot: IAgentUs
 
   return createAgentUsageState(providerId, {
     status: "online",
-    message: null,
+    message: readTextValue(findUsageLine(lines, "Status")),
     fetchedAt: snapshot.fetchedAt ?? new Date().toISOString(),
     plan: snapshot.plan ?? null,
     metrics,
