@@ -169,7 +169,16 @@ interface IUsageMetricLine {
   limit?: number;
   value?: string;
   text?: string;
+  points?: IUsageChartPoint[];
+  note?: string;
+  color?: string;
   resetsAt?: string;
+}
+
+interface IUsageChartPoint {
+  label: string;
+  value: number;
+  valueLabel?: string;
 }
 
 interface IAgentUsageSnapshot {
@@ -211,7 +220,11 @@ interface IAgentUsageState {
   credits: string | null;
   today: string | null;
   yesterday: string | null;
+  latestTokenLog: string | null;
   last30Days: string | null;
+  usageTrend: IUsageMetricLine | null;
+  dailyTokenRows: Array<{ label: string; value: string }>;
+  modelShares: Array<{ label: string; value: string }>;
 }
 
 const USAGE_PROVIDERS: IUsageProviderConfig[] = [
@@ -617,6 +630,21 @@ const readTextValue = (line: IUsageMetricLine | null): string | null => {
   return null;
 };
 
+const CODEX_KNOWN_TEXT_LABELS = new Set(["rate limit resets", "credits", "today", "yesterday", "latest token log", "last 30 days"]);
+
+const readCodexModelShares = (lines: IUsageMetricLine[]): Array<{ label: string; value: string }> =>
+  lines
+    .filter((line) => line.type === "text" && !CODEX_KNOWN_TEXT_LABELS.has(line.label.toLowerCase()))
+    .filter((line) => !line.label.toLowerCase().startsWith("daily "))
+    .map((line) => ({ label: line.label, value: readTextValue(line) ?? "" }))
+    .filter((line) => /%$/.test(line.value));
+
+const readCodexDailyTokenRows = (lines: IUsageMetricLine[]): Array<{ label: string; value: string }> =>
+  lines
+    .filter((line) => line.type === "text" && line.label.toLowerCase().startsWith("daily "))
+    .map((line) => ({ label: line.label.replace(/^Daily\s+/i, ""), value: readTextValue(line) ?? "" }))
+    .filter((line) => line.value.length > 0);
+
 
 const formatDurationShort = (ms: number): string => {
   const totalMinutes = Math.max(0, Math.round(ms / 60_000));
@@ -712,7 +740,11 @@ const createAgentUsageState = (providerId: UsageProviderId, partial: Partial<IAg
   credits: null,
   today: null,
   yesterday: null,
+  latestTokenLog: null,
   last30Days: null,
+  usageTrend: null,
+  dailyTokenRows: [],
+  modelShares: [],
   ...partial,
 });
 
@@ -735,7 +767,11 @@ const parseAgentUsageSnapshot = (providerId: UsageProviderId, snapshot: IAgentUs
     credits: readTextValue(findUsageLine(lines, "Credits")),
     today: readTextValue(findUsageLine(lines, "Today")),
     yesterday: readTextValue(findUsageLine(lines, "Yesterday")),
+    latestTokenLog: readTextValue(findUsageLine(lines, "Latest Token Log")),
     last30Days: readTextValue(findUsageLine(lines, "Last 30 Days")),
+    usageTrend: lines.find((line) => line.type === "barChart" && line.label.toLowerCase() === "usage trend") ?? null,
+    dailyTokenRows: providerId === "codex" ? readCodexDailyTokenRows(lines) : [],
+    modelShares: providerId === "codex" ? readCodexModelShares(lines) : [],
   });
 };
 
@@ -1247,16 +1283,75 @@ const UsageTextRows = ({ rows }: { rows: Array<{ label: string; value: string | 
   );
 };
 
+const UsageTrendChart = ({ line }: { line: IUsageMetricLine | null }) => {
+  const points = line?.points?.filter((point) => Number.isFinite(point.value) && point.value >= 0) ?? [];
+  if (points.length === 0) return null;
+  const max = Math.max(...points.map((point) => point.value), 1);
+  return (
+    <div className="usage-trend-card">
+      <div className="usage-trend-head">
+        <span>{line?.label ?? "Usage Trend"}</span>
+        {line?.note ? <small title={line.note}>ⓘ</small> : null}
+      </div>
+      <div className="usage-trend-bars" aria-label="Codex usage trend">
+        {points.map((point, index) => (
+          <span
+            className="usage-trend-bar"
+            style={{ height: `${Math.max(8, (point.value / max) * 100)}%`, backgroundColor: line?.color ?? undefined }}
+            title={`${point.label}: ${point.valueLabel ?? point.value}`}
+            key={`${point.label}-${index}`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const ModelShareRows = ({ rows }: { rows: Array<{ label: string; value: string }> }) => {
+  if (rows.length === 0) return null;
+  return (
+    <div className="usage-model-shares">
+      {rows.map((row) => (
+        <div className="usage-model-share" key={row.label}>
+          <span>{row.label}</span>
+          <strong>{row.value}</strong>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const DailyTokenRows = ({ rows }: { rows: Array<{ label: string; value: string }> }) => {
+  if (rows.length === 0) return null;
+  return (
+    <div className="usage-daily-tokens">
+      <div className="usage-daily-title">Daily Tokens</div>
+      {rows.map((row) => (
+        <div className="usage-daily-token" key={row.label}>
+          <span>{row.label}</span>
+          <strong>{row.value}</strong>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 const CodexUsageDetails = ({ usage }: { usage: IAgentUsageState }) => (
-  <UsageTextRows
-    rows={[
-      { label: "Credits", value: usage.credits },
-      { label: "Rate Limit Resets", value: usage.rateLimitResets },
-      { label: "Today", value: usage.today },
-      { label: "Yesterday", value: usage.yesterday },
-      { label: "Last 30 Days", value: usage.last30Days },
-    ]}
-  />
+  <>
+    <UsageTextRows
+      rows={[
+        { label: "Credits", value: usage.credits },
+        { label: "Rate Limit Resets", value: usage.rateLimitResets },
+        { label: "Today", value: usage.today },
+        { label: "Yesterday", value: usage.yesterday },
+        { label: "Latest Token Log", value: usage.latestTokenLog },
+        { label: "Last 30 Days", value: usage.last30Days },
+      ]}
+    />
+    <UsageTrendChart line={usage.usageTrend} />
+    <DailyTokenRows rows={usage.dailyTokenRows} />
+    <ModelShareRows rows={usage.modelShares} />
+  </>
 );
 
 const UsageProviderIcon = ({ provider, size = 14 }: { provider: IUsageProviderConfig; size?: number }) => (

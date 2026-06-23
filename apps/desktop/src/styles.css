@@ -1177,6 +1177,104 @@ button {
   white-space: nowrap;
 }
 
+.usage-trend-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.usage-trend-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-3);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.usage-trend-head small {
+  color: rgba(255, 255, 255, 0.36);
+  font-size: 9px;
+}
+
+.usage-trend-bars {
+  height: 28px;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  padding: 2px 0 0;
+}
+
+.usage-trend-bar {
+  min-width: 2px;
+  flex: 1 1 0;
+  border-radius: 2px 2px 0 0;
+  background: #74aa9c;
+  opacity: 0.88;
+}
+
+.usage-model-shares {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.usage-daily-tokens {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.usage-daily-title {
+  color: var(--text-3);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.usage-daily-token {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  color: var(--text-3);
+  font-size: 10px;
+}
+
+.usage-daily-token strong {
+  min-width: 0;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 10px;
+  font-weight: 650;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.usage-model-share {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text-3);
+  font-size: 10px;
+}
+
+.usage-model-share strong {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 10px;
+  font-weight: 650;
+}
+
 .usage-refresh {
   width: 20px;
   height: 20px;

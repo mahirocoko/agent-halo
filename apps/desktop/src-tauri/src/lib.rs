@@ -1,11 +1,11 @@
 use std::{
     collections::BTreeMap,
     fs,
-    io::Write,
+    io::{Read, Write},
     net::{SocketAddr, TcpStream},
     path::{Path, PathBuf},
-    process::Command,
-    sync::mpsc,
+    process::{Command, Stdio},
+    sync::{mpsc, Mutex, OnceLock},
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -34,6 +34,9 @@ const CODEX_REFRESH_URL: &str = "https://auth.openai.com/oauth/token";
 const CODEX_CLIENT_ID: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
 const CODEX_KEYCHAIN_SERVICE: &str = "Codex Auth";
 const CODEX_CREDIT_USD_RATE: f64 = 0.04;
+const CCUSAGE_PACKAGE: &str = "ccusage@20.0.2";
+const CCUSAGE_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
+const CCUSAGE_TIMEOUT: Duration = Duration::from_secs(15);
 const AGY_LS_SERVICE: &str = "exa.language_server_pb.LanguageServerService";
 const CLAUDE_USAGE_URL: &str = "https://api.anthropic.com/api/oauth/usage";
 const CLAUDE_REFRESH_URL: &str = "https://platform.claude.com/v1/oauth/token";
@@ -83,7 +86,7 @@ struct CodexAuthState {
     source: CodexAuthSource,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct CodexUsageSnapshot {
     provider_id: String,
@@ -93,7 +96,7 @@ struct CodexUsageSnapshot {
     fetched_at: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 enum CodexMetricLine {
     #[serde(rename_all = "camelCase")]
@@ -109,9 +112,24 @@ enum CodexMetricLine {
         label: String,
         value: String,
     },
+    #[serde(rename_all = "camelCase")]
+    BarChart {
+        label: String,
+        points: Vec<CodexBarChartPoint>,
+        note: Option<String>,
+        color: Option<String>,
+    },
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CodexBarChartPoint {
+    label: String,
+    value: f64,
+    value_label: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 enum CodexProgressFormat {
     Percent,
@@ -160,6 +178,43 @@ struct CodexCredits {
 struct CodexResetCredits {
     available_count: Option<Value>,
 }
+
+#[derive(Debug, Clone, Deserialize)]
+struct CcusageDailyUsage {
+    daily: Vec<CcusageDay>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CcusageDay {
+    date: String,
+    total_tokens: Option<Value>,
+    cost_usd: Option<Value>,
+    total_cost: Option<Value>,
+    models: Option<BTreeMap<String, CcusageModelUsage>>,
+    model_breakdowns: Option<Vec<Value>>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CcusageModelUsage {
+    total_tokens: Option<Value>,
+    input_tokens: Option<Value>,
+    cached_input_tokens: Option<Value>,
+    cache_creation_tokens: Option<Value>,
+    cache_read_tokens: Option<Value>,
+    output_tokens: Option<Value>,
+    reasoning_output_tokens: Option<Value>,
+}
+
+#[derive(Debug, Clone)]
+struct CcusageCacheEntry {
+    key: String,
+    fetched_at: Instant,
+    usage: CcusageDailyUsage,
+}
+
+static CODEX_CCUSAGE_CACHE: OnceLock<Mutex<Option<CcusageCacheEntry>>> = OnceLock::new();
 
 #[derive(Debug, Deserialize)]
 struct CodexRefreshResponse {
@@ -230,7 +285,11 @@ fn codex_usage() -> Result<CodexUsageSnapshot, String> {
         .map_err(|error| format!("Failed to create Codex usage client: {error}"))?;
 
     match fetch_codex_usage(&client, &auth_state) {
-        Ok((usage, headers)) => Ok(build_codex_usage_snapshot(usage, &headers)),
+        Ok((usage, headers)) => {
+            let mut snapshot = build_codex_usage_snapshot(usage, &headers);
+            append_codex_local_usage(&mut snapshot, &auth_state);
+            Ok(snapshot)
+        }
         Err(CodexUsageFetchError::Auth) => {
             refresh_codex_auth(&client, &mut auth_state)?;
             let (usage, headers) =
@@ -240,7 +299,9 @@ fn codex_usage() -> Result<CodexUsageSnapshot, String> {
                     }
                     CodexUsageFetchError::Other(message) => message,
                 })?;
-            Ok(build_codex_usage_snapshot(usage, &headers))
+            let mut snapshot = build_codex_usage_snapshot(usage, &headers);
+            append_codex_local_usage(&mut snapshot, &auth_state);
+            Ok(snapshot)
         }
         Err(CodexUsageFetchError::Other(message)) => Err(message),
     }
@@ -753,6 +814,543 @@ fn build_codex_usage_snapshot(
         plan: usage.plan_type.and_then(format_codex_plan),
         lines,
         fetched_at: now_iso(),
+    }
+}
+
+fn append_codex_local_usage(snapshot: &mut CodexUsageSnapshot, auth_state: &CodexAuthState) {
+    let Some(usage) = codex_ccusage_daily(auth_state) else {
+        return;
+    };
+
+    let now = time::OffsetDateTime::now_utc();
+    let today_key = local_day_key(now);
+    let yesterday_key = local_day_key(now - time::Duration::days(1));
+    let today = usage
+        .daily
+        .iter()
+        .find(|day| ccusage_day_key(&day.date).as_deref() == Some(today_key.as_str()));
+    let yesterday = usage
+        .daily
+        .iter()
+        .find(|day| ccusage_day_key(&day.date).as_deref() == Some(yesterday_key.as_str()));
+
+    snapshot.lines.push(CodexMetricLine::Text {
+        label: "Today".to_string(),
+        value: format_ccusage_optional_day(today),
+    });
+    snapshot.lines.push(CodexMetricLine::Text {
+        label: "Yesterday".to_string(),
+        value: format_ccusage_optional_day(yesterday),
+    });
+    if let Some(latest_day) = ccusage_latest_day(&usage.daily) {
+        snapshot.lines.push(CodexMetricLine::Text {
+            label: "Latest Token Log".to_string(),
+            value: ccusage_day_display_label(&latest_day.date),
+        });
+    }
+
+    let total_tokens: f64 = usage.daily.iter().filter_map(ccusage_day_tokens).sum();
+    let cost_values = usage.daily.iter().filter_map(ccusage_day_cost);
+    let mut has_cost = false;
+    let mut total_cost = 0.0;
+    for cost in cost_values {
+        has_cost = true;
+        total_cost += cost;
+    }
+    if total_tokens > 0.0 || has_cost {
+        snapshot.lines.push(CodexMetricLine::Text {
+            label: "Last 30 Days".to_string(),
+            value: format_cost_tokens(if has_cost { Some(total_cost) } else { None }, total_tokens),
+        });
+    }
+
+    for day in ccusage_recent_days(&usage.daily, 7) {
+        snapshot.lines.push(CodexMetricLine::Text {
+            label: format!("Daily {}", ccusage_day_display_label(&day.date)),
+            value: format_ccusage_day(Some(day)),
+        });
+    }
+
+    let mut chart_points = ccusage_chart_points(&usage.daily);
+    if !chart_points.is_empty() {
+        if chart_points.len() > 31 {
+            chart_points = chart_points.split_off(chart_points.len() - 31);
+        }
+        snapshot.lines.push(CodexMetricLine::BarChart {
+            label: "Usage Trend".to_string(),
+            points: chart_points,
+            note: Some("Estimated from local Codex logs for the selected account.".to_string()),
+            color: Some("#74AA9C".to_string()),
+        });
+    }
+
+    for (model, percent) in ccusage_model_shares(&usage.daily) {
+        snapshot.lines.push(CodexMetricLine::Text {
+            label: model,
+            value: format_percent_label(percent),
+        });
+    }
+}
+
+fn codex_ccusage_daily(auth_state: &CodexAuthState) -> Option<CcusageDailyUsage> {
+    let key = codex_ccusage_cache_key(auth_state);
+    let cache = CODEX_CCUSAGE_CACHE.get_or_init(|| Mutex::new(None));
+    if let Ok(guard) = cache.lock() {
+        if let Some(entry) = guard.as_ref() {
+            if entry.key == key && entry.fetched_at.elapsed() < CCUSAGE_CACHE_TTL {
+                return Some(entry.usage.clone());
+            }
+        }
+    }
+
+    let since = codex_ccusage_since_string(30);
+    let home_path = codex_home_for_ccusage(auth_state);
+    let usage = run_ccusage_codex_daily(&since, home_path.as_deref())?;
+    if let Ok(mut guard) = cache.lock() {
+        *guard = Some(CcusageCacheEntry {
+            key,
+            fetched_at: Instant::now(),
+            usage: usage.clone(),
+        });
+    }
+    Some(usage)
+}
+
+fn codex_ccusage_cache_key(auth_state: &CodexAuthState) -> String {
+    codex_home_for_ccusage(auth_state).unwrap_or_else(|| "default".to_string())
+}
+
+fn codex_home_for_ccusage(auth_state: &CodexAuthState) -> Option<String> {
+    if let Ok(codex_home) = std::env::var("CODEX_HOME") {
+        let trimmed = codex_home.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+    match &auth_state.source {
+        CodexAuthSource::File(path) => path.parent().map(|path| path.to_string_lossy().to_string()),
+        CodexAuthSource::Keychain => None,
+    }
+}
+
+fn run_ccusage_codex_daily(since: &str, codex_home: Option<&str>) -> Option<CcusageDailyUsage> {
+    for runner in ccusage_runners(since) {
+        let child_result = Command::new(&runner.program)
+            .args(&runner.args)
+            .env("PATH", enriched_cli_path())
+            .envs(codex_home.map(|home| ("CODEX_HOME", home)))
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn();
+        let Ok(mut child) = child_result else {
+            continue;
+        };
+        let deadline = Instant::now() + CCUSAGE_TIMEOUT;
+        loop {
+            if matches!(child.try_wait(), Ok(Some(_))) {
+                break;
+            }
+            if Instant::now() >= deadline {
+                let _ = child.kill();
+                let _ = child.wait();
+                return None;
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
+
+        let mut stdout = String::new();
+        let mut stderr = String::new();
+        if let Some(mut pipe) = child.stdout.take() {
+            let _ = pipe.read_to_string(&mut stdout);
+        }
+        if let Some(mut pipe) = child.stderr.take() {
+            let _ = pipe.read_to_string(&mut stderr);
+        }
+        let Ok(status) = child.wait() else {
+            continue;
+        };
+        if !status.success() {
+            let _ = stderr;
+            continue;
+        }
+        if let Some(usage) = parse_ccusage_output(&stdout) {
+            return Some(usage);
+        }
+    }
+    None
+}
+
+struct CcusageRunnerCommand {
+    program: String,
+    args: Vec<String>,
+}
+
+fn ccusage_runners(since: &str) -> Vec<CcusageRunnerCommand> {
+    let suffix = vec![
+        "codex".to_string(),
+        "daily".to_string(),
+        "--json".to_string(),
+        "--order".to_string(),
+        "desc".to_string(),
+        "--since".to_string(),
+        since.to_string(),
+    ];
+    let mut runners = Vec::new();
+    if let Some(program) = first_existing_command(&[
+        home_join(".bun/bin/bunx"),
+        Some("/opt/homebrew/bin/bunx".into()),
+        Some("/usr/local/bin/bunx".into()),
+        Some("bunx".into()),
+    ]) {
+        runners.push(CcusageRunnerCommand {
+            program,
+            args: [
+                vec!["--silent".to_string(), CCUSAGE_PACKAGE.to_string()],
+                suffix.clone(),
+            ]
+            .concat(),
+        });
+    }
+    if let Some(program) = first_existing_command(&[
+        Some("/opt/homebrew/bin/pnpm".into()),
+        Some("/usr/local/bin/pnpm".into()),
+        Some("pnpm".into()),
+    ]) {
+        runners.push(CcusageRunnerCommand {
+            program,
+            args: [
+                vec![
+                    "-s".to_string(),
+                    "dlx".to_string(),
+                    CCUSAGE_PACKAGE.to_string(),
+                ],
+                suffix.clone(),
+            ]
+            .concat(),
+        });
+    }
+    if let Some(program) = first_existing_command(&[
+        Some("/opt/homebrew/bin/yarn".into()),
+        Some("/usr/local/bin/yarn".into()),
+        Some("yarn".into()),
+    ]) {
+        runners.push(CcusageRunnerCommand {
+            program,
+            args: [
+                vec![
+                    "dlx".to_string(),
+                    "-q".to_string(),
+                    CCUSAGE_PACKAGE.to_string(),
+                ],
+                suffix.clone(),
+            ]
+            .concat(),
+        });
+    }
+    if let Some(program) = first_existing_command(&[
+        Some("/opt/homebrew/bin/npm".into()),
+        Some("/usr/local/bin/npm".into()),
+        Some("npm".into()),
+    ]) {
+        runners.push(CcusageRunnerCommand {
+            program,
+            args: [
+                vec![
+                    "exec".to_string(),
+                    "--yes".to_string(),
+                    format!("--package={CCUSAGE_PACKAGE}"),
+                    "--".to_string(),
+                    "ccusage".to_string(),
+                ],
+                suffix.clone(),
+            ]
+            .concat(),
+        });
+    }
+    if let Some(program) = first_existing_command(&[
+        Some("/opt/homebrew/bin/npx".into()),
+        Some("/usr/local/bin/npx".into()),
+        Some("npx".into()),
+    ]) {
+        runners.push(CcusageRunnerCommand {
+            program,
+            args: [
+                vec!["--yes".to_string(), CCUSAGE_PACKAGE.to_string()],
+                suffix,
+            ]
+            .concat(),
+        });
+    }
+    runners
+}
+
+fn parse_ccusage_output(stdout: &str) -> Option<CcusageDailyUsage> {
+    serde_json::from_str::<CcusageDailyUsage>(stdout)
+        .ok()
+        .or_else(|| {
+            let start = stdout.find('{')?;
+            serde_json::from_str::<CcusageDailyUsage>(&stdout[start..]).ok()
+        })
+}
+
+fn first_existing_command(candidates: &[Option<String>]) -> Option<String> {
+    for candidate in candidates.iter().flatten() {
+        if candidate.contains('/') {
+            if Path::new(candidate).is_file() {
+                return Some(candidate.clone());
+            }
+        } else {
+            return Some(candidate.clone());
+        }
+    }
+    None
+}
+
+fn home_join(relative: &str) -> Option<String> {
+    home_dir().map(|home| home.join(relative).to_string_lossy().to_string())
+}
+
+fn enriched_cli_path() -> String {
+    let mut entries = Vec::new();
+    if let Some(home) = home_dir() {
+        entries.push(home.join(".bun/bin").to_string_lossy().to_string());
+        entries.push(home.join(".nvm/current/bin").to_string_lossy().to_string());
+        entries.push(home.join(".local/bin").to_string_lossy().to_string());
+    }
+    entries.push("/opt/homebrew/bin".to_string());
+    entries.push("/usr/local/bin".to_string());
+    if let Ok(path) = std::env::var("PATH") {
+        entries.extend(path.split(':').map(ToOwned::to_owned));
+    }
+    let mut seen = BTreeMap::new();
+    entries
+        .into_iter()
+        .filter(|entry| !entry.is_empty())
+        .filter(|entry| seen.insert(entry.clone(), ()).is_none())
+        .collect::<Vec<_>>()
+        .join(":")
+}
+
+fn codex_ccusage_since_string(days_back: i64) -> String {
+    let since = time::OffsetDateTime::now_utc() - time::Duration::days(days_back);
+    format!(
+        "{:04}{:02}{:02}",
+        since.year(),
+        u8::from(since.month()),
+        since.day()
+    )
+}
+
+fn local_day_key(date: time::OffsetDateTime) -> String {
+    format!(
+        "{:04}-{:02}-{:02}",
+        date.year(),
+        u8::from(date.month()),
+        date.day()
+    )
+}
+
+fn ccusage_day_key(raw: &str) -> Option<String> {
+    let value = raw.trim();
+    if value.len() >= 10
+        && value.as_bytes().get(4) == Some(&b'-')
+        && value.as_bytes().get(7) == Some(&b'-')
+    {
+        return Some(value[..10].to_string());
+    }
+    if value.len() == 8 && value.chars().all(|ch| ch.is_ascii_digit()) {
+        return Some(format!("{}-{}-{}", &value[..4], &value[4..6], &value[6..8]));
+    }
+    None
+}
+
+fn ccusage_day_tokens(day: &CcusageDay) -> Option<f64> {
+    value_to_f64(day.total_tokens.as_ref()).filter(|value| *value >= 0.0)
+}
+
+fn ccusage_day_cost(day: &CcusageDay) -> Option<f64> {
+    value_to_f64(day.cost_usd.as_ref())
+        .or_else(|| value_to_f64(day.total_cost.as_ref()))
+        .filter(|value| value.is_finite())
+}
+
+fn format_ccusage_day(day: Option<&CcusageDay>) -> String {
+    let tokens = day.and_then(ccusage_day_tokens).unwrap_or(0.0);
+    let cost = day.and_then(ccusage_day_cost).or(Some(0.0));
+    format_cost_tokens(cost, tokens)
+}
+
+fn format_ccusage_optional_day(day: Option<&CcusageDay>) -> String {
+    day.map(|day| format_ccusage_day(Some(day)))
+        .unwrap_or_else(|| "No local token log".to_string())
+}
+
+fn format_cost_tokens(cost: Option<f64>, tokens: f64) -> String {
+    let mut parts = Vec::new();
+    if let Some(cost) = cost {
+        parts.push(format!("${:.2}", cost.max(0.0)));
+    }
+    parts.push(format!("{} tokens", format_compact_number(tokens)));
+    parts.join(" · ")
+}
+
+fn format_compact_number(value: f64) -> String {
+    let abs = value.abs();
+    let (divisor, suffix) = if abs >= 1_000_000_000.0 {
+        (1_000_000_000.0, "B")
+    } else if abs >= 1_000_000.0 {
+        (1_000_000.0, "M")
+    } else if abs >= 1_000.0 {
+        (1_000.0, "K")
+    } else {
+        return format!("{}", value.round() as i64);
+    };
+    let scaled = value / divisor;
+    if scaled.abs() >= 10.0 {
+        format!("{}{suffix}", scaled.round() as i64)
+    } else {
+        format!("{:.1}{suffix}", scaled).replace(".0", "")
+    }
+}
+
+fn ccusage_chart_points(days: &[CcusageDay]) -> Vec<CodexBarChartPoint> {
+    let mut points = days
+        .iter()
+        .filter_map(|day| {
+            let key = ccusage_day_key(&day.date)?;
+            let value = ccusage_day_tokens(day)?;
+            Some((key, value))
+        })
+        .collect::<Vec<_>>();
+    points.sort_by(|a, b| a.0.cmp(&b.0));
+    points
+        .into_iter()
+        .map(|(key, value)| CodexBarChartPoint {
+            label: format!(
+                "{}/{}",
+                key[5..7].trim_start_matches('0'),
+                key[8..10].trim_start_matches('0')
+            ),
+            value,
+            value_label: format!("{} tokens", format_compact_number(value)),
+        })
+        .collect()
+}
+
+fn ccusage_recent_days(days: &[CcusageDay], limit: usize) -> Vec<&CcusageDay> {
+    let mut keyed = days
+        .iter()
+        .filter_map(|day| ccusage_day_key(&day.date).map(|key| (key, day)))
+        .collect::<Vec<_>>();
+    keyed.sort_by(|a, b| b.0.cmp(&a.0));
+    keyed.into_iter().take(limit).map(|(_, day)| day).collect()
+}
+
+fn ccusage_latest_day(days: &[CcusageDay]) -> Option<&CcusageDay> {
+    ccusage_recent_days(days, 1).into_iter().next()
+}
+
+fn ccusage_day_display_label(raw: &str) -> String {
+    ccusage_day_key(raw)
+        .map(|key| {
+            format!(
+                "{}/{}",
+                key[5..7].trim_start_matches('0'),
+                key[8..10].trim_start_matches('0')
+            )
+        })
+        .unwrap_or_else(|| raw.to_string())
+}
+
+fn ccusage_model_shares(days: &[CcusageDay]) -> Vec<(String, f64)> {
+    let mut totals: BTreeMap<String, f64> = BTreeMap::new();
+    let mut total_tokens = 0.0;
+    for day in days {
+        if let Some(models) = &day.models {
+            for (name, usage) in models {
+                let tokens = ccusage_model_tokens(usage);
+                if tokens <= 0.0 {
+                    continue;
+                }
+                *totals.entry(name.clone()).or_default() += tokens;
+                total_tokens += tokens;
+            }
+        }
+        if let Some(breakdowns) = &day.model_breakdowns {
+            for breakdown in breakdowns {
+                let name = maybe_string(breakdown.get("modelName"))
+                    .or_else(|| maybe_string(breakdown.get("name")))
+                    .or_else(|| maybe_string(breakdown.get("model")));
+                let Some(name) = name else {
+                    continue;
+                };
+                let tokens = ccusage_model_tokens_from_value(breakdown);
+                if tokens <= 0.0 {
+                    continue;
+                }
+                *totals.entry(name).or_default() += tokens;
+                total_tokens += tokens;
+            }
+        }
+    }
+    if total_tokens <= 0.0 {
+        return Vec::new();
+    }
+    let mut shares = totals
+        .into_iter()
+        .map(|(name, tokens)| (name, (tokens / total_tokens) * 100.0))
+        .collect::<Vec<_>>();
+    shares.sort_by(|a, b| {
+        b.1.partial_cmp(&a.1)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.0.cmp(&b.0))
+    });
+    shares.truncate(5);
+    shares
+}
+
+fn ccusage_model_tokens(usage: &CcusageModelUsage) -> f64 {
+    value_to_f64(usage.total_tokens.as_ref()).unwrap_or_else(|| {
+        [
+            usage.input_tokens.as_ref(),
+            usage.cached_input_tokens.as_ref(),
+            usage.cache_creation_tokens.as_ref(),
+            usage.cache_read_tokens.as_ref(),
+            usage.output_tokens.as_ref(),
+            usage.reasoning_output_tokens.as_ref(),
+        ]
+        .into_iter()
+        .flatten()
+        .filter_map(|value| value_to_f64(Some(value)))
+        .sum()
+    })
+}
+
+fn ccusage_model_tokens_from_value(value: &Value) -> f64 {
+    value_to_f64(value.get("totalTokens")).unwrap_or_else(|| {
+        [
+            "inputTokens",
+            "cachedInputTokens",
+            "cacheCreationTokens",
+            "cacheReadTokens",
+            "outputTokens",
+            "reasoningOutputTokens",
+        ]
+        .into_iter()
+        .filter_map(|key| value_to_f64(value.get(key)))
+        .sum()
+    })
+}
+
+fn format_percent_label(percent: f64) -> String {
+    if percent > 0.0 && percent < 0.1 {
+        return "<0.1%".to_string();
+    }
+    let rounded = (percent * 10.0).round() / 10.0;
+    if (rounded.fract()).abs() < f64::EPSILON {
+        format!("{}%", rounded as i64)
+    } else {
+        format!("{rounded:.1}%")
     }
 }
 
