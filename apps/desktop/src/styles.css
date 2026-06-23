@@ -654,9 +654,12 @@ button {
   flex: 1;
   min-width: 0;
   min-height: 0;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   max-height: 440px;
+  overflow: hidden;
+  padding-inline: clamp(40px, 4.4vw, 50px);
   opacity: 1;
   transform: translateY(0);
   transition: opacity 0.12s ease, transform 0.16s ease;
@@ -677,13 +680,15 @@ button {
 
 .sheet-header {
   width: 100%;
-  padding: 24px 36px 12px;
+  box-sizing: border-box;
+  padding: 24px 0 12px;
   color: inherit;
 }
 
 .sheet-footer {
   min-height: 38px;
-  padding: 8px 36px 14px;
+  box-sizing: border-box;
+  padding: 8px 0 14px;
   border-top: 1px solid var(--hair);
 }
 
@@ -1302,7 +1307,7 @@ button {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 0 36px 18px;
+  padding: 0 0 18px;
 }
 
 .sheet-body[data-view="usage"] {
@@ -1527,15 +1532,22 @@ button {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .session-row {
   min-height: 54px;
-  display: flex;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 58px auto auto;
   align-items: center;
-  gap: 8px;
-  padding: 10px 10px;
+  gap: 7px;
+  padding: 8px 6px;
   border-radius: 12px;
+  overflow: hidden;
   cursor: pointer;
 }
 
@@ -1732,11 +1744,11 @@ button {
 
 .session-label {
   display: flex;
-  flex: 1;
   flex-direction: column;
   justify-content: center;
   gap: 3px;
   min-width: 0;
+  overflow: hidden;
 }
 
 .session-main-line {
@@ -1744,6 +1756,7 @@ button {
   align-items: baseline;
   gap: 9px;
   min-width: 0;
+  overflow: hidden;
 }
 
 .agent-badge {
@@ -1759,8 +1772,9 @@ button {
 }
 
 .session-project {
-  max-width: 112px;
-  flex: none;
+  max-width: 132px;
+  min-width: 0;
+  flex: 0 1 auto;
   overflow: hidden;
   color: var(--text);
   font-size: 13px;
@@ -1780,6 +1794,7 @@ button {
 }
 
 .session-meta {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   font-size: 11px;
@@ -1788,7 +1803,7 @@ button {
 }
 
 .session-folder {
-  max-width: 260px;
+  max-width: 100%;
   min-width: 0;
   overflow: hidden;
   color: var(--text-3);
@@ -1800,11 +1815,17 @@ button {
 
 .session-time {
   flex: none;
+  justify-self: end;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
   font-size: 10px;
 }
 
 .session-row .row-btn {
+  justify-self: end;
   margin-left: 0;
 }
 

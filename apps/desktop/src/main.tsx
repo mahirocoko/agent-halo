@@ -2404,10 +2404,9 @@ const App = () => {
                     {sessionGroups.map((group) => {
                       const session = group.primarySession;
                       const isGrouped = group.sessions.length > 1;
-                      const rowTitle = isGrouped ? `${group.workspacePath ?? group.workspace} · ${group.sessions.length} sessions` : session.conversationId;
 
                       return (
-                      <li className={`session-row ${isGrouped ? "session-group" : ""} ${group.status === "done" ? "ended" : ""}`} key={group.key} title={rowTitle} onClick={() => openSession(session.conversationId)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") openSession(session.conversationId); }} role="button" tabIndex={0}>
+                      <li className={`session-row ${isGrouped ? "session-group" : ""} ${group.status === "done" ? "ended" : ""}`} key={group.key} aria-label={isGrouped ? `${group.project}, ${group.sessions.length} sessions` : `${group.project}, ${session.conversationId}`} onClick={() => openSession(session.conversationId)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") openSession(session.conversationId); }} role="button" tabIndex={0}>
                         <SessionMascot activityKind={group.activityKind} sessionId={session.conversationId} status={group.status} />
                         <span className="session-label">
                           <span className="session-main-line">
@@ -2417,7 +2416,6 @@ const App = () => {
                           </span>
                           <span className="session-folder">{group.workspace}</span>
                         </span>
-                        <span className="spacer" />
                         <span className="session-time">{formatTime(group.lastActivityAt)}</span>
                         <button
                           className="row-btn row-focus"
@@ -2427,7 +2425,7 @@ const App = () => {
                             void focusSelectedSession(session);
                           }}
                           data-tauri-drag-region="false"
-                          title="Focus session in Ghostty"
+                          aria-label={`Focus ${group.project} session in Ghostty`}
                         >
                           <Focus size={11} strokeWidth={2.4} />
                           Focus
@@ -2442,7 +2440,7 @@ const App = () => {
                               else dismissSession(session.conversationId);
                             }}
                             data-tauri-drag-region="false"
-                          title={isGrouped ? "Dismiss workspace sessions" : "Dismiss session"}
+                          aria-label={isGrouped ? "Dismiss workspace sessions" : "Dismiss session"}
                         >
                             <X size={12} strokeWidth={2.5} />
                         </button>
