@@ -54,7 +54,7 @@ Events are newline-delimited JSON in `~/.letta/mods/agent-halo.events.ndjson` an
 
 `GET /snapshot` also returns `recent: AgentHaloEvent[]`. `POST /hook/stop` is a local hook integration endpoint that converts a Letta `Stop` hook into a `turn_stop` event. `POST /ingest` is the local multi-instance fan-in endpoint: secondary mod instances that cannot bind the bridge port forward their events to the primary bridge instead of dropping them. Current bridge session actions intentionally report `focusTerminal: false` and `endSession: false` until real Letta-scoped session/process capabilities exist.
 
-The desktop app may expose a separate native-only terminal focus fallback. For Ghostty, it uses Ghostty's macOS scripting dictionary to match a terminal by cwd/title/id, select the owning tab, and focus the terminal. For Warp, it uses macOS accessibility window-title matching when available, then falls back to app activation. It is still not a bridge-level session action and should remain clearly labeled as a desktop-native fallback.
+The desktop app may expose a separate native-only terminal focus fallback. For Ghostty, it uses Ghostty's macOS scripting dictionary to match a terminal by cwd/title/id, select the owning tab, and focus the terminal. For Warp, it uses macOS accessibility window-title matching and can cycle visible Warp tabs through the Tab menu, then falls back to app activation. Warp does not expose Ghostty-style terminal/tab metadata, so exact tab focus depends on unique window/tab titles. It is still not a bridge-level session action and should remain clearly labeled as a desktop-native fallback.
 
 ## Event types
 

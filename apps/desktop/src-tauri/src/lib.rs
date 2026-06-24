@@ -55,6 +55,12 @@ const GROK_BILLING_URL: &str = "https://cli-chat-proxy.grok.com/v1/billing";
 const GROK_SETTINGS_URL: &str = "https://cli-chat-proxy.grok.com/v1/settings";
 const GROK_TOKEN_AUTH_HEADER: &str = "xai-grok-cli";
 
+#[derive(Debug, Clone)]
+struct TerminalFocusHints {
+    primary: Vec<String>,
+    fallback: Vec<String>,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct CodexAuthFile {
     #[serde(rename = "OPENAI_API_KEY")]
@@ -2047,21 +2053,21 @@ fn focus_supported_terminal_window(
     let hints = build_focus_hints(conversation_id, cwd, agent_name);
     let mut errors = Vec::new();
 
-    match focus_ghostty_with_window_hints(&hints) {
+    match focus_ghostty_with_window_hints(&hints.all()) {
         Ok(Some(message)) => return Ok(message),
         Ok(None) => {}
         Err(error) => errors.push(format!("Ghostty: {error}")),
     }
 
     if app_is_running_by_bundle("dev.warp.Warp-Stable") {
-        if let Ok(Some(message)) = focus_warp_with_window_hints(&hints) {
+        if let Ok(Some(message)) = focus_warp_with_window_hints(&hints.primary, &hints.fallback) {
             return Ok(message);
         }
 
         return activate_terminal_app_by_bundle("dev.warp.Warp-Stable", "Warp");
     }
 
-    match focus_warp_with_window_hints(&hints) {
+    match focus_warp_with_window_hints(&hints.primary, &hints.fallback) {
         Ok(Some(message)) => return Ok(message),
         Ok(None) => {}
         Err(error) => errors.push(format!("Warp: {error}")),
@@ -2153,33 +2159,58 @@ fn apple_script_returns_true(script: &str) -> bool {
         .unwrap_or(false)
 }
 
+impl TerminalFocusHints {
+    fn all(&self) -> Vec<String> {
+        dedup_hints(
+            self.primary
+                .iter()
+                .chain(self.fallback.iter())
+                .cloned()
+                .collect(),
+        )
+    }
+}
+
+fn dedup_hints(hints: Vec<String>) -> Vec<String> {
+    let mut deduped = Vec::new();
+    for hint in hints {
+        if hint.trim().is_empty() || deduped.iter().any(|value| value == &hint) {
+            continue;
+        }
+        deduped.push(hint);
+    }
+    deduped
+}
+
 fn build_focus_hints(
     conversation_id: &str,
     cwd: Option<&str>,
     agent_name: Option<&str>,
-) -> Vec<String> {
-    let mut hints = Vec::new();
+) -> TerminalFocusHints {
+    let mut primary = Vec::new();
+    let mut fallback = Vec::new();
     let trimmed_conversation_id = conversation_id.trim();
 
     if !trimmed_conversation_id.is_empty() {
-        hints.push(trimmed_conversation_id.to_string());
-        hints.push(trimmed_conversation_id.chars().take(8).collect::<String>());
+        primary.push(trimmed_conversation_id.to_string());
+        primary.push(trimmed_conversation_id.chars().take(8).collect::<String>());
     }
 
     if let Some(cwd) = cwd.map(str::trim).filter(|value| !value.is_empty()) {
-        hints.push(cwd.to_string());
+        primary.push(cwd.to_string());
         if let Some(name) = Path::new(cwd).file_name().and_then(|name| name.to_str()) {
-            hints.push(name.to_string());
+            primary.push(name.to_string());
         }
     }
 
     if let Some(agent_name) = agent_name.map(str::trim).filter(|value| !value.is_empty()) {
-        hints.push(agent_name.to_string());
+        fallback.push(agent_name.to_string());
     }
 
-    hints.sort();
-    hints.dedup();
-    hints
+    TerminalFocusHints {
+        primary: dedup_hints(primary),
+        fallback: dedup_hints(fallback),
+    }
 }
 
 fn focus_ghostty_with_window_hints(hints: &[String]) -> Result<Option<String>, String> {
@@ -2210,8 +2241,11 @@ fn focus_ghostty_with_window_hints(hints: &[String]) -> Result<Option<String>, S
     }
 }
 
-fn focus_warp_with_window_hints(hints: &[String]) -> Result<Option<String>, String> {
-    let script = build_focus_warp_script(hints);
+fn focus_warp_with_window_hints(
+    primary_hints: &[String],
+    fallback_hints: &[String],
+) -> Result<Option<String>, String> {
+    let script = build_focus_warp_script(primary_hints, fallback_hints);
     let output = Command::new("osascript")
         .arg("-e")
         .arg(script)
@@ -2284,38 +2318,81 @@ return "unmatched"
     )
 }
 
-fn build_focus_warp_script(hints: &[String]) -> String {
-    let hints_source = hints
+fn build_focus_warp_script(primary_hints: &[String], fallback_hints: &[String]) -> String {
+    let primary_hints_source = primary_hints
         .iter()
         .filter(|hint| !hint.trim().is_empty())
         .map(|hint| apple_script_string(hint))
         .collect::<Vec<_>>()
         .join(", ");
-    let hints_source = if hints_source.is_empty() {
+    let primary_hints_source = if primary_hints_source.is_empty() {
         "{}".to_string()
     } else {
-        format!("{{{hints_source}}}")
+        format!("{{{primary_hints_source}}}")
+    };
+
+    let fallback_hints_source = fallback_hints
+        .iter()
+        .filter(|hint| !hint.trim().is_empty())
+        .map(|hint| apple_script_string(hint))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let fallback_hints_source = if fallback_hints_source.is_empty() {
+        "{}".to_string()
+    } else {
+        format!("{{{fallback_hints_source}}}")
     };
 
     format!(
-        r#"set matchHints to {hints_source}
+        r#"set primaryHints to {primary_hints_source}
+set fallbackHints to {fallback_hints_source}
 tell application "System Events"
   set warpProcesses to application processes whose bundle identifier is "dev.warp.Warp-Stable"
   if (count warpProcesses) is 0 then return "unmatched"
   set warpProcess to item 1 of warpProcesses
   tell warpProcess
     repeat with candidateWindow in windows
-      set windowTitle to name of candidateWindow as text
-      repeat with matchHint in matchHints
-        set hintText to matchHint as text
-        if hintText is not "" then
-          if windowTitle contains hintText then
-            perform action "AXRaise" of candidateWindow
-            set frontmost to true
-            tell application id "dev.warp.Warp-Stable" to activate
-            return "matched:" & windowTitle
+      perform action "AXRaise" of candidateWindow
+      set frontmost to true
+      tell application id "dev.warp.Warp-Stable" to activate
+      delay 0.08
+
+      repeat with scanIndex from 0 to 23
+        set windowTitle to name of candidateWindow as text
+        repeat with matchHint in primaryHints
+          set hintText to matchHint as text
+          if hintText is not "" then
+            if windowTitle contains hintText then
+              return "matched:" & windowTitle & " · exact"
+            end if
           end if
-        end if
+        end repeat
+
+        try
+          click menu item "Switch to Next Tab" of menu "Tab" of menu bar 1
+          delay 0.08
+        on error
+          exit repeat
+        end try
+      end repeat
+
+      repeat with scanIndex from 0 to 23
+        set windowTitle to name of candidateWindow as text
+        repeat with matchHint in fallbackHints
+          set hintText to matchHint as text
+          if hintText is not "" then
+            if windowTitle contains hintText then
+              return "matched:" & windowTitle & " · fallback"
+            end if
+          end if
+        end repeat
+
+        try
+          click menu item "Switch to Next Tab" of menu "Tab" of menu bar 1
+          delay 0.08
+        on error
+          exit repeat
+        end try
       end repeat
     end repeat
   end tell
