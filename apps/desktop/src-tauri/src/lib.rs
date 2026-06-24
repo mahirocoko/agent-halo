@@ -2458,7 +2458,7 @@ tell application "System Events"
       set frontmost to true
       tell application id "dev.warp.Warp-Stable" to activate
       delay 0.08
-      set initialWindowTitle to name of candidateWindow as text
+      set switchedTabs to 0
 
       repeat with scanIndex from 0 to 23
         set windowTitle to name of candidateWindow as text
@@ -2473,29 +2473,18 @@ tell application "System Events"
 
         try
           click menu item "Switch to Next Tab" of menu "Tab" of menu bar 1
+          set switchedTabs to switchedTabs + 1
           delay 0.08
-          if (name of candidateWindow as text) is initialWindowTitle then exit repeat
         on error
           exit repeat
         end try
       end repeat
 
-      if (count fallbackHints) > 0 then
-        repeat with scanIndex from 0 to 23
-          set windowTitle to name of candidateWindow as text
-          repeat with matchHint in fallbackHints
-            set hintText to matchHint as text
-            if hintText is not "" then
-              if windowTitle contains hintText then
-                return "matched:" & windowTitle & " · fallback"
-              end if
-            end if
-          end repeat
-
+      if switchedTabs > 0 then
+        repeat switchedTabs times
           try
-            click menu item "Switch to Next Tab" of menu "Tab" of menu bar 1
+            click menu item "Switch to Previous Tab" of menu "Tab" of menu bar 1
             delay 0.08
-            if (name of candidateWindow as text) is initialWindowTitle then exit repeat
           on error
             exit repeat
           end try
