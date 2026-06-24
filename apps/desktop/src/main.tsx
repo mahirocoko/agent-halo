@@ -2115,13 +2115,14 @@ const App = () => {
     }
 
     try {
+      closePanel({ suppressHover: true });
+      await new Promise((resolve) => window.setTimeout(resolve, 180));
       const message = await invoke<string>("focus_terminal", {
         conversationId: session.conversationId,
         cwd: "cwd" in session ? session.cwd : session.workspacePath,
         agentName: session.agentName,
       });
       setSessionAction({ ok: true, message });
-      closePanel({ suppressHover: true });
     } catch (error) {
       setSessionAction({ ok: false, message: error instanceof Error ? error.message : "Terminal focus failed" });
     }

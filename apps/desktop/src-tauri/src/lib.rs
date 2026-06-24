@@ -2053,14 +2053,18 @@ fn focus_supported_terminal_window(
         Err(error) => errors.push(format!("Ghostty: {error}")),
     }
 
+    if app_is_running_by_bundle("dev.warp.Warp-Stable") {
+        if let Ok(Some(message)) = focus_warp_with_window_hints(&hints) {
+            return Ok(message);
+        }
+
+        return activate_terminal_app_by_bundle("dev.warp.Warp-Stable", "Warp");
+    }
+
     match focus_warp_with_window_hints(&hints) {
         Ok(Some(message)) => return Ok(message),
         Ok(None) => {}
         Err(error) => errors.push(format!("Warp: {error}")),
-    }
-
-    if app_is_running_by_bundle("dev.warp.Warp-Stable") {
-        return activate_terminal_app_by_bundle("dev.warp.Warp-Stable", "Warp");
     }
 
     if app_is_running("Ghostty") {
