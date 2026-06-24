@@ -2060,6 +2060,12 @@ fn focus_supported_terminal_window(
     }
 
     if app_is_running_by_bundle("dev.warp.Warp-Stable") {
+        if let Some(title) = build_warp_terminal_title(conversation_id, cwd) {
+            if let Ok(message) = focus_warp_with_control_cli(&title) {
+                return Ok(message);
+            }
+        }
+
         if let Ok(Some(message)) = focus_warp_with_window_hints(&hints.primary, &hints.fallback) {
             return Ok(message);
         }
@@ -2093,6 +2099,88 @@ fn focus_supported_terminal_window(
             errors.join("; ")
         )
     })
+}
+
+fn build_warp_terminal_title(conversation_id: &str, cwd: Option<&str>) -> Option<String> {
+    let short_conversation_id = terminal_title_part(conversation_id).map(|value| {
+        if value.len() > 12 {
+            value.chars().take(12).collect::<String>()
+        } else {
+            value
+        }
+    });
+    let workspace = cwd.and_then(terminal_title_part).and_then(|value| {
+        Path::new(&value)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .map(str::to_string)
+            .or(Some(value))
+    });
+    let parts = [
+        Some("Agent Halo".to_string()),
+        workspace,
+        short_conversation_id,
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>();
+
+    if parts.len() <= 1 {
+        None
+    } else {
+        Some(parts.join(" · "))
+    }
+}
+
+fn terminal_title_part(value: &str) -> Option<String> {
+    let cleaned = value
+        .chars()
+        .map(|character| {
+            if character.is_control() {
+                ' '
+            } else {
+                character
+            }
+        })
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    if cleaned.is_empty() {
+        None
+    } else {
+        Some(cleaned)
+    }
+}
+
+fn focus_warp_with_control_cli(tab_title: &str) -> Result<String, String> {
+    let Some(warpctrl_path) = find_warpctrl_path() else {
+        return Err("warpctrl is not installed".to_string());
+    };
+
+    let output = Command::new(&warpctrl_path)
+        .args(["tab", "activate", "--tab-title", tab_title])
+        .output()
+        .map_err(|error| format!("Failed to run warpctrl: {error}"))?;
+
+    if output.status.success() {
+        return Ok(format!("Focused Warp · {tab_title} · warpctrl"));
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    Err(if stderr.is_empty() {
+        "warpctrl tab activation failed".to_string()
+    } else {
+        stderr
+    })
+}
+
+fn find_warpctrl_path() -> Option<PathBuf> {
+    ["/usr/local/bin/warpctrl", "/opt/homebrew/bin/warpctrl"]
+        .iter()
+        .map(PathBuf::from)
+        .find(|path| path.exists())
 }
 
 fn activate_terminal_app(app_name: &str) -> Result<String, String> {
