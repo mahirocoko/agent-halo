@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, writeSync } from "node:fs";
 import { createServer, request } from "node:http";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -72,12 +72,30 @@ function buildTerminalTitle(event, ctx) {
 }
 
 function setTerminalTitle(title) {
-  if (!title || process.stdout?.isTTY !== true) return;
+  if (!title) return;
+  const sequence = `\u001b]2;${title}\u0007\u001b]0;${title}\u0007`;
   try {
-    process.stdout.write(`\u001b]0;${title}\u0007`);
+    if (process.stdout?.isTTY === true) process.stdout.write(sequence);
+  } catch {
+    // Continue to /dev/tty fallback below.
+  }
+
+  try {
+    const tty = openSync("/dev/tty", "w");
+    try {
+      writeSync(tty, sequence);
+    } finally {
+      closeSync(tty);
+    }
   } catch {
     // Ignore terminal title failures; presence events should continue normally.
   }
+}
+
+function reinforceTerminalTitle(title) {
+  setTerminalTitle(title);
+  setTimeout(() => setTerminalTitle(title), 150).unref?.();
+  setTimeout(() => setTerminalTitle(title), 600).unref?.();
 }
 
 function modelToString(model) {
@@ -458,7 +476,7 @@ export default function activate(letta) {
   if (letta.capabilities.events?.lifecycle) {
     disposers.push(
       letta.events.on("conversation_open", (event, ctx) => {
-        if (config.setTerminalTitle) setTerminalTitle(buildTerminalTitle(event, ctx));
+        if (config.setTerminalTitle) reinforceTerminalTitle(buildTerminalTitle(event, ctx));
         bridge.emit(
           baseEvent("conversation_open", event, ctx, {
             reason: event.reason,
@@ -485,7 +503,7 @@ export default function activate(letta) {
   if (letta.capabilities.events?.turns) {
     disposers.push(
       letta.events.on("turn_start", (event, ctx) => {
-        if (config.setTerminalTitle) setTerminalTitle(buildTerminalTitle(event, ctx));
+        if (config.setTerminalTitle) reinforceTerminalTitle(buildTerminalTitle(event, ctx));
         const data = { inputCount: Array.isArray(event.input) ? event.input.length : 0 };
         if (config.captureTextPreview) {
           data.userTextPreview = getTextPreview(event.input, config.maxTextPreviewLength);
@@ -498,7 +516,7 @@ export default function activate(letta) {
   if (letta.capabilities.events?.tools) {
     disposers.push(
       letta.events.on("tool_start", (event, ctx) => {
-        if (config.setTerminalTitle) setTerminalTitle(buildTerminalTitle(event, ctx));
+        if (config.setTerminalTitle) reinforceTerminalTitle(buildTerminalTitle(event, ctx));
         bridge.emit(
           baseEvent("tool_start", event, ctx, {
             toolCallId: event.toolCallId ?? null,

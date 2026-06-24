@@ -2155,32 +2155,51 @@ fn terminal_title_part(value: &str) -> Option<String> {
 }
 
 fn focus_warp_with_control_cli(tab_title: &str) -> Result<String, String> {
-    let Some(warpctrl_path) = find_warpctrl_path() else {
+    let commands = warp_control_commands();
+    if commands.is_empty() {
         return Err("warpctrl is not installed".to_string());
-    };
-
-    let output = Command::new(&warpctrl_path)
-        .args(["tab", "activate", "--tab-title", tab_title])
-        .output()
-        .map_err(|error| format!("Failed to run warpctrl: {error}"))?;
-
-    if output.status.success() {
-        return Ok(format!("Focused Warp · {tab_title} · warpctrl"));
     }
 
-    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    Err(if stderr.is_empty() {
+    let mut errors = Vec::new();
+    for mut command in commands {
+        let executable = command.remove(0);
+        let output = Command::new(&executable)
+            .args(command)
+            .args(["tab", "activate", "--tab-title", tab_title])
+            .output()
+            .map_err(|error| format!("Failed to run {}: {error}", executable.display()))?;
+
+        if output.status.success() {
+            return Ok(format!("Focused Warp · {tab_title} · warpctrl"));
+        }
+
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        if !stderr.is_empty() {
+            errors.push(stderr);
+        }
+    }
+
+    Err(if errors.is_empty() {
         "warpctrl tab activation failed".to_string()
     } else {
-        stderr
+        errors.join("; ")
     })
 }
 
-fn find_warpctrl_path() -> Option<PathBuf> {
-    ["/usr/local/bin/warpctrl", "/opt/homebrew/bin/warpctrl"]
+fn warp_control_commands() -> Vec<Vec<PathBuf>> {
+    let mut commands = ["/usr/local/bin/warpctrl", "/opt/homebrew/bin/warpctrl"]
         .iter()
         .map(PathBuf::from)
-        .find(|path| path.exists())
+        .filter(|path| path.exists())
+        .map(|path| vec![path])
+        .collect::<Vec<_>>();
+
+    let stable_executable = PathBuf::from("/Applications/Warp.app/Contents/MacOS/stable");
+    if stable_executable.exists() {
+        commands.push(vec![stable_executable, PathBuf::from("--warpctrl")]);
+    }
+
+    commands
 }
 
 fn activate_terminal_app(app_name: &str) -> Result<String, String> {
@@ -2439,6 +2458,7 @@ tell application "System Events"
       set frontmost to true
       tell application id "dev.warp.Warp-Stable" to activate
       delay 0.08
+      set initialWindowTitle to name of candidateWindow as text
 
       repeat with scanIndex from 0 to 23
         set windowTitle to name of candidateWindow as text
@@ -2454,29 +2474,33 @@ tell application "System Events"
         try
           click menu item "Switch to Next Tab" of menu "Tab" of menu bar 1
           delay 0.08
+          if (name of candidateWindow as text) is initialWindowTitle then exit repeat
         on error
           exit repeat
         end try
       end repeat
 
-      repeat with scanIndex from 0 to 23
-        set windowTitle to name of candidateWindow as text
-        repeat with matchHint in fallbackHints
-          set hintText to matchHint as text
-          if hintText is not "" then
-            if windowTitle contains hintText then
-              return "matched:" & windowTitle & " · fallback"
+      if (count fallbackHints) > 0 then
+        repeat with scanIndex from 0 to 23
+          set windowTitle to name of candidateWindow as text
+          repeat with matchHint in fallbackHints
+            set hintText to matchHint as text
+            if hintText is not "" then
+              if windowTitle contains hintText then
+                return "matched:" & windowTitle & " · fallback"
+              end if
             end if
-          end if
-        end repeat
+          end repeat
 
-        try
-          click menu item "Switch to Next Tab" of menu "Tab" of menu bar 1
-          delay 0.08
-        on error
-          exit repeat
-        end try
-      end repeat
+          try
+            click menu item "Switch to Next Tab" of menu "Tab" of menu bar 1
+            delay 0.08
+            if (name of candidateWindow as text) is initialWindowTitle then exit repeat
+          on error
+            exit repeat
+          end try
+        end repeat
+      end if
     end repeat
   end tell
 end tell
