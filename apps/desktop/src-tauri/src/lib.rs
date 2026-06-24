@@ -2185,10 +2185,9 @@ fn dedup_hints(hints: Vec<String>) -> Vec<String> {
 fn build_focus_hints(
     conversation_id: &str,
     cwd: Option<&str>,
-    agent_name: Option<&str>,
+    _agent_name: Option<&str>,
 ) -> TerminalFocusHints {
     let mut primary = Vec::new();
-    let mut fallback = Vec::new();
     let trimmed_conversation_id = conversation_id.trim();
 
     if !trimmed_conversation_id.is_empty() {
@@ -2203,13 +2202,9 @@ fn build_focus_hints(
         }
     }
 
-    if let Some(agent_name) = agent_name.map(str::trim).filter(|value| !value.is_empty()) {
-        fallback.push(agent_name.to_string());
-    }
-
     TerminalFocusHints {
         primary: dedup_hints(primary),
-        fallback: dedup_hints(fallback),
+        fallback: Vec::new(),
     }
 }
 

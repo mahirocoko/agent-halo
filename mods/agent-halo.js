@@ -9,6 +9,7 @@ const DEFAULT_PORT = 47621;
 const MOD_DIR = join(homedir(), ".letta", "mods");
 const CONFIG_PATH = join(MOD_DIR, "agent-halo.config.json");
 const DEFAULT_LOG_FILE = join(MOD_DIR, "agent-halo.events.ndjson");
+const TERMINAL_TITLE_PREFIX = "Agent Halo";
 
 function readConfig() {
   const fallback = {
@@ -17,6 +18,7 @@ function readConfig() {
     logFile: DEFAULT_LOG_FILE,
     captureTextPreview: false,
     maxTextPreviewLength: 160,
+    setTerminalTitle: true,
   };
 
   if (!existsSync(CONFIG_PATH)) return fallback;
@@ -33,9 +35,48 @@ function readConfig() {
       maxTextPreviewLength: Number.isInteger(parsed.maxTextPreviewLength)
         ? parsed.maxTextPreviewLength
         : fallback.maxTextPreviewLength,
+      setTerminalTitle: parsed.setTerminalTitle !== false,
     };
   } catch {
     return fallback;
+  }
+}
+
+function terminalTitlePart(value) {
+  if (typeof value !== "string") return null;
+  return value.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim() || null;
+}
+
+function workspaceName(cwd) {
+  const cleanCwd = terminalTitlePart(cwd);
+  if (!cleanCwd) return null;
+  const parts = cleanCwd.split("/").filter(Boolean);
+  return parts.at(-1) ?? cleanCwd;
+}
+
+function shortConversationId(conversationId) {
+  const cleanConversationId = terminalTitlePart(conversationId);
+  if (!cleanConversationId) return null;
+  return cleanConversationId.length > 12 ? cleanConversationId.slice(0, 12) : cleanConversationId;
+}
+
+function buildTerminalTitle(event, ctx) {
+  const conversationId = event.conversationId ?? ctx?.conversation?.id ?? null;
+  return [
+    TERMINAL_TITLE_PREFIX,
+    workspaceName(ctx?.cwd),
+    shortConversationId(conversationId),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function setTerminalTitle(title) {
+  if (!title || process.stdout?.isTTY !== true) return;
+  try {
+    process.stdout.write(`\u001b]0;${title}\u0007`);
+  } catch {
+    // Ignore terminal title failures; presence events should continue normally.
   }
 }
 
@@ -417,6 +458,7 @@ export default function activate(letta) {
   if (letta.capabilities.events?.lifecycle) {
     disposers.push(
       letta.events.on("conversation_open", (event, ctx) => {
+        if (config.setTerminalTitle) setTerminalTitle(buildTerminalTitle(event, ctx));
         bridge.emit(
           baseEvent("conversation_open", event, ctx, {
             reason: event.reason,
@@ -443,6 +485,7 @@ export default function activate(letta) {
   if (letta.capabilities.events?.turns) {
     disposers.push(
       letta.events.on("turn_start", (event, ctx) => {
+        if (config.setTerminalTitle) setTerminalTitle(buildTerminalTitle(event, ctx));
         const data = { inputCount: Array.isArray(event.input) ? event.input.length : 0 };
         if (config.captureTextPreview) {
           data.userTextPreview = getTextPreview(event.input, config.maxTextPreviewLength);
@@ -455,6 +498,7 @@ export default function activate(letta) {
   if (letta.capabilities.events?.tools) {
     disposers.push(
       letta.events.on("tool_start", (event, ctx) => {
+        if (config.setTerminalTitle) setTerminalTitle(buildTerminalTitle(event, ctx));
         bridge.emit(
           baseEvent("tool_start", event, ctx, {
             toolCallId: event.toolCallId ?? null,
