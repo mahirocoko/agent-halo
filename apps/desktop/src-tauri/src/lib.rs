@@ -2032,31 +2032,86 @@ fn agent_halo_mod_status() -> Result<(String, bool), String> {
 
 #[tauri::command]
 fn focus_terminal(conversation_id: String, cwd: Option<String>) -> Result<String, String> {
-    focus_ghostty_window(&conversation_id, cwd.as_deref())
+    focus_supported_terminal_window(&conversation_id, cwd.as_deref())
 }
 
-fn focus_ghostty_window(conversation_id: &str, cwd: Option<&str>) -> Result<String, String> {
+fn focus_supported_terminal_window(
+    conversation_id: &str,
+    cwd: Option<&str>,
+) -> Result<String, String> {
     let hints = build_focus_hints(conversation_id, cwd);
+    let mut errors = Vec::new();
 
-    if let Ok(message) = focus_ghostty_with_window_hints(&hints) {
+    match focus_ghostty_with_window_hints(&hints) {
+        Ok(Some(message)) => return Ok(message),
+        Ok(None) => {}
+        Err(error) => errors.push(format!("Ghostty: {error}")),
+    }
+
+    match focus_warp_with_window_hints(&hints) {
+        Ok(Some(message)) => return Ok(message),
+        Ok(None) => {}
+        Err(error) => errors.push(format!("Warp: {error}")),
+    }
+
+    if app_is_running("Warp") {
+        return activate_terminal_app("Warp");
+    }
+
+    if app_is_running("Ghostty") {
+        return activate_terminal_app("Ghostty");
+    }
+
+    if let Ok(message) = activate_terminal_app("Warp") {
         return Ok(message);
     }
 
+    if let Ok(message) = activate_terminal_app("Ghostty") {
+        return Ok(message);
+    }
+
+    Err(if errors.is_empty() {
+        "Failed to activate a supported terminal".to_string()
+    } else {
+        format!(
+            "Failed to activate a supported terminal ({})",
+            errors.join("; ")
+        )
+    })
+}
+
+fn activate_terminal_app(app_name: &str) -> Result<String, String> {
     let output = Command::new("open")
-        .args(["-a", "Ghostty"])
+        .args(["-a", app_name])
         .output()
-        .map_err(|error| format!("Failed to launch Ghostty: {error}"))?;
+        .map_err(|error| format!("Failed to launch {app_name}: {error}"))?;
 
     if output.status.success() {
-        return Ok("Activated Ghostty · exact terminal not found".to_string());
+        return Ok(format!("Activated {app_name} · exact terminal not found"));
     }
 
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
     Err(if stderr.is_empty() {
-        "Failed to activate Ghostty".to_string()
+        format!("Failed to activate {app_name}")
     } else {
-        format!("Failed to activate Ghostty: {stderr}")
+        format!("Failed to activate {app_name}: {stderr}")
     })
+}
+
+fn app_is_running(app_name: &str) -> bool {
+    let script = format!("application {} is running", apple_script_string(app_name));
+    Command::new("osascript")
+        .arg("-e")
+        .arg(script)
+        .output()
+        .ok()
+        .and_then(|output| {
+            if !output.status.success() {
+                return None;
+            }
+            Some(String::from_utf8_lossy(&output.stdout).trim() == "true")
+        })
+        .unwrap_or(false)
 }
 
 fn build_focus_hints(conversation_id: &str, cwd: Option<&str>) -> Vec<String> {
@@ -2080,7 +2135,7 @@ fn build_focus_hints(conversation_id: &str, cwd: Option<&str>) -> Vec<String> {
     hints
 }
 
-fn focus_ghostty_with_window_hints(hints: &[String]) -> Result<String, String> {
+fn focus_ghostty_with_window_hints(hints: &[String]) -> Result<Option<String>, String> {
     let script = build_focus_ghostty_script(hints);
     let output = Command::new("osascript")
         .arg("-e")
@@ -2099,12 +2154,40 @@ fn focus_ghostty_with_window_hints(hints: &[String]) -> Result<String, String> {
 
     let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
     if stdout.strip_prefix("matched:").is_some() {
-        Ok(format!(
+        Ok(Some(format!(
             "Focused Ghostty · {}",
             stdout.trim_start_matches("matched:")
-        ))
+        )))
     } else {
-        Ok("Activated Ghostty · exact terminal not found".to_string())
+        Ok(None)
+    }
+}
+
+fn focus_warp_with_window_hints(hints: &[String]) -> Result<Option<String>, String> {
+    let script = build_focus_warp_script(hints);
+    let output = Command::new("osascript")
+        .arg("-e")
+        .arg(script)
+        .output()
+        .map_err(|error| format!("Failed to run AppleScript: {error}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if stderr.is_empty() {
+            "AppleScript focus failed".to_string()
+        } else {
+            stderr
+        });
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if stdout.strip_prefix("matched:").is_some() {
+        Ok(Some(format!(
+            "Focused Warp · {}",
+            stdout.trim_start_matches("matched:")
+        )))
+    } else {
+        Ok(None)
     }
 }
 
@@ -2148,9 +2231,47 @@ tell application "Ghostty"
       end repeat
     end repeat
   end repeat
-  activate
 end tell
-return "activated"
+return "unmatched"
+"#
+    )
+}
+
+fn build_focus_warp_script(hints: &[String]) -> String {
+    let hints_source = hints
+        .iter()
+        .filter(|hint| !hint.trim().is_empty())
+        .map(|hint| apple_script_string(hint))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let hints_source = if hints_source.is_empty() {
+        "{}".to_string()
+    } else {
+        format!("{{{hints_source}}}")
+    };
+
+    format!(
+        r#"set matchHints to {hints_source}
+tell application "System Events"
+  if not (exists process "Warp") then return "unmatched"
+  tell process "Warp"
+    repeat with candidateWindow in windows
+      set windowTitle to name of candidateWindow as text
+      repeat with matchHint in matchHints
+        set hintText to matchHint as text
+        if hintText is not "" then
+          if windowTitle contains hintText then
+            perform action "AXRaise" of candidateWindow
+            set frontmost to true
+            tell application "Warp" to activate
+            return "matched:" & windowTitle
+          end if
+        end if
+      end repeat
+    end repeat
+  end tell
+end tell
+return "unmatched"
 "#
     )
 }

@@ -2119,7 +2119,7 @@ const App = () => {
       setSessionAction({ ok: true, message });
       closePanel({ suppressHover: true });
     } catch (error) {
-      setSessionAction({ ok: false, message: error instanceof Error ? error.message : "Ghostty focus failed" });
+      setSessionAction({ ok: false, message: error instanceof Error ? error.message : "Terminal focus failed" });
     }
   };
 
@@ -2246,7 +2246,7 @@ const App = () => {
                       <span className="setup-title">Session controls</span>
                       <span className="setup-detail">
                         {canUseNativeControls
-                          ? "Ghostty focus available · end unavailable"
+                          ? "Ghostty/Warp focus available · end unavailable"
                           : capabilities.sessionActions.focusTerminal || capabilities.sessionActions.endSession
                             ? "Focus/end available from bridge"
                             : "Focus/end unavailable in current bridge"}
@@ -2266,7 +2266,7 @@ const App = () => {
                   </div>
                   <div className="detail-path" title={selectedSession.cwd}>{shortenPath(selectedSession.cwd)}</div>
                   {canUseNativeControls ? (
-                    <div className="capability-note">Focus matches Ghostty terminal cwd/title and selects its tab</div>
+                    <div className="capability-note">Focus matches Ghostty or Warp terminal windows when possible</div>
                   ) : (
                     <div className="capability-note">Focus needs the desktop runtime</div>
                   )}
@@ -2332,7 +2332,7 @@ const App = () => {
                             void focusSelectedSession(session);
                           }}
                           data-tauri-drag-region="false"
-                          title="Focus session in Ghostty"
+                          title="Focus session in terminal"
                         >
                           <Focus size={11} strokeWidth={2.4} />
                           Focus

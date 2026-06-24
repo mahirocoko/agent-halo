@@ -10,7 +10,7 @@ Agent Halo is a small macOS companion for Letta Code. It sits near the camera no
 
 - Shows live Letta Code activity in a compact notch-style overlay.
 - Groups recent conversations by workspace so subagents in the same repo stay together.
-- Lets you focus a matching Ghostty terminal from a session row.
+- Lets you focus a matching Ghostty or Warp terminal from a session row.
 - Keeps completed sessions around until you dismiss or delete them locally.
 - Shows local AI usage for supported tools such as Codex, Antigravity, Claude Code, Cursor, and Grok when their local credentials are available.
 - Installs and checks the local Letta mod from the desktop app.
@@ -101,7 +101,7 @@ pnpm desktop:web
 open http://127.0.0.1:47622/?demo=1
 ```
 
-The browser demo is useful for layout checks, but native features such as mod install, Ghostty focus, menu-bar behavior, and macOS window sizing require the Tauri desktop app.
+The browser demo is useful for layout checks, but native features such as mod install, terminal focus, menu-bar behavior, and macOS window sizing require the Tauri desktop app.
 
 ## Project layout
 

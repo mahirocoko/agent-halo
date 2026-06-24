@@ -20,8 +20,8 @@ Mahiro accepted Notchcode v1 as a read-only + dismiss + setup/control-plane surf
 | Setup/control plane | Setup view shows bridge, mod install status, next step, and session-control capability boundary. | Done |
 | Setup boundary regression | `apps/desktop/tests/demo-setup.spec.ts` verifies browser demo does not fake native install/check behavior or focus/end controls. | Covered |
 | Capability-aware bridge | `packages/protocol/src/index.ts` defines bridge capabilities; `/health` and `/snapshot` include them from `mods/agent-halo.js`. | Done |
-| No fake focus/end | Bridge-level `focusTerminal` / `endSession` remain false; desktop labels Ghostty focus as a native fallback, not exact session/process control. | Done |
-| Ghostty focus fallback | Desktop detail view uses Ghostty's scripting dictionary to match terminal cwd/title/id, select the owning tab, and focus the terminal. It falls back to app activation when no terminal match is found. | Done |
+| No fake focus/end | Bridge-level `focusTerminal` / `endSession` remain false; desktop labels terminal focus as a native fallback, not exact session/process control. | Done |
+| Ghostty/Warp focus fallback | Desktop detail view uses Ghostty's scripting dictionary or Warp accessibility window-title matching, then falls back to app activation when no terminal match is found. | Done |
 | Real end session action | Needs a real Letta session/process capability before exposing controls. | Post-v1 |
 
 ## Focus/end capability evidence
@@ -34,7 +34,7 @@ Current Letta Code mod public APIs expose lifecycle, turn, and tool events plus 
 
 The installed Letta Code protocol types include lower-level app-server commands such as `abort_message`, `terminal_kill`, and terminal process messages, but those are not exposed through the trusted mod API used by `mods/agent-halo.js`. Agent Halo should therefore keep bridge-level `sessionActions.focusTerminal` and `sessionActions.endSession` false until Letta exposes a public scoped session/process action or Mahiro explicitly accepts an internal/experimental bridge.
 
-Current desktop focus is intentionally narrower: `focus_terminal` is a macOS/Ghostty fallback that activates Ghostty, attempts to raise a window whose title contains the conversation id, cwd, or folder name, and otherwise reports app-level activation. It is not exact pane focus. Exact pane focus should use future metadata such as terminal title mapping or `TMUX_PANE` plus `tmux select-pane`.
+Current desktop focus is intentionally narrower: `focus_terminal` is a native macOS fallback for supported terminals. Ghostty matching uses its scripting dictionary; Warp matching uses accessibility window-title matching because Warp does not expose the same terminal/tab scripting model. When no exact match is found, Agent Halo activates a supported terminal and reports app-level activation. It is not exact pane focus. Exact pane focus should use future metadata such as terminal title mapping or `TMUX_PANE` plus `tmux select-pane`.
 
 ## Verification commands
 
