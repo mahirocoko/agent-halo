@@ -2031,15 +2031,20 @@ fn agent_halo_mod_status() -> Result<(String, bool), String> {
 }
 
 #[tauri::command]
-fn focus_terminal(conversation_id: String, cwd: Option<String>) -> Result<String, String> {
-    focus_supported_terminal_window(&conversation_id, cwd.as_deref())
+fn focus_terminal(
+    conversation_id: String,
+    cwd: Option<String>,
+    agent_name: Option<String>,
+) -> Result<String, String> {
+    focus_supported_terminal_window(&conversation_id, cwd.as_deref(), agent_name.as_deref())
 }
 
 fn focus_supported_terminal_window(
     conversation_id: &str,
     cwd: Option<&str>,
+    agent_name: Option<&str>,
 ) -> Result<String, String> {
-    let hints = build_focus_hints(conversation_id, cwd);
+    let hints = build_focus_hints(conversation_id, cwd, agent_name);
     let mut errors = Vec::new();
 
     match focus_ghostty_with_window_hints(&hints) {
@@ -2054,15 +2059,15 @@ fn focus_supported_terminal_window(
         Err(error) => errors.push(format!("Warp: {error}")),
     }
 
-    if app_is_running("Warp") {
-        return activate_terminal_app("Warp");
+    if app_is_running_by_bundle("dev.warp.Warp-Stable") {
+        return activate_terminal_app_by_bundle("dev.warp.Warp-Stable", "Warp");
     }
 
     if app_is_running("Ghostty") {
         return activate_terminal_app("Ghostty");
     }
 
-    if let Ok(message) = activate_terminal_app("Warp") {
+    if let Ok(message) = activate_terminal_app_by_bundle("dev.warp.Warp-Stable", "Warp") {
         return Ok(message);
     }
 
@@ -2098,8 +2103,38 @@ fn activate_terminal_app(app_name: &str) -> Result<String, String> {
     })
 }
 
+fn activate_terminal_app_by_bundle(bundle_id: &str, app_name: &str) -> Result<String, String> {
+    let output = Command::new("open")
+        .args(["-b", bundle_id])
+        .output()
+        .map_err(|error| format!("Failed to launch {app_name}: {error}"))?;
+
+    if output.status.success() {
+        return Ok(format!("Activated {app_name} · exact terminal not found"));
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    Err(if stderr.is_empty() {
+        format!("Failed to activate {app_name}")
+    } else {
+        format!("Failed to activate {app_name}: {stderr}")
+    })
+}
+
 fn app_is_running(app_name: &str) -> bool {
     let script = format!("application {} is running", apple_script_string(app_name));
+    apple_script_returns_true(&script)
+}
+
+fn app_is_running_by_bundle(bundle_id: &str) -> bool {
+    let script = format!(
+        "application id {} is running",
+        apple_script_string(bundle_id)
+    );
+    apple_script_returns_true(&script)
+}
+
+fn apple_script_returns_true(script: &str) -> bool {
     Command::new("osascript")
         .arg("-e")
         .arg(script)
@@ -2114,7 +2149,11 @@ fn app_is_running(app_name: &str) -> bool {
         .unwrap_or(false)
 }
 
-fn build_focus_hints(conversation_id: &str, cwd: Option<&str>) -> Vec<String> {
+fn build_focus_hints(
+    conversation_id: &str,
+    cwd: Option<&str>,
+    agent_name: Option<&str>,
+) -> Vec<String> {
     let mut hints = Vec::new();
     let trimmed_conversation_id = conversation_id.trim();
 
@@ -2128,6 +2167,10 @@ fn build_focus_hints(conversation_id: &str, cwd: Option<&str>) -> Vec<String> {
         if let Some(name) = Path::new(cwd).file_name().and_then(|name| name.to_str()) {
             hints.push(name.to_string());
         }
+    }
+
+    if let Some(agent_name) = agent_name.map(str::trim).filter(|value| !value.is_empty()) {
+        hints.push(agent_name.to_string());
     }
 
     hints.sort();
@@ -2253,8 +2296,10 @@ fn build_focus_warp_script(hints: &[String]) -> String {
     format!(
         r#"set matchHints to {hints_source}
 tell application "System Events"
-  if not (exists process "Warp") then return "unmatched"
-  tell process "Warp"
+  set warpProcesses to application processes whose bundle identifier is "dev.warp.Warp-Stable"
+  if (count warpProcesses) is 0 then return "unmatched"
+  set warpProcess to item 1 of warpProcesses
+  tell warpProcess
     repeat with candidateWindow in windows
       set windowTitle to name of candidateWindow as text
       repeat with matchHint in matchHints
@@ -2263,7 +2308,7 @@ tell application "System Events"
           if windowTitle contains hintText then
             perform action "AXRaise" of candidateWindow
             set frontmost to true
-            tell application "Warp" to activate
+            tell application id "dev.warp.Warp-Stable" to activate
             return "matched:" & windowTitle
           end if
         end if

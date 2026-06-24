@@ -82,6 +82,7 @@ interface INotchMetrics {
 
 interface ISessionSummary {
   conversationId: string;
+  agentName: string | null;
   project: string;
   workspace: string;
   workspacePath: string | null;
@@ -978,6 +979,7 @@ const buildSessionSummaries = (events: AgentHaloEvent[], presence: IAgentHaloPre
     const workspacePath = getSessionWorkspacePath(sessionEvents, latestEvent.cwd);
     sessions.set(conversationId, {
       conversationId,
+      agentName: latestEvent.agentName ?? null,
       project: projectName(workspacePath ?? latestEvent.cwd),
       workspace: shortenPath(workspacePath ?? latestEvent.cwd),
       workspacePath,
@@ -996,6 +998,7 @@ const buildSessionSummaries = (events: AgentHaloEvent[], presence: IAgentHaloPre
     const workspacePath = getSessionWorkspacePath(currentEvent ? [currentEvent, ...sessionEvents] : sessionEvents, presence.cwd);
     sessions.set(presence.conversationId, {
       conversationId: presence.conversationId,
+      agentName: presence.agentName,
       project: projectName(workspacePath ?? presence.cwd),
       workspace: shortenPath(workspacePath ?? presence.cwd),
       workspacePath,
@@ -1029,7 +1032,7 @@ const buildSessionDetail = (
 
   return {
     ...summary,
-    agentName: (isCurrent ? presence.agentName : latestEvent?.agentName) ?? "Mahiro Code",
+    agentName: (isCurrent ? presence.agentName : latestEvent?.agentName ?? summary.agentName) ?? "Mahiro Code",
     cwd: workspacePath ?? (isCurrent ? presence.cwd : latestEvent?.cwd) ?? "No workspace",
     model: (isCurrent ? presence.model : latestEvent?.model) ?? "Letta Code",
     permissionMode: (isCurrent ? presence.permissionMode : latestEvent?.permissionMode) ?? "—",
@@ -2115,6 +2118,7 @@ const App = () => {
       const message = await invoke<string>("focus_terminal", {
         conversationId: session.conversationId,
         cwd: "cwd" in session ? session.cwd : session.workspacePath,
+        agentName: session.agentName,
       });
       setSessionAction({ ok: true, message });
       closePanel({ suppressHover: true });
