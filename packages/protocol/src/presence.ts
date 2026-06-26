@@ -82,6 +82,21 @@ export const reducePresence = (
         toolCallCount: event.data.toolCallCount,
       };
     case "turn_start":
+    case "llm_start":
+      return {
+        ...current,
+        ...scoped,
+        status: "thinking",
+        activeToolName: null,
+      };
+    case "compact_start":
+      return {
+        ...current,
+        ...scoped,
+        status: "tool-running",
+        activeToolName: "compact",
+      };
+    case "compact_end":
       return {
         ...current,
         ...scoped,
@@ -102,6 +117,23 @@ export const reducePresence = (
         status: "tool-running",
         activeToolName: event.data.toolName,
       };
+    case "tool_end":
+      return {
+        ...current,
+        ...scoped,
+        status: event.data.status === "error" ? "error" : "thinking",
+        activeToolName: null,
+      };
+    case "llm_end": {
+      const reason = event.data.stopReason?.toLowerCase() ?? "";
+      const isTerminal = reason.includes("end") || reason.includes("stop") || reason.includes("done") || reason.includes("complete");
+      return {
+        ...current,
+        ...scoped,
+        status: isTerminal ? "closed" : "thinking",
+        activeToolName: null,
+      };
+    }
     case "bridge_error":
       return {
         ...current,

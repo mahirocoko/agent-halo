@@ -74,6 +74,8 @@ function getCapabilities(letta) {
       lifecycle: letta.capabilities.events?.lifecycle === true,
       turns: letta.capabilities.events?.turns === true,
       tools: letta.capabilities.events?.tools === true,
+      compact: letta.capabilities.events?.compact === true,
+      llm: letta.capabilities.events?.llm === true,
     },
     endpoints: {
       health: true,
@@ -87,6 +89,23 @@ function getCapabilities(letta) {
       endSession: false,
       dismissEnded: true,
     },
+  };
+}
+
+function numberOrNull(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function normalizeLlmUsage(value) {
+  if (!value || typeof value !== "object") return null;
+  const promptTokens = numberOrNull(value.promptTokens);
+  const completionTokens = numberOrNull(value.completionTokens);
+  const rawTotalTokens = numberOrNull(value.totalTokens);
+  const computedTotalTokens = promptTokens !== null && completionTokens !== null ? promptTokens + completionTokens : null;
+  return {
+    promptTokens,
+    completionTokens,
+    totalTokens: computedTotalTokens ?? rawTotalTokens,
   };
 }
 
@@ -197,7 +216,7 @@ function createBridge(letta, config) {
     for (const key of Object.keys(lastScope)) {
       if (payload[key] != null) lastScope[key] = payload[key];
     }
-    if (payload.type === "turn_start" || payload.type === "tool_start") {
+    if (payload.type === "turn_start" || payload.type === "tool_start" || payload.type === "compact_start" || payload.type === "llm_start") {
       lastWorkingScope = cloneScope(lastScope);
     }
   };
@@ -409,11 +428,6 @@ export default function activate(letta) {
   const config = readConfig();
   const bridge = createBridge(letta, config);
 
-  if (letta.capabilities.ui?.statusValues) {
-    letta.ui.setStatus("agent-halo", `:${config.port}`);
-    disposers.push(() => letta.ui.clearStatus("agent-halo"));
-  }
-
   if (letta.capabilities.events?.lifecycle) {
     disposers.push(
       letta.events.on("conversation_open", (event, ctx) => {
@@ -460,6 +474,75 @@ export default function activate(letta) {
             toolCallId: event.toolCallId ?? null,
             toolName: event.toolName,
             argKeys: Object.keys(event.args ?? {}).sort(),
+          }),
+        );
+      }),
+    );
+
+    disposers.push(
+      letta.events.on("tool_end", (event, ctx) => {
+        bridge.emit(
+          baseEvent("tool_end", event, ctx, {
+            toolCallId: event.toolCallId ?? null,
+            toolName: event.toolName,
+            status: event.status,
+            outputLength: typeof event.output === "string" ? event.output.length : null,
+          }),
+        );
+      }),
+    );
+  }
+
+  if (letta.capabilities.events?.compact) {
+    disposers.push(
+      letta.events.on("compact_start", (event, ctx) => {
+        bridge.emit(
+          baseEvent("compact_start", event, ctx, {
+            trigger: event.trigger,
+          }),
+        );
+      }),
+    );
+
+    disposers.push(
+      letta.events.on("compact_end", (event, ctx) => {
+        bridge.emit(
+          baseEvent("compact_end", event, ctx, {
+            trigger: event.trigger,
+            messagesBefore: typeof event.messagesBefore === "number" ? event.messagesBefore : null,
+            messagesAfter: typeof event.messagesAfter === "number" ? event.messagesAfter : null,
+            contextTokensBefore: typeof event.contextTokensBefore === "number" ? event.contextTokensBefore : null,
+            contextTokensAfter: typeof event.contextTokensAfter === "number" ? event.contextTokensAfter : null,
+          }),
+        );
+      }),
+    );
+  }
+
+  if (letta.capabilities.events?.llm) {
+    disposers.push(
+      letta.events.on("llm_start", (event, ctx) => {
+        const model = modelToString(event.model) ?? modelToString(ctx?.model) ?? "unknown-model";
+        bridge.emit(
+          baseEvent("llm_start", event, ctx, {
+            model,
+            messageCount: typeof event.messageCount === "number" ? event.messageCount : null,
+            contextWindow: typeof event.contextWindow === "number" ? event.contextWindow : null,
+          }),
+        );
+      }),
+    );
+
+    disposers.push(
+      letta.events.on("llm_end", (event, ctx) => {
+        const model = modelToString(event.model) ?? modelToString(ctx?.model) ?? "unknown-model";
+        const usage = normalizeLlmUsage(event.usage);
+        bridge.emit(
+          baseEvent("llm_end", event, ctx, {
+            model,
+            stopReason: typeof event.stopReason === "string" ? event.stopReason : null,
+            durationMs: typeof event.durationMs === "number" ? event.durationMs : null,
+            usage,
           }),
         );
       }),

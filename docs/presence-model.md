@@ -24,13 +24,18 @@ The current reducer lives in `packages/protocol/src/presence.ts`.
 | `conversation_open` | `idle` | Clears active tool and closed stats. |
 | `turn_start` | `thinking` | A user turn entered the model path. |
 | `tool_start` | `tool-running` | Captures `activeToolName`; no arguments are stored. |
+| `tool_end` | `thinking` / `error` | Clears active tool; errors become error state, success returns to thinking until the next model/turn event. |
+| `compact_start` | `tool-running` | Shows context compaction as active work with `activeToolName = compact`. |
+| `compact_end` | `thinking` | Records before/after compaction stats and returns to thinking. |
+| `llm_start` | `thinking` | A provider request started; records model, message count, and context window. |
+| `llm_end` | `closed` / `thinking` | Records stop reason, duration, and token usage; terminal stop reasons close the turn. |
 | `turn_stop` | `closed` | Local Letta `Stop` hook signal; means the assistant turn finished and should show as done/sticky. |
 | `conversation_close` | `closed` | Captures message/tool counts when available. |
 | `bridge_error` | `error` | Reserved for bridge/runtime errors. |
 
-## Missing event types
+## Completion and stale fallback
 
-Letta Code mods currently expose `tool_start` but not `tool_end` in this first event slice. Agent Halo can use Mahiro's local Letta `Stop` hook via `POST /hook/stop` as the reliable turn-finished signal. Viewers should still treat long-running `thinking` / `tool-running` states as potentially stale after a local timeout when the hook endpoint is unavailable.
+Letta Code mods now expose `tool_end`, `compact_start` / `compact_end`, and local-backend `llm_start` / `llm_end`. Agent Halo still keeps Mahiro's local Letta `Stop` hook via `POST /hook/stop` as a reliable turn-finished fallback because not every backend/surface emits every event. Viewers should still treat long-running `thinking` / `tool-running` states as potentially stale after a local timeout when terminal events are unavailable.
 
 The terminal viewer defaults to `staleAfterMs = 30000`.
 
@@ -51,10 +56,13 @@ Current raw events:
 | `tool_start` + `memory_apply_patch` | `memory` | `coffee` | Learning/memory write; next custom candidate should be archive/spark animation. |
 | `tool_start` + `Skill` | `skill` | `work` | Skill invoked; next custom candidate should be tool-belt animation. |
 | `tool_start` + goal tools | `goal` | `coffee` | Goal tracking; next custom candidate should be checkpoint animation. |
+| `tool_end` success | derived tool kind | `work`/`idle` | Tool finished; status/output length are recorded without raw output. |
+| `compact_start` / `compact_end` | `compact` | `dust` | Context compaction started/completed; token/message shrink stats are available on end. |
+| `llm_start` / `llm_end` | `model` | `idle`/`work` | Provider request started/completed; duration and token usage are available on end. |
 | `turn_stop` / `conversation_close` | `done` | `idle` | Turn/session completed; candidate for settle/idle/done animation. |
 | `bridge_error` | `error` | `hurt` | Bridge or stream issue; candidate for hurt/fluster animation. |
 
-Important limitation: there is no native `plan_start`, `thinking_delta`, `tool_end`, or assistant-text event in the current protocol. “Plan” is inferred from the `UpdatePlan` tool, “thinking” is inferred from `turn_start`, and active work is inferred from `tool_start` until `turn_stop` or staleness.
+Important limitation: there is no native `plan_start`, `thinking_delta`, or assistant-text event in the current protocol. “Plan” is inferred from the `UpdatePlan` tool, “thinking” is inferred from `turn_start` / `llm_start`, and active work is inferred from tool/model/compaction lifecycle until `llm_end`, `turn_stop`, or staleness.
 
 ## Privacy stance
 

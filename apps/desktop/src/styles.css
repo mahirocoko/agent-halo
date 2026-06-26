@@ -1706,12 +1706,14 @@ button {
 
 .action-row[data-kind="delegating"] .action-tool,
 .action-row[data-kind="visual"] .action-tool,
+.action-row[data-kind="model"] .action-tool,
 .action-row[data-kind="skill"] .action-tool {
   color: #b9a7ff;
   background: rgba(167, 139, 250, 0.14);
 }
 
 .action-row[data-kind="memory"] .action-tool,
+.action-row[data-kind="compact"] .action-tool,
 .action-row[data-kind="goal"] .action-tool {
   color: #7dd3a4;
   background: rgba(74, 222, 128, 0.12);

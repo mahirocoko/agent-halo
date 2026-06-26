@@ -35,6 +35,8 @@ Events are newline-delimited JSON in `~/.letta/mods/agent-halo.events.ndjson` an
       lifecycle: boolean,
       turns: boolean,
       tools: boolean,
+      compact: boolean,
+      llm: boolean,
     },
     endpoints: {
       health: true,
@@ -55,6 +57,8 @@ Events are newline-delimited JSON in `~/.letta/mods/agent-halo.events.ndjson` an
 `GET /snapshot` also returns `recent: AgentHaloEvent[]`. `POST /hook/stop` is a local hook integration endpoint that converts a Letta `Stop` hook into a `turn_stop` event. `POST /ingest` is the local multi-instance fan-in endpoint: secondary mod instances that cannot bind the bridge port forward their events to the primary bridge instead of dropping them. Current bridge session actions intentionally report `focusTerminal: false` and `endSession: false` until real Letta-scoped session/process capabilities exist.
 
 The desktop app may expose a separate native-only Ghostty focus fallback. That action uses Ghostty's macOS scripting dictionary to match a terminal by cwd/title/id, select the owning tab, and focus the terminal; it is still not a bridge-level session action and should remain clearly labeled as a desktop-native fallback.
+
+Lower-level Letta Code app-server/device protocol exports richer queue, approval, tool-execution, and result events. Agent Halo v1 does not consume that internal websocket protocol yet; the bridge stays on the trusted public mod event surface until a scoped, stable app-server integration is designed. Do not fake queue/approval rows from transcript text.
 
 ## Event types
 
@@ -141,6 +145,87 @@ Does not record full tool arguments by default; records argument keys only.
     "toolCallId": "call_123",
     "toolName": "exec_command",
     "argKeys": ["cmd", "yield_time_ms"]
+  }
+}
+```
+
+### `tool_end`
+
+Emitted after local tool execution finishes. The bridge stores only status and output length, not raw output.
+
+```json
+{
+  "type": "tool_end",
+  "data": {
+    "toolCallId": "call_123",
+    "toolName": "exec_command",
+    "status": "success",
+    "outputLength": 1200
+  }
+}
+```
+
+### `compact_start`
+
+Emitted before local backend compaction starts.
+
+```json
+{
+  "type": "compact_start",
+  "data": {
+    "trigger": "context_window_overflow"
+  }
+}
+```
+
+### `compact_end`
+
+Emitted after local backend compaction completes.
+
+```json
+{
+  "type": "compact_end",
+  "data": {
+    "trigger": "context_window_overflow",
+    "messagesBefore": 220,
+    "messagesAfter": 120,
+    "contextTokensBefore": 190000,
+    "contextTokensAfter": 90000
+  }
+}
+```
+
+### `llm_start`
+
+Emitted before a local backend provider request starts.
+
+```json
+{
+  "type": "llm_start",
+  "data": {
+    "model": "openai/gpt-5.5",
+    "messageCount": 120,
+    "contextWindow": 200000
+  }
+}
+```
+
+### `llm_end`
+
+Emitted when a local backend provider request produces a final message. A failed request that retries before producing a final message may not emit `llm_end`. When prompt and completion counts are both available, Agent Halo normalizes `totalTokens` to `promptTokens + completionTokens` for per-request activity display.
+
+```json
+{
+  "type": "llm_end",
+  "data": {
+    "model": "openai/gpt-5.5",
+    "stopReason": "end_turn",
+    "durationMs": 4200,
+    "usage": {
+      "promptTokens": 10000,
+      "completionTokens": 1200,
+      "totalTokens": 11200
+    }
   }
 }
 ```

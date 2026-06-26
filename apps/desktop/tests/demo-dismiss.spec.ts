@@ -9,8 +9,8 @@ test("dismiss hides ended sessions until fresh activity resumes", async ({ page 
   await page.evaluate((key) => window.localStorage.removeItem(key), dismissedStorageKey);
   await page.reload();
 
-  await page.getByTitle("Dismiss session").waitFor({ state: "visible", timeout: 10_000 });
-  await page.getByTitle("Dismiss session").click();
+  await page.getByRole("button", { name: "Dismiss session" }).waitFor({ state: "visible", timeout: 10_000 });
+  await page.getByRole("button", { name: "Dismiss session" }).click();
 
   await expect.poll(async () => page.evaluate((key) => window.localStorage.getItem(key), dismissedStorageKey)).toContain("local-conv-demo-1");
   await expect(page.getByText("Waiting for Letta Code")).toBeVisible({ timeout: 10_000 });
@@ -32,7 +32,7 @@ test("delete removes a stuck session registry locally", async ({ page }) => {
   );
   await page.reload();
 
-  await page.getByTitle("Dismiss session").waitFor({ state: "visible", timeout: 10_000 });
+  await page.getByRole("button", { name: "Dismiss session" }).waitFor({ state: "visible", timeout: 10_000 });
   await page.locator(".session-row").first().click();
   await page.getByRole("button", { name: "Delete" }).click();
 

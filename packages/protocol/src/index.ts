@@ -6,6 +6,8 @@ export interface IAgentHaloBridgeCapabilities {
     lifecycle: boolean;
     turns: boolean;
     tools: boolean;
+    compact: boolean;
+    llm: boolean;
   };
   endpoints: {
     health: boolean;
@@ -26,6 +28,8 @@ export const createDefaultBridgeCapabilities = (): IAgentHaloBridgeCapabilities 
     lifecycle: false,
     turns: false,
     tools: false,
+    compact: false,
+    llm: false,
   },
   endpoints: {
     health: true,
@@ -48,6 +52,11 @@ export type AgentHaloEventType =
   | "turn_start"
   | "turn_stop"
   | "tool_start"
+  | "tool_end"
+  | "compact_start"
+  | "compact_end"
+  | "llm_start"
+  | "llm_end"
   | "bridge_error";
 
 export interface IAgentHaloBaseEvent {
@@ -117,6 +126,57 @@ export interface IAgentHaloToolStartEvent extends IAgentHaloBaseEvent {
   };
 }
 
+export interface IAgentHaloToolEndEvent extends IAgentHaloBaseEvent {
+  type: "tool_end";
+  data: {
+    toolCallId: string | null;
+    toolName: string;
+    status: "success" | "error" | string;
+    outputLength: number | null;
+  };
+}
+
+export interface IAgentHaloCompactStartEvent extends IAgentHaloBaseEvent {
+  type: "compact_start";
+  data: {
+    trigger: "manual" | "context_window_overflow" | "context_window_limit" | string;
+  };
+}
+
+export interface IAgentHaloCompactEndEvent extends IAgentHaloBaseEvent {
+  type: "compact_end";
+  data: {
+    trigger: "manual" | "context_window_overflow" | "context_window_limit" | string;
+    messagesBefore: number | null;
+    messagesAfter: number | null;
+    contextTokensBefore: number | null;
+    contextTokensAfter: number | null;
+  };
+}
+
+export interface IAgentHaloLlmStartEvent extends IAgentHaloBaseEvent {
+  type: "llm_start";
+  data: {
+    model: string;
+    messageCount: number | null;
+    contextWindow: number | null;
+  };
+}
+
+export interface IAgentHaloLlmEndEvent extends IAgentHaloBaseEvent {
+  type: "llm_end";
+  data: {
+    model: string;
+    stopReason: string | null;
+    durationMs: number | null;
+    usage: {
+      promptTokens: number | null;
+      completionTokens: number | null;
+      totalTokens: number | null;
+    } | null;
+  };
+}
+
 export interface IAgentHaloBridgeErrorEvent extends IAgentHaloBaseEvent {
   type: "bridge_error";
   data: {
@@ -132,6 +192,11 @@ export type AgentHaloEvent =
   | IAgentHaloTurnStartEvent
   | IAgentHaloTurnStopEvent
   | IAgentHaloToolStartEvent
+  | IAgentHaloToolEndEvent
+  | IAgentHaloCompactStartEvent
+  | IAgentHaloCompactEndEvent
+  | IAgentHaloLlmStartEvent
+  | IAgentHaloLlmEndEvent
   | IAgentHaloBridgeErrorEvent;
 
 export type {

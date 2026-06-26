@@ -63,11 +63,23 @@ function reducePresence(current, event) {
         toolCallCount: event.data?.toolCallCount ?? null,
       };
     case "turn_start":
+    case "llm_start":
+      return { ...current, ...scoped, status: "thinking", activeToolName: null };
+    case "compact_start":
+      return { ...current, ...scoped, status: "tool-running", activeToolName: "compact" };
+    case "compact_end":
       return { ...current, ...scoped, status: "thinking", activeToolName: null };
     case "turn_stop":
       return { ...current, ...scoped, status: "closed", activeToolName: null };
     case "tool_start":
       return { ...current, ...scoped, status: "tool-running", activeToolName: event.data?.toolName ?? null };
+    case "tool_end":
+      return { ...current, ...scoped, status: event.data?.status === "error" ? "error" : "thinking", activeToolName: null };
+    case "llm_end": {
+      const reason = event.data?.stopReason?.toLowerCase?.() ?? "";
+      const isTerminal = reason.includes("end") || reason.includes("stop") || reason.includes("done") || reason.includes("complete");
+      return { ...current, ...scoped, status: isTerminal ? "closed" : "thinking", activeToolName: null };
+    }
     case "bridge_error":
       return { ...current, ...scoped, status: "error", activeToolName: null };
     default:

@@ -26,13 +26,13 @@ Mahiro accepted Notchcode v1 as a read-only + dismiss + setup/control-plane surf
 
 ## Focus/end capability evidence
 
-Current Letta Code mod public APIs expose lifecycle, turn, and tool events plus scoped conversation helpers. The relevant public mod references are:
+Current Letta Code mod public APIs expose lifecycle, turn, tool, compaction, and local-backend LLM events plus scoped conversation helpers. The relevant public mod references are:
 
-- `creating-mods/references/events.md`: supported events are `conversation_open`, `conversation_close`, `tool_start`, and `turn_start`.
+- `creating-mods/references/events.md`: supported events include `conversation_open`, `conversation_close`, `turn_start`, `tool_start`, `tool_end`, `compact_start`, `compact_end`, `llm_start`, and `llm_end`.
 - Event `ctx.conversation` exposes `id`, `getHistory()`, `fork()`, and `sendMessageStream()`.
 - `creating-mods/references/architecture.md` says: “If the mod API does not expose a capability yet, avoid reaching around it.”
 
-The installed Letta Code protocol types include lower-level app-server commands such as `abort_message`, `terminal_kill`, and terminal process messages, but those are not exposed through the trusted mod API used by `mods/agent-halo.js`. Agent Halo should therefore keep bridge-level `sessionActions.focusTerminal` and `sessionActions.endSession` false until Letta exposes a public scoped session/process action or Mahiro explicitly accepts an internal/experimental bridge.
+The installed Letta Code protocol types include lower-level app-server commands/events such as `abort_message`, `terminal_kill`, terminal process messages, queue/approval events, tool execution events, and result usage. These are not the trusted public mod API used by `mods/agent-halo.js`. Agent Halo should therefore keep bridge-level `sessionActions.focusTerminal` and `sessionActions.endSession` false, and should not fake queue/approval activity, until Letta exposes a public scoped session/process/app-server action or Mahiro explicitly accepts an internal/experimental bridge.
 
 Current desktop focus is intentionally narrower: `focus_terminal` is a macOS/Ghostty fallback that activates Ghostty, attempts to raise a window whose title contains the conversation id, cwd, or folder name, and otherwise reports app-level activation. It is not exact pane focus. Exact pane focus should use future metadata such as terminal title mapping or `TMUX_PANE` plus `tmux select-pane`.
 

@@ -112,6 +112,8 @@ type ActivityKind =
   | "asking"
   | "skill"
   | "goal"
+  | "compact"
+  | "model"
   | "done"
   | "error"
   | "bridge";
@@ -315,6 +317,43 @@ interface IStatusView {
   isStale: boolean;
   staleForMs: number;
 }
+
+const readBooleanField = (value: unknown, key: string, fallback: boolean): boolean => {
+  if (typeof value !== "object" || value === null) return fallback;
+  const candidate = (value as Record<string, unknown>)[key];
+  return typeof candidate === "boolean" ? candidate : fallback;
+};
+
+const normalizeBridgeCapabilities = (value: unknown): IAgentHaloBridgeCapabilities => {
+  const fallback = createDefaultBridgeCapabilities();
+  if (typeof value !== "object" || value === null) return fallback;
+  const record = value as Record<string, unknown>;
+  const events = record.events;
+  const endpoints = record.endpoints;
+  const sessionActions = record.sessionActions;
+
+  return {
+    events: {
+      lifecycle: readBooleanField(events, "lifecycle", fallback.events.lifecycle),
+      turns: readBooleanField(events, "turns", fallback.events.turns),
+      tools: readBooleanField(events, "tools", fallback.events.tools),
+      compact: readBooleanField(events, "compact", fallback.events.compact),
+      llm: readBooleanField(events, "llm", fallback.events.llm),
+    },
+    endpoints: {
+      health: readBooleanField(endpoints, "health", fallback.endpoints.health),
+      snapshot: readBooleanField(endpoints, "snapshot", fallback.endpoints.snapshot),
+      sse: readBooleanField(endpoints, "sse", fallback.endpoints.sse),
+      hookStop: readBooleanField(endpoints, "hookStop", fallback.endpoints.hookStop),
+      ingest: readBooleanField(endpoints, "ingest", fallback.endpoints.ingest),
+    },
+    sessionActions: {
+      focusTerminal: readBooleanField(sessionActions, "focusTerminal", fallback.sessionActions.focusTerminal),
+      endSession: readBooleanField(sessionActions, "endSession", fallback.sessionActions.endSession),
+      dismissEnded: readBooleanField(sessionActions, "dismissEnded", fallback.sessionActions.dismissEnded),
+    },
+  };
+};
 
 const isSessionEventRegistry = (value: unknown): value is SessionEventRegistry =>
   typeof value === "object" &&
@@ -540,9 +579,31 @@ const getToolActivityLabel = (kind: ActivityKind): string => {
       return "skill";
     case "goal":
       return "goal";
+    case "compact":
+      return "compact";
+    case "model":
+      return "model";
     default:
       return "tool";
   }
+};
+
+const formatCompactNumber = (value: number | null | undefined): string | null => {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 }).format(value);
+};
+
+const getLlmUsageTotalTokens = (usage: { promptTokens: number | null; completionTokens: number | null; totalTokens: number | null } | null | undefined): number | null => {
+  if (!usage) return null;
+  if (typeof usage.promptTokens === "number" && typeof usage.completionTokens === "number") {
+    return usage.promptTokens + usage.completionTokens;
+  }
+  return typeof usage.totalTokens === "number" ? usage.totalTokens : null;
+};
+
+const isTerminalLlmStopReason = (value: string | null | undefined): boolean => {
+  const reason = value?.toLowerCase() ?? "";
+  return reason.includes("end") || reason.includes("stop") || reason.includes("done") || reason.includes("complete");
 };
 
 const getToolActivityDetail = (toolName: string): string => {
@@ -596,6 +657,29 @@ const getEventActivity = (event: AgentHaloEvent): IActivityDescriptor => {
     case "tool_start": {
       const kind = getToolActivityKind(event.data.toolName);
       return { kind, label: getToolActivityLabel(kind), detail: getToolActivityDetail(event.data.toolName) };
+    }
+    case "tool_end": {
+      if (event.data.status === "error") {
+        return { kind: "error", label: "error", detail: `${getToolActivityDetail(event.data.toolName)} failed` };
+      }
+      const kind = getToolActivityKind(event.data.toolName);
+      return { kind, label: "done", detail: `${getToolActivityDetail(event.data.toolName)} complete` };
+    }
+    case "compact_start":
+      return { kind: "compact", label: "compact", detail: event.data.trigger };
+    case "compact_end": {
+      const before = formatCompactNumber(event.data.contextTokensBefore);
+      const after = formatCompactNumber(event.data.contextTokensAfter);
+      const detail = before && after ? `${before}→${after} tokens` : event.data.trigger;
+      return { kind: "compact", label: "compacted", detail };
+    }
+    case "llm_start":
+      return { kind: "model", label: "model", detail: event.data.model.split("/").slice(-1)[0] ?? event.data.model };
+    case "llm_end": {
+      const tokens = formatCompactNumber(getLlmUsageTotalTokens(event.data.usage));
+      const seconds = typeof event.data.durationMs === "number" ? `${Math.max(0.1, event.data.durationMs / 1000).toFixed(1)}s` : null;
+      const parts = [tokens ? `${tokens} tokens` : null, seconds].filter(Boolean);
+      return { kind: "model", label: "model", detail: parts.length > 0 ? parts.join(" · ") : event.data.stopReason ?? "complete" };
     }
     case "bridge_error":
       return { kind: "error", label: "error", detail: event.data.message };
@@ -818,7 +902,14 @@ const getEventSessionStatus = (event: AgentHaloEvent, now: Date = new Date()): I
       return "done";
     case "turn_start":
     case "tool_start":
+    case "compact_start":
+    case "compact_end":
+    case "llm_start":
       return now.getTime() - Date.parse(event.timestamp) > STALE_AFTER_MS ? "waiting" : "working";
+    case "tool_end":
+      return event.data.status === "error" ? "error" : now.getTime() - Date.parse(event.timestamp) > STALE_AFTER_MS ? "waiting" : "working";
+    case "llm_end":
+      return isTerminalLlmStopReason(event.data.stopReason) ? "done" : now.getTime() - Date.parse(event.timestamp) > STALE_AFTER_MS ? "waiting" : "working";
     case "bridge_error":
       return "error";
     default:
@@ -928,6 +1019,10 @@ const getSessionMascotAction = (status?: ISessionSummary["status"], activityKind
     return "coffee";
   }
 
+  if (activityKind === "compact") {
+    return "dust";
+  }
+
   if (activityKind === "thinking" || activityKind === "visual") {
     return "idle";
   }
@@ -967,7 +1062,7 @@ const SessionMascot = ({ activityKind, sessionId, status }: { activityKind?: Act
 
 const createDemoEvent = (index: number): AgentHaloEvent => {
   const timestamp = new Date().toISOString();
-  const demoSession = Math.floor(index / 5) % 3;
+  const demoSession = Math.floor(index / 8) % 3;
   const base = {
     version: 1 as const,
     id: `demo-${index}-${crypto.randomUUID()}`,
@@ -980,7 +1075,7 @@ const createDemoEvent = (index: number): AgentHaloEvent => {
     permissionMode: "unrestricted",
   };
 
-  switch (index % 5) {
+  switch (index % 8) {
     case 0:
       return { ...base, type: "conversation_open", data: { reason: "startup", previousConversationId: null } };
     case 1:
@@ -988,9 +1083,15 @@ const createDemoEvent = (index: number): AgentHaloEvent => {
     case 2:
       return { ...base, type: "tool_start", data: { toolCallId: "demo-tool", toolName: "exec_command", argKeys: ["cmd"] } };
     case 3:
+      return { ...base, type: "tool_end", data: { toolCallId: "demo-tool", toolName: "exec_command", status: "success", outputLength: 420 } };
+    case 4:
+      return { ...base, type: "compact_start", data: { trigger: "context_window_overflow" } };
+    case 5:
+      return { ...base, type: "compact_end", data: { trigger: "context_window_overflow", messagesBefore: 220, messagesAfter: 120, contextTokensBefore: 190000, contextTokensAfter: 90000 } };
+    case 6:
       return { ...base, type: "tool_start", data: { toolCallId: "demo-tool-2", toolName: "Agent", argKeys: ["prompt", "description"] } };
     default:
-      return { ...base, type: "turn_stop", data: { hookEventName: "Stop", source: "hook", message: "ทำงานเสร็จแล้วค่ะ" } };
+      return { ...base, type: "llm_end", data: { model: "gpt-5.5", stopReason: "end_turn", durationMs: 2400, usage: { promptTokens: 8200, completionTokens: 720, totalTokens: 8920 } } };
   }
 };
 
@@ -1601,7 +1702,7 @@ const useAgentHaloPresence = () => {
       setConnection({ status: "connected", message: "Demo mode" });
       setCapabilities({
         ...createDefaultBridgeCapabilities(),
-        events: { lifecycle: true, turns: true, tools: true },
+        events: { lifecycle: true, turns: true, tools: true, compact: true, llm: true },
       });
       let index = 0;
       const pushDemoEvent = () => {
@@ -1617,7 +1718,7 @@ const useAgentHaloPresence = () => {
         });
       };
       pushDemoEvent();
-      const timer = window.setInterval(pushDemoEvent, 1_600);
+      const timer = window.setInterval(pushDemoEvent, 1_200);
       return () => window.clearInterval(timer);
     }
 
@@ -1625,9 +1726,9 @@ const useAgentHaloPresence = () => {
       try {
         const response = await fetch(`${BRIDGE_URL}/snapshot`);
         if (!response.ok) throw new Error(`Snapshot HTTP ${response.status}`);
-        const payload = (await response.json()) as { recent?: AgentHaloEvent[]; capabilities?: IAgentHaloBridgeCapabilities };
+        const payload = (await response.json()) as { recent?: AgentHaloEvent[]; capabilities?: unknown };
         if (!disposed) {
-          if (payload.capabilities) setCapabilities(payload.capabilities);
+          if (payload.capabilities) setCapabilities(normalizeBridgeCapabilities(payload.capabilities));
           if (Array.isArray(payload.recent)) {
             setPresence(payload.recent.reduce(applyEvent, createInitialPresence()));
             setRecentEvents(payload.recent.slice(-MAX_RECENT_EVENTS).reverse());
@@ -1647,8 +1748,8 @@ const useAgentHaloPresence = () => {
       try {
         const response = await fetch(`${BRIDGE_URL}/health`);
         if (!response.ok) throw new Error(`Health HTTP ${response.status}`);
-        const payload = (await response.json()) as { capabilities?: IAgentHaloBridgeCapabilities };
-        if (!disposed && payload.capabilities) setCapabilities(payload.capabilities);
+        const payload = (await response.json()) as { capabilities?: unknown };
+        if (!disposed && payload.capabilities) setCapabilities(normalizeBridgeCapabilities(payload.capabilities));
       } catch {
         // SSE connection state covers bridge availability.
       }
@@ -1686,7 +1787,7 @@ const useAgentHaloPresence = () => {
       }
     };
 
-    for (const type of ["bridge_ready", "conversation_open", "conversation_close", "turn_start", "turn_stop", "tool_start", "bridge_error"]) {
+    for (const type of ["bridge_ready", "conversation_open", "conversation_close", "turn_start", "turn_stop", "tool_start", "tool_end", "compact_start", "compact_end", "llm_start", "llm_end", "bridge_error"]) {
       source.addEventListener(type, handleEvent as EventListener);
     }
 
@@ -1700,8 +1801,8 @@ const useAgentHaloPresence = () => {
     try {
       const response = await fetch(`${BRIDGE_URL}/health`);
       if (!response.ok) throw new Error(`Health HTTP ${response.status}`);
-      const payload = (await response.json()) as { capabilities?: IAgentHaloBridgeCapabilities };
-      if (payload.capabilities) setCapabilities(payload.capabilities);
+      const payload = (await response.json()) as { capabilities?: unknown };
+      if (payload.capabilities) setCapabilities(normalizeBridgeCapabilities(payload.capabilities));
       return true;
     } catch {
       return false;
@@ -1777,7 +1878,7 @@ const App = () => {
 
   useEffect(() => {
     if (!lastLiveEvent?.conversationId) return;
-    if (!["turn_start", "tool_start", "turn_stop"].includes(lastLiveEvent.type)) return;
+    if (!["turn_start", "tool_start", "tool_end", "compact_start", "compact_end", "llm_start", "llm_end", "turn_stop"].includes(lastLiveEvent.type)) return;
 
     setDismissedSessionIds((current) => {
       const conversationId = lastLiveEvent.conversationId ?? "";
