@@ -1,78 +1,96 @@
 # Agent Halo
 
-Agent Halo is a small macOS companion for Letta Code. It sits near the camera notch, shows what your agents are doing, and keeps recent sessions easy to find without digging through terminal panes.
-
 <p align="center">
   <img src="apps/desktop/assets/agent-halo-app-icon.png" alt="Agent Halo app icon" width="128" height="128" />
 </p>
 
-## What it does
+<p align="center">
+  A local macOS presence companion for Letta Code — built around the notch, live agent activity, and workspace-aware session recall.
+</p>
+
+<p align="center">
+  <strong>Local-first</strong> · <strong>Mod-driven</strong> · <strong>Notch-native</strong>
+</p>
+
+---
+
+## Overview
+
+Agent Halo is a small desktop companion for [Letta Code](https://docs.letta.com/letta-code/index.md). It runs near the macOS camera notch, listens to trusted Letta Code mod events, and turns agent activity into a compact live presence surface.
+
+It is designed for people who keep multiple Letta Code conversations, subagents, and project terminals open at once. Instead of scraping terminal text or asking you to hunt through panes, Agent Halo keeps recent workspaces visible, shows what is currently happening, and provides lightweight local controls.
+
+## What Agent Halo does
 
 - Shows live Letta Code activity in a compact notch-style overlay.
-- Groups recent conversations by workspace so subagents in the same repo stay together.
-- Lets you focus a matching Ghostty terminal from a session row.
-- Keeps completed sessions around until you dismiss or delete them locally.
-- Shows local AI usage for supported tools such as Codex, Antigravity, Claude Code, Cursor, and Grok when their local credentials are available.
-- Installs and checks the local Letta mod from the desktop app.
+- Tracks conversation lifecycle, model turns, tool starts/ends, compaction, and local-backend LLM request activity.
+- Groups recent sessions by workspace so related subagents stay together.
+- Keeps completed sessions visible until you acknowledge, dismiss, or delete them locally.
+- Provides a native Ghostty focus fallback for matching terminal tabs/windows by cwd/title/session hints.
+- Shows local AI usage for supported providers when credentials or local usage sources are available.
+- Installs and verifies the local Letta Code mod from the desktop setup view.
 
-Agent Halo is intentionally local-first. It reads local Letta mod events and local tool credentials; it does not depend on transcript scraping or a hosted dashboard.
+Agent Halo intentionally stays local. It uses the public Letta Code mod surface, a local bridge, local credentials, and local logs. It does not depend on a hosted dashboard and does not use transcript parsing as its primary source of truth.
 
-## How it works
+## Current status
+
+Agent Halo is an early macOS app. The core bridge, desktop overlay, setup flow, workspace grouping, session controls, mascot activity, and local usage views are active. The project is still evolving quickly; expect the event protocol and native controls to stay conservative until Letta exposes stable public APIs for deeper session/process control.
+
+## Architecture
 
 ```text
-Letta Code mod events
-  -> local Agent Halo bridge on 127.0.0.1:47621
-  -> desktop notch overlay
+Letta Code public mod events
+  -> ~/.letta/mods/agent-halo.js
+  -> local bridge on 127.0.0.1:47621
+  -> SSE / snapshot / NDJSON log
+  -> Tauri desktop notch overlay + terminal viewer
 ```
 
 The bridge exposes local-only endpoints:
 
-- `GET /health` — bridge status and capabilities
-- `GET /snapshot` — recent session state
-- `GET /events` — live Server-Sent Events
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /health` | Bridge status and capability metadata |
+| `GET /snapshot` | Current capabilities and recent events |
+| `GET /events` | Live Server-Sent Events stream |
+| `POST /hook/stop` | Optional local Stop-hook bridge for turn completion fallback |
+| `POST /ingest` | Multi-instance fan-in when another mod instance already owns the bridge port |
 
-It also writes a local event log at:
+The bridge also writes a local NDJSON event log:
 
 ```text
 ~/.letta/mods/agent-halo.events.ndjson
 ```
 
-## Install locally
+See:
 
-Requirements:
+- [`docs/architecture.md`](docs/architecture.md)
+- [`docs/event-protocol.md`](docs/event-protocol.md)
+- [`docs/presence-model.md`](docs/presence-model.md)
 
-- macOS
-- Letta Code
-- pnpm
-- Rust/Tauri toolchain for building the desktop app
+## Event coverage
 
-Install dependencies and build the app:
+Agent Halo currently consumes these Letta Code mod events when available:
 
-```bash
-pnpm install
-pnpm desktop:install
-open /Applications/Agent\ Halo.app
-```
+- `conversation_open`
+- `conversation_close`
+- `turn_start`
+- `tool_start`
+- `tool_end`
+- `compact_start`
+- `compact_end`
+- `llm_start`
+- `llm_end`
 
-In Agent Halo, open **Setup** and choose **Install/Reinstall** to install the Letta mod. Then reload or restart Letta Code so it loads:
+The bridge keeps payloads intentionally small and privacy-aware. Tool results are represented by status and output length, not raw output. LLM activity stores model, stop reason, duration, and token counts. User text previews are disabled by default unless explicitly configured locally.
 
-```text
-~/.letta/mods/agent-halo.js
-```
+Lower-level Letta Code app-server/device protocol events such as queue, approval, result, and process-control messages are not consumed in v1. Agent Halo will not fake those states from transcript text.
 
-You can also install the mod from the command line:
+## Usage providers
 
-```bash
-pnpm mod:install
-```
+The Usage tab appears only for providers Agent Halo can read locally. Missing providers stay hidden rather than showing noisy error cards.
 
-Then run `/reload` inside Letta Code.
-
-## Usage view
-
-The Usage tab shows providers only when Agent Halo can read local credentials for them. Missing providers stay hidden instead of showing noisy error cards.
-
-Currently supported providers:
+Currently supported local providers:
 
 - Codex
 - Antigravity
@@ -80,42 +98,119 @@ Currently supported providers:
 - Cursor
 - Grok
 
-Antigravity usage is read from the local Antigravity/`agy` language server when it is running, using the same quota-summary surface as `/usage`. If the language server is not available, the provider stays hidden instead of showing partial Cloud Code fallback data.
+Notes:
+
+- Codex history and token trends come from local usage history where available.
+- Antigravity usage is read from the local Antigravity/`agy` language server using the same quota-summary surface as `/usage`.
+- Claude Code follows OpenUsage-informed local credential detection and refresh behavior where possible.
+- Provider cards remain capability-aware; credential-present but unusable sessions should surface a status message instead of silently disappearing.
+
+## Installation
+
+### Requirements
+
+- macOS
+- Letta Code `0.27.x` or newer recommended
+- pnpm `10.x`
+- Rust and the Tauri toolchain for desktop builds
+
+### Build and install the desktop app
+
+```bash
+pnpm install
+pnpm desktop:install
+open /Applications/Agent\ Halo.app
+```
+
+In Agent Halo, open **Setup** and choose **Install/Reinstall** to install the local Letta mod:
+
+```text
+~/.letta/mods/agent-halo.js
+```
+
+Then reload Letta Code:
+
+```text
+/reload
+```
+
+You can also install the mod directly from the repository:
+
+```bash
+pnpm mod:install
+```
 
 ## Development
 
 Common commands:
 
 ```bash
-pnpm check
-pnpm desktop:dev
-pnpm desktop:install
-pnpm viewer
-pnpm mod:tail
+pnpm check              # Typecheck root + desktop
+pnpm test:demo          # Browser demo Playwright tests
+pnpm desktop:dev        # Run the Tauri desktop app in dev mode
+pnpm desktop:install    # Build and install /Applications/Agent Halo.app
+pnpm desktop:web        # Browser-only demo/dev server
+pnpm viewer             # Terminal SSE viewer
+pnpm mod:tail           # Tail the local NDJSON event log
 ```
 
-Browser-only visual demo:
+Browser-only demo:
 
 ```bash
 pnpm desktop:web
 open http://127.0.0.1:47622/?demo=1
 ```
 
-The browser demo is useful for layout checks, but native features such as mod install, Ghostty focus, menu-bar behavior, and macOS window sizing require the Tauri desktop app.
+The browser demo is useful for layout and interaction checks. Native behavior — mod install, Ghostty focus, menu-bar behavior, transparent window sizing, and real event streams — must be validated in the Tauri desktop app.
 
 ## Project layout
 
-- `mods/agent-halo.js` — Letta Code mod and local bridge
-- `apps/desktop/` — Tauri desktop overlay
-- `apps/viewer/` — terminal event viewer
-- `packages/protocol/` — shared event and presence model
-- `docs/` — architecture, protocol, and design notes
+```text
+mods/agent-halo.js              Letta Code mod and local bridge
+packages/protocol/              Shared event and presence model
+apps/desktop/                   Tauri desktop notch overlay
+apps/viewer/                    Terminal event viewer
+docs/                           Architecture, protocol, and design notes
+scripts/install-mod.mjs         Local mod installer
+scripts/install-desktop.mjs     Desktop build/install helper
+```
 
 ## Design direction
 
-Agent Halo should feel like a quiet companion, not an AI dashboard. The UI follows a dark hardware-notch direction with compact rows, restrained accents, and local controls. See `docs/notchcode-parity.md` for the current design reference notes.
+Agent Halo should feel like a quiet companion, not a generic AI dashboard. The interface follows a dark hardware-notch direction with compact workspace rows, hairline dividers, restrained orange/green state accents, and small mascot activity.
 
-Runtime mascot strips live in `apps/desktop/public/mascots/session-cat/`, with QA previews and notes in `apps/desktop/assets/mascots/`. Generated source sheets are not kept in the repo; the checked-in runtime strips and previews are the maintained asset set.
+Design references and parity notes live in [`docs/notchcode-parity.md`](docs/notchcode-parity.md).
+
+Runtime mascot strips live in:
+
+```text
+apps/desktop/public/mascots/session-cat/
+```
+
+QA previews and asset notes live in:
+
+```text
+apps/desktop/assets/mascots/
+```
+
+## Privacy and local data
+
+Agent Halo is built around local state:
+
+- Bridge traffic stays on `127.0.0.1`.
+- Events are written to `~/.letta/mods/agent-halo.events.ndjson`.
+- Dismissed/deleted session state is stored in desktop renderer local storage.
+- Provider usage reads local credentials, CLIs, language servers, or local history where available.
+- The bridge does not store raw tool output by default.
+- Text preview capture is opt-in through local config and disabled by default.
+
+## Known boundaries
+
+- Real “end session” control is not exposed until Letta provides a stable scoped session/process API.
+- Ghostty focus is a native fallback, not a guaranteed exact process/session focus API.
+- `llm_*` and `compact_*` events are local-backend dependent.
+- App-server queue/approval/result protocol support is intentionally deferred until there is a stable integration boundary.
+- Browser demo checks cannot prove native Tauri or Ghostty behavior.
 
 ## Credits
 
