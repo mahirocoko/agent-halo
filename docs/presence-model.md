@@ -28,14 +28,14 @@ The current reducer lives in `packages/protocol/src/presence.ts`.
 | `compact_start` | `tool-running` | Shows context compaction as active work with `activeToolName = compact`. |
 | `compact_end` | `thinking` | Records before/after compaction stats and returns to thinking. |
 | `llm_start` | `thinking` | A provider request started; records model, message count, and context window. |
-| `llm_end` | `closed` / `thinking` | Records stop reason, duration, and token usage; terminal stop reasons close the turn. |
+| `llm_end` | `closed` / `thinking` / `error` | Records stop reason, duration, token usage, and provider-error summaries; terminal stop reasons close the turn, provider errors enter error state. |
 | `turn_stop` | `closed` | Local Letta `Stop` hook signal; means the assistant turn finished and should show as done/sticky. |
 | `conversation_close` | `closed` | Captures message/tool counts when available. |
 | `bridge_error` | `error` | Reserved for bridge/runtime errors. |
 
 ## Completion and stale fallback
 
-Letta Code mods now expose `tool_end`, `compact_start` / `compact_end`, and local-backend `llm_start` / `llm_end`. Agent Halo still keeps Mahiro's local Letta `Stop` hook via `POST /hook/stop` as a reliable turn-finished fallback because not every backend/surface emits every event. Viewers should still treat long-running `thinking` / `tool-running` states as potentially stale after a local timeout when terminal events are unavailable.
+Letta Code mods now expose `tool_end`, `compact_start` / `compact_end`, and local-backend `llm_start` / `llm_end`; Letta Code 0.27.20 also emits `llm_end` for provider errors with nullable usage and an error summary. Agent Halo still keeps Mahiro's local Letta `Stop` hook via `POST /hook/stop` as a reliable turn-finished fallback because not every backend/surface emits every event. Viewers should still treat long-running `thinking` / `tool-running` states as potentially stale after a local timeout when terminal events are unavailable.
 
 The terminal viewer defaults to `staleAfterMs = 30000`.
 

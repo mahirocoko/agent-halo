@@ -109,6 +109,15 @@ function normalizeLlmUsage(value) {
   };
 }
 
+function normalizeLlmError(value) {
+  if (!value || typeof value !== "object") return undefined;
+  const message = typeof value.message === "string" ? value.message : null;
+  const errorType = typeof value.errorType === "string" ? value.errorType : "llm_error";
+  const retryable = typeof value.retryable === "boolean" ? value.retryable : null;
+  if (!message) return undefined;
+  return { message, errorType, retryable };
+}
+
 function postBridgeEvent(config, path, payload) {
   const body = JSON.stringify(payload);
   const req = request(
@@ -537,12 +546,14 @@ export default function activate(letta) {
       letta.events.on("llm_end", (event, ctx) => {
         const model = modelToString(event.model) ?? modelToString(ctx?.model) ?? "unknown-model";
         const usage = normalizeLlmUsage(event.usage);
+        const error = normalizeLlmError(event.error);
         bridge.emit(
           baseEvent("llm_end", event, ctx, {
             model,
             stopReason: typeof event.stopReason === "string" ? event.stopReason : null,
             durationMs: typeof event.durationMs === "number" ? event.durationMs : null,
             usage,
+            ...(error ? { error } : {}),
           }),
         );
       }),

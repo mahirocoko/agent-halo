@@ -676,6 +676,10 @@ const getEventActivity = (event: AgentHaloEvent): IActivityDescriptor => {
     case "llm_start":
       return { kind: "model", label: "model", detail: event.data.model.split("/").slice(-1)[0] ?? event.data.model };
     case "llm_end": {
+      if (event.data.error) {
+        const retry = event.data.error.retryable === true ? "retryable" : event.data.error.retryable === false ? "not retryable" : null;
+        return { kind: "error", label: "model error", detail: [event.data.error.message, retry].filter(Boolean).join(" · ") };
+      }
       const tokens = formatCompactNumber(getLlmUsageTotalTokens(event.data.usage));
       const seconds = typeof event.data.durationMs === "number" ? `${Math.max(0.1, event.data.durationMs / 1000).toFixed(1)}s` : null;
       const parts = [tokens ? `${tokens} tokens` : null, seconds].filter(Boolean);

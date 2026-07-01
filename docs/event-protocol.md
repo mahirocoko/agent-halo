@@ -212,7 +212,7 @@ Emitted before a local backend provider request starts.
 
 ### `llm_end`
 
-Emitted when a local backend provider request produces a final message. A failed request that retries before producing a final message may not emit `llm_end`. When prompt and completion counts are both available, Agent Halo normalizes `totalTokens` to `promptTokens + completionTokens` for per-request activity display.
+Emitted when a local backend provider request finishes. In Letta Code 0.27.20+, provider failures also emit `llm_end` with `stopReason: "llm_api_error"`, `usage: null`, and an optional `error` summary. Agent Halo intentionally keeps only the short error summary (`message`, `errorType`, `retryable`) and does not store verbose provider details. When prompt and completion counts are both available, Agent Halo normalizes `totalTokens` to `promptTokens + completionTokens` for per-request activity display.
 
 ```json
 {
@@ -225,6 +225,25 @@ Emitted when a local backend provider request produces a final message. A failed
       "promptTokens": 10000,
       "completionTokens": 1200,
       "totalTokens": 11200
+    }
+  }
+}
+```
+
+Provider-error shape:
+
+```json
+{
+  "type": "llm_end",
+  "data": {
+    "model": "openai/gpt-5.5",
+    "stopReason": "llm_api_error",
+    "durationMs": 4200,
+    "usage": null,
+    "error": {
+      "message": "provider failed",
+      "errorType": "llm_error",
+      "retryable": true
     }
   }
 }

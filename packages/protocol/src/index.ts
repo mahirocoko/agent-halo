@@ -163,6 +163,12 @@ export interface IAgentHaloLlmStartEvent extends IAgentHaloBaseEvent {
   };
 }
 
+export interface IAgentHaloLlmEndError {
+  message: string;
+  errorType: "llm_error" | "local_backend_error" | string;
+  retryable: boolean | null;
+}
+
 export interface IAgentHaloLlmEndEvent extends IAgentHaloBaseEvent {
   type: "llm_end";
   data: {
@@ -174,6 +180,7 @@ export interface IAgentHaloLlmEndEvent extends IAgentHaloBaseEvent {
       completionTokens: number | null;
       totalTokens: number | null;
     } | null;
+    error?: IAgentHaloLlmEndError;
   };
 }
 

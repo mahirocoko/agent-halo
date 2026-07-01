@@ -126,11 +126,12 @@ export const reducePresence = (
       };
     case "llm_end": {
       const reason = event.data.stopReason?.toLowerCase() ?? "";
+      const isError = Boolean(event.data.error) || reason.includes("error") || reason.includes("fail");
       const isTerminal = reason.includes("end") || reason.includes("stop") || reason.includes("done") || reason.includes("complete");
       return {
         ...current,
         ...scoped,
-        status: isTerminal ? "closed" : "thinking",
+        status: isError ? "error" : isTerminal ? "closed" : "thinking",
         activeToolName: null,
       };
     }
