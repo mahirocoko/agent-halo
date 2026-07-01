@@ -1484,9 +1484,17 @@ const UsageProviderDetail = ({ provider, usage }: { provider: IUsageProviderConf
       </div>
       <UsageProviderLinks links={provider.links} />
       {usage.status === "online" && usage.metrics.length > 0 ? (
-        <div className="usage-provider-metrics">
-          {provider.id === "agy" ? <AntigravityUsageGroups metrics={usage.metrics} /> : usage.metrics.map((metric) => <UsageMeter metric={metric} key={metric.label} />)}
-        </div>
+        <>
+          {usage.message ? (
+            <div className="usage-provider-message usage-provider-note">
+              <TriangleAlert size={13} strokeWidth={2.2} />
+              <span>{usage.message}</span>
+            </div>
+          ) : null}
+          <div className="usage-provider-metrics">
+            {provider.id === "agy" ? <AntigravityUsageGroups metrics={usage.metrics} /> : usage.metrics.map((metric) => <UsageMeter metric={metric} key={metric.label} />)}
+          </div>
+        </>
       ) : (
         <div className="usage-provider-message">
           <StatusIcon size={13} strokeWidth={2.2} />
@@ -1601,13 +1609,7 @@ const AgentUsageList = ({ onRefresh, onSettingsChange, settings, usages }: {
   usages: Record<UsageProviderId, IAgentUsageState>;
 }) => {
   const [selectedProviderId, setSelectedProviderId] = useState<UsageSidebarSelection | null>(null);
-  const visibleProviders = useMemo(
-    () => USAGE_PROVIDERS.filter((provider) => {
-      const usage = usages[provider.id] ?? createAgentUsageState(provider.id);
-      return usage.status === "loading" || usage.status === "online";
-    }),
-    [usages],
-  );
+  const visibleProviders = useMemo(() => USAGE_PROVIDERS, []);
   const selectedProvider = selectedProviderId === "settings" ? null : visibleProviders.find((provider) => provider.id === selectedProviderId) ?? visibleProviders[0] ?? null;
   const activeSidebarId: UsageSidebarSelection = selectedProviderId === "settings" ? "settings" : selectedProvider?.id ?? "settings";
 

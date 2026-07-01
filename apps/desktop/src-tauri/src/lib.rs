@@ -31,11 +31,13 @@ const TRAY_SHOW: &str = "show";
 const TRAY_HIDE: &str = "hide";
 const TRAY_QUIT: &str = "quit";
 const CODEX_USAGE_URL: &str = "https://chatgpt.com/backend-api/wham/usage";
+const CODEX_RESET_CREDITS_URL: &str =
+    "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits";
 const CODEX_REFRESH_URL: &str = "https://auth.openai.com/oauth/token";
 const CODEX_CLIENT_ID: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
 const CODEX_KEYCHAIN_SERVICE: &str = "Codex Auth";
 const CODEX_CREDIT_USD_RATE: f64 = 0.04;
-const CCUSAGE_PACKAGE: &str = "ccusage@20.0.2";
+const CCUSAGE_PACKAGE: &str = "ccusage@20.0.14";
 const CCUSAGE_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
 const CCUSAGE_TIMEOUT: Duration = Duration::from_secs(15);
 const AGY_LS_SERVICE: &str = "exa.language_server_pb.LanguageServerService";
@@ -170,6 +172,7 @@ struct CodexReviewRateLimit {
 struct CodexRateLimitWindow {
     used_percent: Option<Value>,
     reset_at: Option<Value>,
+    reset_after_seconds: Option<Value>,
     limit_window_seconds: Option<Value>,
 }
 
@@ -181,6 +184,18 @@ struct CodexCredits {
 #[derive(Debug, Deserialize)]
 struct CodexResetCredits {
     available_count: Option<Value>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CodexResetCreditsEnvelope {
+    available_count: Option<Value>,
+    credits: Option<Vec<CodexResetCredit>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CodexResetCredit {
+    status: Option<String>,
+    expires_at: Option<Value>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -217,6 +232,8 @@ struct CcusageCacheEntry {
     fetched_at: Instant,
     usage: CcusageDailyUsage,
 }
+
+static CLAUDE_LAST_GOOD_USAGE: OnceLock<Mutex<Option<CodexUsageSnapshot>>> = OnceLock::new();
 
 static CODEX_CCUSAGE_CACHE: OnceLock<Mutex<Option<CcusageCacheEntry>>> = OnceLock::new();
 
@@ -303,7 +320,8 @@ fn codex_usage() -> Result<CodexUsageSnapshot, String> {
 
     match fetch_codex_usage(&client, &auth_state) {
         Ok((usage, headers)) => {
-            let mut snapshot = build_codex_usage_snapshot(usage, &headers);
+            let reset_credits = fetch_codex_reset_credits_best_effort(&client, &auth_state);
+            let mut snapshot = build_codex_usage_snapshot(usage, &headers, reset_credits.as_ref());
             append_codex_local_usage(&mut snapshot, &auth_state);
             Ok(snapshot)
         }
@@ -314,11 +332,18 @@ fn codex_usage() -> Result<CodexUsageSnapshot, String> {
                     CodexUsageFetchError::Auth => {
                         "Codex session expired. Run `codex` to log in again.".to_string()
                     }
+                    CodexUsageFetchError::RateLimited(_) => {
+                        "Codex usage is rate limited. Try again shortly.".to_string()
+                    }
                     CodexUsageFetchError::Other(message) => message,
                 })?;
-            let mut snapshot = build_codex_usage_snapshot(usage, &headers);
+            let reset_credits = fetch_codex_reset_credits_best_effort(&client, &auth_state);
+            let mut snapshot = build_codex_usage_snapshot(usage, &headers, reset_credits.as_ref());
             append_codex_local_usage(&mut snapshot, &auth_state);
             Ok(snapshot)
+        }
+        Err(CodexUsageFetchError::RateLimited(_)) => {
+            Err("Codex usage is rate limited. Try again shortly.".to_string())
         }
         Err(CodexUsageFetchError::Other(message)) => Err(message),
     }
@@ -345,7 +370,7 @@ fn claude_usage() -> Result<CodexUsageSnapshot, String> {
     if !claude_can_fetch_live_usage(&auth) {
         return Ok(build_claude_status_snapshot(
             &auth,
-            "Live usage unavailable for this Claude token.".to_string(),
+            "Re-login for live usage. Run `claude` and sign in again.".to_string(),
         ));
     }
 
@@ -356,21 +381,27 @@ fn claude_usage() -> Result<CodexUsageSnapshot, String> {
     }
 
     match fetch_claude_usage(&client, &auth) {
-        Ok(usage) => Ok(build_claude_usage_snapshot(usage, &auth)),
+        Ok(usage) => Ok(store_claude_last_good(build_claude_usage_snapshot(usage, &auth))),
         Err(CodexUsageFetchError::Auth) => {
             if let Err(message) = refresh_claude_token(&client, &mut auth) {
                 return Ok(build_claude_status_snapshot(&auth, message));
             }
             match fetch_claude_usage(&client, &auth) {
-                Ok(usage) => Ok(build_claude_usage_snapshot(usage, &auth)),
+                Ok(usage) => Ok(store_claude_last_good(build_claude_usage_snapshot(usage, &auth))),
                 Err(CodexUsageFetchError::Auth) => Ok(build_claude_status_snapshot(
                     &auth,
                     "Claude Code session expired. Run `claude` to log in again.".to_string(),
                 )),
+                Err(CodexUsageFetchError::RateLimited(retry_after)) => Ok(
+                    claude_rate_limited_snapshot(&auth, retry_after),
+                ),
                 Err(CodexUsageFetchError::Other(message)) => {
                     Ok(build_claude_status_snapshot(&auth, message))
                 }
             }
+        }
+        Err(CodexUsageFetchError::RateLimited(retry_after)) => {
+            Ok(claude_rate_limited_snapshot(&auth, retry_after))
         }
         Err(CodexUsageFetchError::Other(message)) => {
             Ok(build_claude_status_snapshot(&auth, message))
@@ -393,8 +424,14 @@ fn cursor_usage() -> Result<CodexUsageSnapshot, String> {
                     "Cursor session expired. Sign in via Cursor app or run `agent login`."
                         .to_string()
                 }
+                CodexUsageFetchError::RateLimited(_) => {
+                    "Cursor usage is rate limited. Try again shortly.".to_string()
+                }
                 CodexUsageFetchError::Other(message) => message,
             })?
+        }
+        Err(CodexUsageFetchError::RateLimited(_)) => {
+            return Err("Cursor usage is rate limited. Try again shortly.".to_string())
         }
         Err(CodexUsageFetchError::Other(message)) => return Err(message),
     };
@@ -477,6 +514,7 @@ fn open_external_url(url: String) -> Result<(), String> {
 #[derive(Debug)]
 enum CodexUsageFetchError {
     Auth,
+    RateLimited(Option<u64>),
     Other(String),
 }
 
@@ -668,6 +706,36 @@ fn fetch_codex_usage(
         })
 }
 
+fn fetch_codex_reset_credits_best_effort(
+    client: &reqwest::blocking::Client,
+    auth_state: &CodexAuthState,
+) -> Option<CodexResetCreditsEnvelope> {
+    let token = codex_access_token(auth_state).ok()?;
+    let mut request = client
+        .get(CODEX_RESET_CREDITS_URL)
+        .bearer_auth(token)
+        .header(reqwest::header::ACCEPT, "application/json")
+        .header("OpenAI-Beta", "codex-1")
+        .header("originator", "Codex Desktop");
+
+    if let Some(account_id) = auth_state
+        .auth
+        .tokens
+        .as_ref()
+        .and_then(|tokens| tokens.account_id.as_deref())
+        .map(str::trim)
+        .filter(|account_id| !account_id.is_empty())
+    {
+        request = request.header("ChatGPT-Account-Id", account_id);
+    }
+
+    let response = request.send().ok()?;
+    if !response.status().is_success() {
+        return None;
+    }
+    response.json::<CodexResetCreditsEnvelope>().ok()
+}
+
 fn refresh_codex_auth(
     client: &reqwest::blocking::Client,
     auth_state: &mut CodexAuthState,
@@ -729,6 +797,7 @@ fn refresh_codex_auth(
 fn build_codex_usage_snapshot(
     usage: CodexUsageEnvelope,
     headers: &reqwest::header::HeaderMap,
+    reset_credits: Option<&CodexResetCreditsEnvelope>,
 ) -> CodexUsageSnapshot {
     let mut lines = Vec::new();
     let primary = read_percent_header(headers, "x-codex-primary-used-percent").or_else(|| {
@@ -812,18 +881,11 @@ fn build_codex_usage_snapshot(
             ));
         }
     }
-    if let Some(available) = usage
-        .rate_limit_reset_credits
-        .and_then(|credits| credits.available_count)
-        .as_ref()
-        .and_then(|value| value_to_f64(Some(value)))
-    {
-        if available >= 0.0 {
-            lines.push(CodexMetricLine::Text {
-                label: "Rate Limit Resets".to_string(),
-                value: format!("{} available", available.floor() as i64),
-            });
-        }
+    if let Some((available, expiries)) = read_codex_reset_credits(&usage, reset_credits) {
+        lines.push(CodexMetricLine::Text {
+            label: "Rate Limit Resets".to_string(),
+            value: format_reset_credit_value(available, &expiries),
+        });
     }
     if let Some(balance) = usage.credits.and_then(|credits| credits.balance) {
         let Some(balance) = value_to_f64(Some(&balance)) else {
@@ -1409,25 +1471,138 @@ fn codex_additional_limit_label(limit_name: Option<&str>) -> String {
     }
 }
 
+fn read_codex_reset_credits(
+    usage: &CodexUsageEnvelope,
+    dedicated: Option<&CodexResetCreditsEnvelope>,
+) -> Option<(i64, Vec<time::OffsetDateTime>)> {
+    let dedicated_count = dedicated
+        .and_then(|credits| credits.available_count.as_ref())
+        .and_then(|value| value_to_f64(Some(value)));
+    let embedded_count = usage
+        .rate_limit_reset_credits
+        .as_ref()
+        .and_then(|credits| credits.available_count.as_ref())
+        .and_then(|value| value_to_f64(Some(value)));
+    let count = dedicated_count.or(embedded_count)?.max(0.0).floor() as i64;
+    let expiries = dedicated
+        .and_then(|credits| credits.credits.as_ref())
+        .map(|credits| {
+            let mut expiries = credits
+                .iter()
+                .filter(|credit| {
+                    credit
+                        .status
+                        .as_deref()
+                        .map(|status| status.eq_ignore_ascii_case("available"))
+                        .unwrap_or(true)
+                })
+                .filter_map(|credit| parse_reset_credit_expiry(credit.expires_at.as_ref()))
+                .collect::<Vec<_>>();
+            expiries.sort();
+            expiries
+        })
+        .unwrap_or_default();
+    Some((count, expiries))
+}
+
+fn parse_reset_credit_expiry(value: Option<&Value>) -> Option<time::OffsetDateTime> {
+    match value? {
+        Value::Number(number) => number
+            .as_i64()
+            .or_else(|| number.as_f64().map(|value| value as i64))
+            .and_then(|seconds| time::OffsetDateTime::from_unix_timestamp(seconds).ok()),
+        Value::String(text) => time::OffsetDateTime::parse(
+            text.trim(),
+            &time::format_description::well_known::Rfc3339,
+        )
+        .ok(),
+        _ => None,
+    }
+}
+
+fn format_reset_credit_value(count: i64, expiries: &[time::OffsetDateTime]) -> String {
+    let base = format!("{count} available");
+    let Some(first_expiry) = expiries.first() else {
+        return base;
+    };
+    format!("{base} · expires {}", format_relative_time(*first_expiry))
+}
+
+fn format_relative_time(target: time::OffsetDateTime) -> String {
+    let seconds = target.unix_timestamp() - time::OffsetDateTime::now_utc().unix_timestamp();
+    let abs = seconds.unsigned_abs();
+    let (value, unit) = if abs >= 86_400 {
+        ((abs as f64 / 86_400.0).ceil() as u64, "d")
+    } else if abs >= 3_600 {
+        ((abs as f64 / 3_600.0).ceil() as u64, "h")
+    } else {
+        ((abs as f64 / 60.0).ceil().max(1.0) as u64, "m")
+    };
+    if seconds >= 0 {
+        format!("in {value}{unit}")
+    } else {
+        format!("{value}{unit} ago")
+    }
+}
+
 fn progress_line(
     label: &str,
     used: f64,
     window: Option<&CodexRateLimitWindow>,
     fallback_duration_ms: Option<u64>,
 ) -> CodexMetricLine {
+    let period_duration_ms = window
+        .and_then(|window| value_to_u64(window.limit_window_seconds.as_ref()))
+        .map(|seconds| seconds * 1000)
+        .or(fallback_duration_ms);
+    let reset_at = window.and_then(rate_limit_reset_iso);
+    let used = normalize_fresh_rate_limit_used(used, window, period_duration_ms);
+
     CodexMetricLine::Progress {
         label: label.to_string(),
         used: used.clamp(0.0, 100.0),
         limit: 100.0,
         format: CodexProgressFormat::Percent,
-        resets_at: window
-            .and_then(|window| value_to_i64(window.reset_at.as_ref()))
-            .and_then(unix_seconds_to_iso),
-        period_duration_ms: window
-            .and_then(|window| value_to_u64(window.limit_window_seconds.as_ref()))
-            .map(|seconds| seconds * 1000)
-            .or(fallback_duration_ms),
+        resets_at: reset_at,
+        period_duration_ms,
     }
+}
+
+fn rate_limit_reset_iso(window: &CodexRateLimitWindow) -> Option<String> {
+    if let Some(seconds) = value_to_i64(window.reset_at.as_ref()) {
+        return unix_seconds_to_iso(seconds);
+    }
+    let reset_after = value_to_i64(window.reset_after_seconds.as_ref())?;
+    unix_seconds_to_iso(time::OffsetDateTime::now_utc().unix_timestamp() + reset_after)
+}
+
+fn normalize_fresh_rate_limit_used(
+    used: f64,
+    window: Option<&CodexRateLimitWindow>,
+    period_duration_ms: Option<u64>,
+) -> f64 {
+    if used > 1.0 {
+        return used;
+    }
+    let Some(window) = window else { return used };
+    let Some(period_ms) = period_duration_ms else { return used };
+    let Some(reset_after_seconds) = rate_limit_reset_after_seconds(window) else {
+        return used;
+    };
+    let period_seconds = (period_ms / 1000) as i64;
+    if period_seconds > 0 && reset_after_seconds >= period_seconds.saturating_sub(60) {
+        0.0
+    } else {
+        used
+    }
+}
+
+fn rate_limit_reset_after_seconds(window: &CodexRateLimitWindow) -> Option<i64> {
+    if let Some(value) = value_to_i64(window.reset_after_seconds.as_ref()) {
+        return Some(value);
+    }
+    value_to_i64(window.reset_at.as_ref())
+        .map(|reset_at| reset_at - time::OffsetDateTime::now_utc().unix_timestamp())
 }
 
 fn value_to_f64(value: Option<&Value>) -> Option<f64> {
@@ -1792,6 +1967,11 @@ fn fetch_claude_usage(
     {
         return Err(CodexUsageFetchError::Auth);
     }
+    if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+        return Err(CodexUsageFetchError::RateLimited(read_retry_after_seconds(
+            response.headers(),
+        )));
+    }
     if !response.status().is_success() {
         return Err(CodexUsageFetchError::Other(format!(
             "Claude Code usage request failed (HTTP {})",
@@ -1801,6 +1981,13 @@ fn fetch_claude_usage(
     response.json::<Value>().map_err(|error| {
         CodexUsageFetchError::Other(format!("Claude Code usage response invalid: {error}"))
     })
+}
+
+fn read_retry_after_seconds(headers: &reqwest::header::HeaderMap) -> Option<u64> {
+    headers
+        .get(reqwest::header::RETRY_AFTER)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.trim().parse::<u64>().ok())
 }
 
 fn refresh_claude_token(
@@ -1926,6 +2113,59 @@ fn build_claude_usage_snapshot(usage: Value, auth: &ClaudeAuthState) -> CodexUsa
         plan: claude_plan_label(auth),
         lines,
         fetched_at: now_iso(),
+    }
+}
+
+fn store_claude_last_good(snapshot: CodexUsageSnapshot) -> CodexUsageSnapshot {
+    let cache = CLAUDE_LAST_GOOD_USAGE.get_or_init(|| Mutex::new(None));
+    if let Ok(mut guard) = cache.lock() {
+        *guard = Some(snapshot.clone());
+    }
+    snapshot
+}
+
+fn claude_rate_limited_snapshot(
+    auth: &ClaudeAuthState,
+    retry_after_seconds: Option<u64>,
+) -> CodexUsageSnapshot {
+    if let Some(mut snapshot) = read_claude_last_good() {
+        snapshot.lines.push(CodexMetricLine::Text {
+            label: "Status".to_string(),
+            value: claude_rate_limit_message(retry_after_seconds, true),
+        });
+        snapshot.fetched_at = now_iso();
+        return snapshot;
+    }
+    build_claude_status_snapshot(auth, claude_rate_limit_message(retry_after_seconds, false))
+}
+
+fn read_claude_last_good() -> Option<CodexUsageSnapshot> {
+    CLAUDE_LAST_GOOD_USAGE
+        .get_or_init(|| Mutex::new(None))
+        .lock()
+        .ok()
+        .and_then(|guard| guard.clone())
+}
+
+fn claude_rate_limit_message(retry_after_seconds: Option<u64>, has_cached_usage: bool) -> String {
+    let retry = retry_after_seconds
+        .map(format_retry_after)
+        .map(|value| format!(" · retry in {value}"))
+        .unwrap_or_default();
+    if has_cached_usage {
+        format!("Live usage rate limited{retry}; showing last good values.")
+    } else {
+        format!("Live usage rate limited{retry}. Try again shortly.")
+    }
+}
+
+fn format_retry_after(seconds: u64) -> String {
+    if seconds >= 3_600 {
+        format!("{}h", ((seconds as f64) / 3_600.0).ceil() as u64)
+    } else if seconds >= 60 {
+        format!("{}m", ((seconds as f64) / 60.0).ceil() as u64)
+    } else {
+        format!("{}s", seconds.max(1))
     }
 }
 
