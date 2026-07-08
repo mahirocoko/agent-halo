@@ -1,5 +1,6 @@
 use std::{
     collections::BTreeMap,
+    error::Error as StdError,
     fs,
     io::{Read, Write},
     net::{SocketAddr, TcpStream},
@@ -40,6 +41,7 @@ const CODEX_CREDIT_USD_RATE: f64 = 0.04;
 const CCUSAGE_PACKAGE: &str = "ccusage@20.0.14";
 const CCUSAGE_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
 const CCUSAGE_TIMEOUT: Duration = Duration::from_secs(15);
+const OPENUSAGE_PROXY_CONFIG_PATH: &str = ".openusage/config.json";
 const AGY_LS_SERVICE: &str = "exa.language_server_pb.LanguageServerService";
 const CLAUDE_USAGE_URL: &str = "https://api.anthropic.com/api/oauth/usage";
 const CLAUDE_REFRESH_URL: &str = "https://platform.claude.com/v1/oauth/token";
@@ -90,6 +92,17 @@ enum CodexAuthSource {
 struct CodexAuthState {
     auth: CodexAuthFile,
     source: CodexAuthSource,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenUsageProxyConfigFile {
+    proxy: Option<OpenUsageProxyConfig>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenUsageProxyConfig {
+    enabled: Option<bool>,
+    url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -312,11 +325,7 @@ fn bridge_health() -> bool {
 #[tauri::command]
 fn codex_usage() -> Result<CodexUsageSnapshot, String> {
     let mut auth_state = load_codex_auth()?;
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(12))
-        .user_agent("Agent Halo")
-        .build()
-        .map_err(|error| format!("Failed to create Codex usage client: {error}"))?;
+    let client = usage_client("Codex")?;
 
     match fetch_codex_usage(&client, &auth_state) {
         Ok((usage, headers)) => {
@@ -381,20 +390,24 @@ fn claude_usage() -> Result<CodexUsageSnapshot, String> {
     }
 
     match fetch_claude_usage(&client, &auth) {
-        Ok(usage) => Ok(store_claude_last_good(build_claude_usage_snapshot(usage, &auth))),
+        Ok(usage) => Ok(store_claude_last_good(build_claude_usage_snapshot(
+            usage, &auth,
+        ))),
         Err(CodexUsageFetchError::Auth) => {
             if let Err(message) = refresh_claude_token(&client, &mut auth) {
                 return Ok(build_claude_status_snapshot(&auth, message));
             }
             match fetch_claude_usage(&client, &auth) {
-                Ok(usage) => Ok(store_claude_last_good(build_claude_usage_snapshot(usage, &auth))),
+                Ok(usage) => Ok(store_claude_last_good(build_claude_usage_snapshot(
+                    usage, &auth,
+                ))),
                 Err(CodexUsageFetchError::Auth) => Ok(build_claude_status_snapshot(
                     &auth,
                     "Claude Code session expired. Run `claude` to log in again.".to_string(),
                 )),
-                Err(CodexUsageFetchError::RateLimited(retry_after)) => Ok(
-                    claude_rate_limited_snapshot(&auth, retry_after),
-                ),
+                Err(CodexUsageFetchError::RateLimited(retry_after)) => {
+                    Ok(claude_rate_limited_snapshot(&auth, retry_after))
+                }
                 Err(CodexUsageFetchError::Other(message)) => {
                     Ok(build_claude_status_snapshot(&auth, message))
                 }
@@ -458,7 +471,7 @@ fn grok_usage() -> Result<CodexUsageSnapshot, String> {
         .header("X-XAI-Token-Auth", GROK_TOKEN_AUTH_HEADER)
         .header(reqwest::header::ACCEPT, "application/json")
         .send()
-        .map_err(|error| format!("Grok billing request failed: {error}"))?;
+        .map_err(|error| format_http_send_error("Grok billing", &error))?;
     if billing.status() == reqwest::StatusCode::UNAUTHORIZED
         || billing.status() == reqwest::StatusCode::FORBIDDEN
     {
@@ -683,7 +696,7 @@ fn fetch_codex_usage(
     }
 
     let response = request.send().map_err(|error| {
-        CodexUsageFetchError::Other(format!("Codex usage request failed: {error}"))
+        CodexUsageFetchError::Other(format_http_send_error("Codex usage", &error))
     })?;
 
     let status = response.status();
@@ -758,7 +771,7 @@ fn refresh_codex_auth(
             ("refresh_token", refresh_token.as_str()),
         ])
         .send()
-        .map_err(|error| format!("Codex token refresh failed: {error}"))?;
+        .map_err(|error| format_http_send_error("Codex token refresh", &error))?;
 
     if !response.status().is_success() {
         return Err(format!(
@@ -1511,11 +1524,10 @@ fn parse_reset_credit_expiry(value: Option<&Value>) -> Option<time::OffsetDateTi
             .as_i64()
             .or_else(|| number.as_f64().map(|value| value as i64))
             .and_then(|seconds| time::OffsetDateTime::from_unix_timestamp(seconds).ok()),
-        Value::String(text) => time::OffsetDateTime::parse(
-            text.trim(),
-            &time::format_description::well_known::Rfc3339,
-        )
-        .ok(),
+        Value::String(text) => {
+            time::OffsetDateTime::parse(text.trim(), &time::format_description::well_known::Rfc3339)
+                .ok()
+        }
         _ => None,
     }
 }
@@ -1585,7 +1597,9 @@ fn normalize_fresh_rate_limit_used(
         return used;
     }
     let Some(window) = window else { return used };
-    let Some(period_ms) = period_duration_ms else { return used };
+    let Some(period_ms) = period_duration_ms else {
+        return used;
+    };
     let Some(reset_after_seconds) = rate_limit_reset_after_seconds(window) else {
         return used;
     };
@@ -1635,11 +1649,59 @@ fn value_to_u64(value: Option<&Value>) -> Option<u64> {
 }
 
 fn usage_client(provider: &str) -> Result<reqwest::blocking::Client, String> {
-    reqwest::blocking::Client::builder()
+    let mut builder = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(12))
-        .user_agent("Agent Halo")
+        .user_agent("Agent Halo");
+
+    if let Some(proxy_url) = openusage_proxy_url() {
+        let proxy = reqwest::Proxy::all(&proxy_url)
+            .map_err(|error| format!("Invalid OpenUsage proxy config: {error}"))?;
+        let no_proxy = reqwest::NoProxy::from_string("localhost,127.0.0.1,::1");
+        builder = builder.proxy(proxy.no_proxy(no_proxy));
+    }
+
+    builder
         .build()
         .map_err(|error| format!("Failed to create {provider} usage client: {error}"))
+}
+
+fn openusage_proxy_url() -> Option<String> {
+    static OPENUSAGE_PROXY_URL: OnceLock<Option<String>> = OnceLock::new();
+    OPENUSAGE_PROXY_URL
+        .get_or_init(|| {
+            let path = home_path(OPENUSAGE_PROXY_CONFIG_PATH)?;
+            let text = fs::read_to_string(path).ok()?;
+            let config = serde_json::from_str::<OpenUsageProxyConfigFile>(&text).ok()?;
+            let proxy = config.proxy?;
+            if proxy.enabled != Some(true) {
+                return None;
+            }
+            let url = proxy.url?.trim().to_string();
+            if is_supported_proxy_url(&url) {
+                Some(url)
+            } else {
+                None
+            }
+        })
+        .clone()
+}
+
+fn is_supported_proxy_url(url: &str) -> bool {
+    let lower = url.to_ascii_lowercase();
+    lower.starts_with("socks5://") || lower.starts_with("http://") || lower.starts_with("https://")
+}
+
+fn format_http_send_error(label: &str, error: &reqwest::Error) -> String {
+    let mut message = format!("{label} request failed: {error}");
+    if let Some(source) = error.source() {
+        message.push_str(&format!(" ({source})"));
+    }
+    if error.is_connect() && openusage_proxy_url().is_none() {
+        message.push_str(
+            ". If this network needs a proxy, add ~/.openusage/config.json with proxy.enabled and proxy.url.",
+        );
+    }
+    message
 }
 
 fn read_keychain_password(service: &str, account: Option<&str>) -> Option<String> {
@@ -1960,7 +2022,7 @@ fn fetch_claude_usage(
         .header(reqwest::header::USER_AGENT, "claude-code/2.1.69")
         .send()
         .map_err(|error| {
-            CodexUsageFetchError::Other(format!("Claude Code usage request failed: {error}"))
+            CodexUsageFetchError::Other(format_http_send_error("Claude Code usage", &error))
         })?;
     if response.status() == reqwest::StatusCode::UNAUTHORIZED
         || response.status() == reqwest::StatusCode::FORBIDDEN
@@ -2016,7 +2078,7 @@ fn refresh_claude_token(
             "scope": CLAUDE_SCOPES,
         }))
         .send()
-        .map_err(|error| format!("Claude Code token refresh failed: {error}"))?;
+        .map_err(|error| format_http_send_error("Claude Code token refresh", &error))?;
     if !response.status().is_success() {
         return Err(format!(
             "Claude Code token refresh failed (HTTP {})",
@@ -2275,7 +2337,7 @@ fn fetch_cursor_json(
         .body("{}")
         .send()
         .map_err(|error| {
-            CodexUsageFetchError::Other(format!("Cursor usage request failed: {error}"))
+            CodexUsageFetchError::Other(format_http_send_error("Cursor usage", &error))
         })?;
     if response.status() == reqwest::StatusCode::UNAUTHORIZED
         || response.status() == reqwest::StatusCode::FORBIDDEN
@@ -2313,7 +2375,7 @@ fn refresh_cursor_token(
             "refresh_token": refresh_token,
         }))
         .send()
-        .map_err(|error| format!("Cursor token refresh failed: {error}"))?;
+        .map_err(|error| format_http_send_error("Cursor token refresh", &error))?;
     if !response.status().is_success() {
         return Err(format!(
             "Cursor token refresh failed (HTTP {})",
