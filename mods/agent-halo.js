@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 
-const PROTOCOL_VERSION = 1;
+const PROTOCOL_VERSION = 2;
 const DEFAULT_PORT = 47621;
 const MOD_DIR = join(homedir(), ".letta", "mods");
 const CONFIG_PATH = join(MOD_DIR, "agent-halo.config.json");
@@ -82,6 +82,7 @@ function getCapabilities(letta) {
       snapshot: true,
       sse: true,
       hookStop: true,
+      hookAttention: true,
       ingest: true,
     },
     sessionActions: {
@@ -210,7 +211,12 @@ function createBridge(letta, config) {
     model: null,
     permissionMode: null,
   };
-  let lastWorkingScope = null;
+  const activeScopesByConversation = new Map();
+  const activeScopesByCwd = new Map();
+  const recentHookIds = new Map();
+  const recentLegacySignals = new Map();
+  const lastRelaySignalAtByType = new Map();
+  const recentCompletionAtByCwd = new Map();
 
   const cloneScope = (scope) => ({
     agentId: scope.agentId ?? null,
@@ -221,21 +227,95 @@ function createBridge(letta, config) {
     permissionMode: scope.permissionMode ?? null,
   });
 
+  const removeActiveScope = (conversationId) => {
+    if (!conversationId) return;
+    const record = activeScopesByConversation.get(conversationId);
+    activeScopesByConversation.delete(conversationId);
+    if (!record?.scope.cwd) return;
+    const cwdScopes = activeScopesByCwd.get(record.scope.cwd);
+    cwdScopes?.delete(conversationId);
+    if (cwdScopes?.size === 0) activeScopesByCwd.delete(record.scope.cwd);
+  };
+
+  const isTerminalLlmEvent = (payload) => {
+    if (payload.type !== "llm_end") return false;
+    const reason = String(payload.data?.stopReason ?? "").toLowerCase();
+    return reason.includes("end") || reason.includes("stop") || reason.includes("done") || reason.includes("complete") || Boolean(payload.data?.error);
+  };
+
   const rememberScope = (payload) => {
     for (const key of Object.keys(lastScope)) {
       if (payload[key] != null) lastScope[key] = payload[key];
     }
-    if (payload.type === "turn_start" || payload.type === "tool_start" || payload.type === "compact_start" || payload.type === "llm_start") {
-      lastWorkingScope = cloneScope(lastScope);
+    if (payload.type === "turn_start" || payload.type === "tool_start" || payload.type === "compact_start" || payload.type === "llm_start" || payload.type === "attention_requested") {
+      const scope = cloneScope(lastScope);
+      if (payload.type === "turn_start" && scope.cwd) recentCompletionAtByCwd.delete(scope.cwd);
+      if (scope.conversationId) {
+        removeActiveScope(scope.conversationId);
+        const record = { scope, lastActiveAt: Date.now() };
+        activeScopesByConversation.set(scope.conversationId, record);
+        if (scope.cwd) {
+          const cwdScopes = activeScopesByCwd.get(scope.cwd) ?? new Map();
+          cwdScopes.set(scope.conversationId, record);
+          activeScopesByCwd.set(scope.cwd, cwdScopes);
+        }
+      }
+    }
+    if (payload.type === "turn_complete" || payload.type === "turn_stop" || payload.type === "conversation_close" || isTerminalLlmEvent(payload)) {
+      if (payload.cwd) recentCompletionAtByCwd.set(payload.cwd, Date.now());
+      removeActiveScope(payload.conversationId);
     }
   };
 
   const hookScope = (data) => {
-    const scope = cloneScope(lastWorkingScope ?? lastScope);
+    const requestedCwd = typeof data.cwd === "string" && data.cwd.length > 0
+      ? data.cwd
+      : typeof data.workingDirectory === "string" && data.workingDirectory.length > 0
+        ? data.workingDirectory
+        : null;
+    const requestedConversationId = typeof data.conversationId === "string" && data.conversationId.length > 0 ? data.conversationId : null;
+    const requestedAgentId = typeof data.agentId === "string" && data.agentId.length > 0 ? data.agentId : null;
+    let candidates = [];
+
+    if (requestedConversationId) {
+      const exact = activeScopesByConversation.get(requestedConversationId);
+      if (exact) candidates = [exact];
+    } else if (requestedCwd) {
+      candidates = [...(activeScopesByCwd.get(requestedCwd)?.values() ?? [])];
+    } else {
+      candidates = [...activeScopesByConversation.values()];
+    }
+    if (requestedAgentId) {
+      candidates = candidates.filter((record) => record.scope.agentId === requestedAgentId);
+    }
+
+    const scope = cloneScope(candidates.length === 1 ? candidates[0].scope : {});
+    if (requestedConversationId) scope.conversationId = requestedConversationId;
+    if (requestedAgentId) scope.agentId = requestedAgentId;
+    if (requestedCwd) scope.cwd = requestedCwd;
     for (const key of Object.keys(scope)) {
       if (typeof data[key] === "string" && data[key].length > 0) scope[key] = data[key];
     }
     return scope;
+  };
+
+  const shouldEmitHookSignal = (type, scope, data) => {
+    const now = Date.now();
+    const hookId = typeof data.hookId === "string" && data.hookId.length > 0 ? data.hookId : null;
+    for (const [id, seenAt] of recentHookIds) {
+      if (now - seenAt > 60_000) recentHookIds.delete(id);
+    }
+    if (hookId) {
+      if (recentHookIds.has(hookId)) return false;
+      recentHookIds.set(hookId, now);
+      lastRelaySignalAtByType.set(type, now);
+      return true;
+    }
+    if (now - (lastRelaySignalAtByType.get(type) ?? 0) <= 5_000) return false;
+    const legacyKey = [type, scope.conversationId ?? "", scope.cwd ?? ""].join(":");
+    const previous = recentLegacySignals.get(legacyKey) ?? 0;
+    recentLegacySignals.set(legacyKey, now);
+    return now - previous > 5_000;
   };
 
   const emitLocal = (payload) => {
@@ -312,15 +392,38 @@ function createBridge(letta, config) {
     });
 
   const emitHookStop = (data = {}) => {
+    const scope = hookScope(data);
+    if (!shouldEmitHookSignal("turn_complete", scope, data)) return;
     emit({
       version: PROTOCOL_VERSION,
       id: randomUUID(),
-      type: "turn_stop",
+      type: "turn_complete",
       timestamp: new Date().toISOString(),
-      ...hookScope(data),
+      ...scope,
       data: {
         hookEventName: typeof data.hookEventName === "string" ? data.hookEventName : "Stop",
         source: typeof data.source === "string" ? data.source : "hook",
+        message: typeof data.message === "string" ? data.message : null,
+      },
+    });
+  };
+
+  const emitHookAttention = (data = {}) => {
+    const scope = hookScope(data);
+    const isNotificationHook = data.hookEventName === "Notification";
+    if (isNotificationHook && scope.cwd && Date.now() - (recentCompletionAtByCwd.get(scope.cwd) ?? 0) <= 15_000) return;
+    if (!shouldEmitHookSignal("attention_requested", scope, data)) return;
+    emit({
+      version: PROTOCOL_VERSION,
+      id: randomUUID(),
+      type: "attention_requested",
+      timestamp: new Date().toISOString(),
+      ...scope,
+      data: {
+        hookEventName: typeof data.hookEventName === "string" ? data.hookEventName : "PermissionRequest",
+        source: typeof data.source === "string" ? data.source : "hook",
+        kind: isNotificationHook ? "question" : "approval",
+        toolName: typeof data.toolName === "string" ? data.toolName : null,
         message: typeof data.message === "string" ? data.message : null,
       },
     });
@@ -350,7 +453,15 @@ function createBridge(letta, config) {
       const body = await readJsonBody(req);
       emitHookStop(body);
       res.writeHead(202, { "content-type": "application/json; charset=utf-8", ...corsHeaders });
-      res.end(JSON.stringify({ ok: true, type: "turn_stop" }));
+      res.end(JSON.stringify({ ok: true, type: "turn_complete" }));
+      return;
+    }
+
+    if (req.method === "POST" && req.url === "/hook/attention") {
+      const body = await readJsonBody(req);
+      emitHookAttention(body);
+      res.writeHead(202, { "content-type": "application/json; charset=utf-8", ...corsHeaders });
+      res.end(JSON.stringify({ ok: true, type: "attention_requested" }));
       return;
     }
 
@@ -478,13 +589,23 @@ export default function activate(letta) {
   if (letta.capabilities.events?.tools) {
     disposers.push(
       letta.events.on("tool_start", (event, ctx) => {
-        bridge.emit(
-          baseEvent("tool_start", event, ctx, {
+        const toolEvent = baseEvent("tool_start", event, ctx, {
             toolCallId: event.toolCallId ?? null,
             toolName: event.toolName,
             argKeys: Object.keys(event.args ?? {}).sort(),
-          }),
-        );
+          });
+        bridge.emit(toolEvent);
+        if (String(event.toolName).toLowerCase() === "askuserquestion") {
+          bridge.emit(
+            baseEvent("attention_requested", event, ctx, {
+              hookEventName: "AskUserQuestion",
+              source: "tool",
+              kind: "question",
+              toolName: event.toolName,
+              message: "Question",
+            }),
+          );
+        }
       }),
     );
 

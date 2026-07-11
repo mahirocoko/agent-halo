@@ -364,7 +364,7 @@ button {
 }
 
 .notch-wing-right .activity-mascot[data-action="coffee"] .activity-mascot-stage,
-.notch-wing-right .activity-mascot[data-status="waiting"][data-action="coffee"] .activity-mascot-stage {
+.notch-wing-right .activity-mascot[data-status="attention"][data-action="coffee"] .activity-mascot-stage {
   animation: activity-cat-sprite-6 1.35s steps(6) infinite;
 }
 
@@ -446,7 +446,7 @@ button {
 }
 
 .session-mascot[data-action="coffee"] .session-mascot-stage,
-.session-mascot[data-status="waiting"][data-action="coffee"] .session-mascot-stage {
+.session-mascot[data-status="attention"][data-action="coffee"] .session-mascot-stage {
   animation: session-cat-sprite-6 1.35s steps(6) infinite;
 }
 
@@ -475,7 +475,7 @@ button {
   background: var(--accent);
 }
 
-.session-mascot[data-status="waiting"]::after {
+.session-mascot[data-status="attention"]::after {
   background: var(--waiting);
 }
 
@@ -637,6 +637,10 @@ button {
   background: #5b5b5f;
 }
 
+.status-inactive {
+  background: #3f3f43;
+}
+
 .status-error {
   background: var(--danger);
 }
@@ -649,7 +653,7 @@ button {
   animation: pulse-breathe 0.9s ease-in-out infinite alternate;
 }
 
-.glyph-waiting {
+.glyph-attention {
   color: var(--waiting);
   font-size: 13px;
   font-weight: 800;
@@ -1669,8 +1673,12 @@ button {
   color: var(--accent);
 }
 
-.status-text-waiting {
+.status-text-attention {
   color: var(--waiting);
+}
+
+.status-text-inactive {
+  color: #77777d;
 }
 
 .status-text-done {

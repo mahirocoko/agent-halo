@@ -5,6 +5,7 @@ export type AgentHaloPresenceStatus =
   | "idle"
   | "thinking"
   | "tool-running"
+  | "attention"
   | "closed"
   | "error";
 
@@ -104,11 +105,21 @@ export const reducePresence = (
         activeToolName: null,
       };
     case "turn_stop":
+    case "turn_complete":
       return {
         ...current,
         ...scoped,
+        conversationId: event.conversationId,
         status: "closed",
         activeToolName: null,
+      };
+    case "attention_requested":
+      return {
+        ...current,
+        ...scoped,
+        conversationId: event.conversationId,
+        status: "attention",
+        activeToolName: event.data.toolName ?? null,
       };
     case "tool_start":
       return {
@@ -172,6 +183,8 @@ export const getPresenceView = (
         return "thinking";
       case "tool-running":
         return presence.activeToolName ? `tool: ${presence.activeToolName}` : "tool-running";
+      case "attention":
+        return "needs input";
       case "closed":
         return "closed";
       case "error":

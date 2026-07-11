@@ -50,7 +50,7 @@ Currently wired status mapping:
 - `thinking` activity → `idle` (attentive idle)
 - `planning` activity → `plan` (cat arranging orange plan tiles)
 - shell/edit/tool activity → `work` (cat typing at notebook/laptop)
-- `waiting` / memory / goal / asking activity → `coffee` (cat holding/sipping coffee)
+- `attention` / memory / goal / asking activity → `coffee` (cat holding/sipping coffee)
 - delegating/subagent activity → `work` for now (avoid looping the one-shot dust vanish as a long-lived state)
 - `error` → `hurt`
 - `idle` / `done` → `idle`

@@ -1,6 +1,6 @@
 # Agent Halo Event Protocol
 
-Protocol version: `1`
+Protocol version: `2`
 
 Events are newline-delimited JSON in `~/.letta/mods/agent-halo.events.ndjson` and Server-Sent Events from `GET /events`.
 
@@ -8,7 +8,7 @@ Events are newline-delimited JSON in `~/.letta/mods/agent-halo.events.ndjson` an
 
 ```ts
 {
-  version: 1,
+  version: 2,
   id: string,
   type: string,
   timestamp: string,
@@ -43,6 +43,7 @@ Events are newline-delimited JSON in `~/.letta/mods/agent-halo.events.ndjson` an
       snapshot: true,
       sse: true,
       hookStop: true,
+      hookAttention: true,
       ingest: true,
     },
     sessionActions: {
@@ -54,11 +55,11 @@ Events are newline-delimited JSON in `~/.letta/mods/agent-halo.events.ndjson` an
 }
 ```
 
-`GET /snapshot` also returns `recent: AgentHaloEvent[]`. `POST /hook/stop` is a local hook integration endpoint that converts a Letta `Stop` hook into a `turn_stop` event. `POST /ingest` is the local multi-instance fan-in endpoint: secondary mod instances that cannot bind the bridge port forward their events to the primary bridge instead of dropping them. Current bridge session actions intentionally report `focusTerminal: false` and `endSession: false` until real Letta-scoped session/process capabilities exist.
+`GET /snapshot` also returns `recent: AgentHaloEvent[]`. `POST /hook/stop` converts a Letta `Stop` hook into `turn_complete`; legacy `turn_stop` events remain readable. `POST /hook/attention` converts an optionally configured `PermissionRequest` hook into `attention_requested`. The installer copies the relay but does not mutate global Letta settings while other sessions may be writing them. `POST /ingest` is the local multi-instance fan-in endpoint: secondary mod instances that cannot bind the bridge port forward their events to the primary bridge instead of dropping them. Current bridge session actions intentionally report `focusTerminal: false` and `endSession: false` until real Letta-scoped session/process capabilities exist.
 
 The desktop app may expose a separate native-only Ghostty focus fallback. That action uses Ghostty's macOS scripting dictionary to match a terminal by cwd/title/id, select the owning tab, and focus the terminal; it is still not a bridge-level session action and should remain clearly labeled as a desktop-native fallback.
 
-Lower-level Letta Code app-server/device protocol exports richer queue, approval, tool-execution, and result events. Agent Halo v1 does not consume that internal websocket protocol yet; the bridge stays on the trusted public mod event surface until a scoped, stable app-server integration is designed. Do not fake queue/approval rows from transcript text.
+Lower-level Letta Code app-server/device protocol exports richer queue, approval, tool-execution, and result events. Agent Halo does not consume that internal websocket protocol; the bridge stays on public mod events plus supported local hook events. `attention_requested` means only “the local harness asked for user input,” not that Agent Halo owns or can resolve the approval queue.
 
 ## Event types
 
@@ -119,16 +120,33 @@ By default this records counts only. Text previews are disabled unless local con
 }
 ```
 
-### `turn_stop`
+### `turn_complete`
 
-Emitted when a local Letta `Stop` hook posts to `POST /hook/stop`. This means the assistant turn finished; it is not the same as a process/session kill.
+Emitted when the installed local Letta `Stop` hook relay posts to `POST /hook/stop`. This means one assistant turn finished; it is not the same as conversation close or process/session kill. `turn_stop` is retained as a legacy input event.
 
 ```json
 {
-  "type": "turn_stop",
+  "type": "turn_complete",
   "data": {
     "hookEventName": "Stop",
     "source": "hook",
+    "message": null
+  }
+}
+```
+
+### `attention_requested`
+
+Emitted from an explicitly connected `PermissionRequest`/`Notification` hook relay or when the public tool lifecycle reaches `AskUserQuestion`. Some Letta surfaces render `AskUserQuestion` outside the local tool manager, so Mahiro's existing decision voice hook also calls the relay. A Notification immediately following a terminal event in the same cwd is suppressed; a new `turn_start` clears that suppression. The event carries no raw tool arguments or question text.
+
+```json
+{
+  "type": "attention_requested",
+  "data": {
+    "hookEventName": "PermissionRequest",
+    "source": "hook",
+    "kind": "approval",
+    "toolName": "exec_command",
     "message": null
   }
 }

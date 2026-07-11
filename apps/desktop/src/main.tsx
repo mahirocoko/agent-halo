@@ -32,9 +32,12 @@ const BRIDGE_URL = "http://127.0.0.1:47621";
 const DEFAULT_USAGE_REFRESH_MS = 15 * 60_000;
 const USAGE_SETTINGS_STORAGE_KEY = "agent-halo.usage-settings";
 const STALE_AFTER_MS = 30_000;
+const DONE_SIGNAL_MS = 8_000;
 const MAX_RECENT_EVENTS = 80;
 const MAX_SESSION_EVENTS_PER_SESSION = 32;
-const DEMO_MODE = new URLSearchParams(window.location.search).has("demo");
+const SEARCH_PARAMS = new URLSearchParams(window.location.search);
+const DEMO_MODE = SEARCH_PARAMS.has("demo");
+const DEMO_SCENARIO = SEARCH_PARAMS.get("demoScenario");
 const DEFAULT_CAMERA_NOTCH_WIDTH = 184;
 const DEFAULT_CLOSED_NOTCH_HEIGHT = 36;
 const MIN_LIVE_ACTIVITY_WING_WIDTH = 66;
@@ -87,7 +90,7 @@ interface ISessionSummary {
   workspacePath: string | null;
   detail: string;
   activityKind: ActivityKind;
-  status: "idle" | "working" | "waiting" | "done" | "error";
+  status: "idle" | "working" | "attention" | "inactive" | "done" | "error";
   lastActivityAt: string;
 }
 
@@ -114,6 +117,7 @@ type ActivityKind =
   | "goal"
   | "compact"
   | "model"
+  | "attention"
   | "done"
   | "error"
   | "bridge";
@@ -345,6 +349,7 @@ const normalizeBridgeCapabilities = (value: unknown): IAgentHaloBridgeCapabiliti
       snapshot: readBooleanField(endpoints, "snapshot", fallback.endpoints.snapshot),
       sse: readBooleanField(endpoints, "sse", fallback.endpoints.sse),
       hookStop: readBooleanField(endpoints, "hookStop", fallback.endpoints.hookStop),
+      hookAttention: readBooleanField(endpoints, "hookAttention", fallback.endpoints.hookAttention),
       ingest: readBooleanField(endpoints, "ingest", fallback.endpoints.ingest),
     },
     sessionActions: {
@@ -653,7 +658,14 @@ const getEventActivity = (event: AgentHaloEvent): IActivityDescriptor => {
     case "turn_start":
       return { kind: "thinking", label: "thinking", detail: `${event.data.inputCount} input` };
     case "turn_stop":
+    case "turn_complete":
       return { kind: "done", label: "done", detail: event.data.message ?? "turn complete" };
+    case "attention_requested":
+      return {
+        kind: "attention",
+        label: event.data.kind === "question" ? "question" : "approval",
+        detail: event.data.kind === "question" ? "Question" : "Approval needed",
+      };
     case "tool_start": {
       const kind = getToolActivityKind(event.data.toolName);
       return { kind, label: getToolActivityLabel(kind), detail: getToolActivityDetail(event.data.toolName) };
@@ -874,7 +886,8 @@ const getStatusCopy = (view: IStatusView): string => {
     idle: "Agent idle",
     thinking: "Thinking",
     "tool-running": "Using tool",
-    stale: "Still running?",
+    stale: "Activity quiet",
+    attention: "Needs input",
     closed: "Done",
     error: "Bridge error",
   };
@@ -888,7 +901,9 @@ const getGlyphStatus = (status: IStatusView["status"]): ISessionSummary["status"
     case "tool-running":
       return "working";
     case "stale":
-      return "waiting";
+      return "inactive";
+    case "attention":
+      return "attention";
     case "closed":
       return "done";
     case "error":
@@ -900,33 +915,38 @@ const getGlyphStatus = (status: IStatusView["status"]): ISessionSummary["status"
 };
 
 const getEventSessionStatus = (event: AgentHaloEvent, now: Date = new Date()): ISessionSummary["status"] => {
+  const isInactive = now.getTime() - Date.parse(event.timestamp) > STALE_AFTER_MS;
   switch (event.type) {
     case "conversation_close":
     case "turn_stop":
+    case "turn_complete":
       return "done";
+    case "attention_requested":
+      return "attention";
     case "turn_start":
     case "tool_start":
     case "compact_start":
     case "compact_end":
     case "llm_start":
-      return now.getTime() - Date.parse(event.timestamp) > STALE_AFTER_MS ? "waiting" : "working";
+      return isInactive ? "inactive" : "working";
     case "tool_end":
-      return event.data.status === "error" ? "error" : now.getTime() - Date.parse(event.timestamp) > STALE_AFTER_MS ? "waiting" : "working";
+      return event.data.status === "error" ? (isInactive ? "inactive" : "error") : isInactive ? "inactive" : "working";
     case "llm_end":
-      return isTerminalLlmStopReason(event.data.stopReason) ? "done" : now.getTime() - Date.parse(event.timestamp) > STALE_AFTER_MS ? "waiting" : "working";
+      return isTerminalLlmStopReason(event.data.stopReason) ? "done" : event.data.error && !isInactive ? "error" : isInactive ? "inactive" : "working";
     case "bridge_error":
-      return "error";
+      return isInactive ? "inactive" : "error";
     default:
       return "idle";
   }
 };
 
 const sessionStatusPriority: Record<ISessionSummary["status"], number> = {
+  attention: 6,
   error: 5,
   working: 4,
-  waiting: 3,
-  done: 2,
-  idle: 1,
+  done: 3,
+  idle: 2,
+  inactive: 1,
 };
 
 const compareSessionsByActivity = (a: ISessionSummary, b: ISessionSummary): number => Date.parse(b.lastActivityAt) - Date.parse(a.lastActivityAt);
@@ -950,7 +970,7 @@ const buildWorkspaceSessionGroups = (sessions: ISessionSummary[]): IWorkspaceSes
       const primarySession = sortedSessions[0];
       const latestSession = [...groupSessions].sort(compareSessionsByActivity)[0] ?? primarySession;
       const status = primarySession.status;
-      const activeCount = groupSessions.filter((session) => session.status === "working" || session.status === "waiting").length;
+      const activeCount = groupSessions.filter((session) => session.status === "working" || session.status === "attention").length;
       const doneCount = groupSessions.filter((session) => session.status === "done").length;
       const detail = activeCount > 0
         ? `${activeCount} active · ${groupSessions.length} sessions`
@@ -1006,7 +1026,7 @@ const getMascotStyle = (variant: number) => {
 
 const StatusGlyph = ({ status }: { status: ISessionSummary["status"] }) => {
   if (status === "working") return <span className="status-slot"><span className="glyph-pulse">✱</span></span>;
-  if (status === "waiting") return <span className="status-slot"><span className="glyph-waiting">!</span></span>;
+  if (status === "attention") return <span className="status-slot"><span className="glyph-attention">!</span></span>;
   if (status === "done") return <span className="status-slot"><span className="glyph-check">✓</span></span>;
   return <span className="status-slot"><span className={`status-dot status-${status}`} /></span>;
 };
@@ -1018,7 +1038,7 @@ const getSessionMascotAction = (status?: ISessionSummary["status"], activityKind
     return "hurt";
   }
 
-  if (activityKind === "planning" || activityKind === "memory" || activityKind === "goal" || activityKind === "asking") {
+  if (activityKind === "attention" || activityKind === "planning" || activityKind === "memory" || activityKind === "goal" || activityKind === "asking") {
     if (activityKind === "planning") return "plan";
     return "coffee";
   }
@@ -1035,7 +1055,7 @@ const getSessionMascotAction = (status?: ISessionSummary["status"], activityKind
     return "work";
   }
 
-  if (status === "waiting") {
+  if (status === "attention") {
     return "coffee";
   }
 
@@ -1066,9 +1086,9 @@ const SessionMascot = ({ activityKind, sessionId, status }: { activityKind?: Act
 
 const createDemoEvent = (index: number): AgentHaloEvent => {
   const timestamp = new Date().toISOString();
-  const demoSession = Math.floor(index / 8) % 3;
+  const demoSession = Math.floor(index / 10) % 3;
   const base = {
-    version: 1 as const,
+    version: 2 as const,
     id: `demo-${index}-${crypto.randomUUID()}`,
     timestamp,
     agentId: "agent-demo-mahiro-code",
@@ -1079,7 +1099,7 @@ const createDemoEvent = (index: number): AgentHaloEvent => {
     permissionMode: "unrestricted",
   };
 
-  switch (index % 8) {
+  switch (index % 10) {
     case 0:
       return { ...base, type: "conversation_open", data: { reason: "startup", previousConversationId: null } };
     case 1:
@@ -1093,10 +1113,54 @@ const createDemoEvent = (index: number): AgentHaloEvent => {
     case 5:
       return { ...base, type: "compact_end", data: { trigger: "context_window_overflow", messagesBefore: 220, messagesAfter: 120, contextTokensBefore: 190000, contextTokensAfter: 90000 } };
     case 6:
-      return { ...base, type: "tool_start", data: { toolCallId: "demo-tool-2", toolName: "Agent", argKeys: ["prompt", "description"] } };
+      return { ...base, type: "tool_start", data: { toolCallId: "demo-tool-2", toolName: "AskUserQuestion", argKeys: ["questions"] } };
+    case 7:
+      return { ...base, type: "attention_requested", data: { hookEventName: "AskUserQuestion", source: "tool", kind: "question", toolName: "AskUserQuestion", message: "Question" } };
+    case 8:
+      return { ...base, type: "tool_end", data: { toolCallId: "demo-tool-2", toolName: "AskUserQuestion", status: "success", outputLength: 64 } };
     default:
-      return { ...base, type: "llm_end", data: { model: "gpt-5.5", stopReason: "end_turn", durationMs: 2400, usage: { promptTokens: 8200, completionTokens: 720, totalTokens: 8920 } } };
+      return { ...base, type: "turn_complete", data: { hookEventName: "Stop", source: "hook", message: null } };
   }
+};
+
+const createDemoScenarioEvents = (scenario: string): AgentHaloEvent[] => {
+  const now = Date.now();
+  const timestamp = new Date(now).toISOString();
+  const timestampAt = (offset: number) => new Date(now + offset).toISOString();
+  const base = {
+    version: 2 as const,
+    id: `demo-scenario-${scenario}-${crypto.randomUUID()}`,
+    timestamp,
+    agentId: "agent-demo-mahiro-code",
+    agentName: "Mahiro Code",
+    conversationId: `local-conv-demo-${scenario}`,
+    cwd: "/Users/mahiro/ghq/github.com/mahirocoko/agent-halo",
+    model: "gpt-5.6-sol",
+    permissionMode: "unrestricted",
+  };
+
+  if (scenario === "attention") {
+    return [
+      { ...base, id: `${base.id}-open`, type: "conversation_open", data: { reason: "startup", previousConversationId: null } },
+      { ...base, id: `${base.id}-turn`, timestamp: timestampAt(1), type: "turn_start", data: { inputCount: 1 } },
+      { ...base, id: `${base.id}-tool`, timestamp: timestampAt(2), type: "tool_start", data: { toolCallId: "demo-question", toolName: "AskUserQuestion", argKeys: ["questions"] } },
+      { ...base, id: `${base.id}-attention`, timestamp: timestampAt(3), type: "attention_requested", data: { hookEventName: "AskUserQuestion", source: "tool", kind: "question", toolName: "AskUserQuestion", message: "Question" } },
+    ];
+  }
+
+  if (scenario === "done") {
+    return [
+      { ...base, id: `${base.id}-open`, type: "conversation_open", data: { reason: "startup", previousConversationId: null } },
+      { ...base, id: `${base.id}-done`, timestamp: timestampAt(1), type: "turn_complete", data: { hookEventName: "Stop", source: "hook", message: null } },
+    ];
+  }
+
+  const inactiveTime = Date.now() - STALE_AFTER_MS - 60_000;
+  const inactiveTimestamp = new Date(inactiveTime).toISOString();
+  return [
+    { ...base, id: `${base.id}-open`, timestamp: inactiveTimestamp, type: "conversation_open", data: { reason: "startup", previousConversationId: null } },
+    { ...base, id: `${base.id}-inactive`, timestamp: new Date(inactiveTime + 1).toISOString(), type: "llm_start", data: { model: "gpt-5.6-sol", messageCount: 10, contextWindow: 200_000 } },
+  ];
 };
 
 const buildSessionSummaries = (events: AgentHaloEvent[], presence: IAgentHaloPresence, now: Date): ISessionSummary[] => {
@@ -1710,6 +1774,20 @@ const useAgentHaloPresence = () => {
         ...createDefaultBridgeCapabilities(),
         events: { lifecycle: true, turns: true, tools: true, compact: true, llm: true },
       });
+      if (DEMO_SCENARIO) {
+        const events = createDemoScenarioEvents(DEMO_SCENARIO);
+        const nextPresence = events.reduce(applyEvent, createInitialPresence());
+        setLastLiveEvent(events.at(-1) ?? null);
+        setPresence(nextPresence);
+        setRecentEvents([...events].reverse());
+        setSessionEventRegistry(() => {
+          const next = mergeSessionEvents({}, events);
+          writeSessionEventRegistry(next);
+          return next;
+        });
+        return undefined;
+      }
+
       let index = 0;
       const pushDemoEvent = () => {
         const event = createDemoEvent(index);
@@ -1724,7 +1802,7 @@ const useAgentHaloPresence = () => {
         });
       };
       pushDemoEvent();
-      const timer = window.setInterval(pushDemoEvent, 1_200);
+      const timer = window.setInterval(pushDemoEvent, 800);
       return () => window.clearInterval(timer);
     }
 
@@ -1793,7 +1871,7 @@ const useAgentHaloPresence = () => {
       }
     };
 
-    for (const type of ["bridge_ready", "conversation_open", "conversation_close", "turn_start", "turn_stop", "tool_start", "tool_end", "compact_start", "compact_end", "llm_start", "llm_end", "bridge_error"]) {
+    for (const type of ["bridge_ready", "conversation_open", "conversation_close", "turn_start", "turn_stop", "turn_complete", "attention_requested", "tool_start", "tool_end", "compact_start", "compact_end", "llm_start", "llm_end", "bridge_error"]) {
       source.addEventListener(type, handleEvent as EventListener);
     }
 
@@ -1878,13 +1956,13 @@ const App = () => {
   useEffect(() => {
     if (!presence.conversationId) return;
     if (acknowledgedConversationId !== presence.conversationId) return;
-    if (view.status !== "thinking" && view.status !== "tool-running" && view.status !== "stale") return;
+    if (view.status !== "thinking" && view.status !== "tool-running" && view.status !== "attention" && view.status !== "stale") return;
     setAcknowledgedConversationId(null);
   }, [acknowledgedConversationId, presence.conversationId, view.status]);
 
   useEffect(() => {
     if (!lastLiveEvent?.conversationId) return;
-    if (!["turn_start", "tool_start", "tool_end", "compact_start", "compact_end", "llm_start", "llm_end", "turn_stop"].includes(lastLiveEvent.type)) return;
+    if (!["turn_start", "tool_start", "tool_end", "compact_start", "compact_end", "llm_start", "llm_end", "turn_stop", "turn_complete", "attention_requested"].includes(lastLiveEvent.type)) return;
 
     setDismissedSessionIds((current) => {
       const conversationId = lastLiveEvent.conversationId ?? "";
@@ -1914,25 +1992,38 @@ const App = () => {
             ? sessionGroups[0].sessions.length === 1 ? "1 session" : `${sessionGroups[0].sessions.length} sessions`
             : `${sessionGroups.length} workspaces`;
   const activitySession =
+    sessions.find((session) => session.status === "attention") ??
     sessions.find((session) => session.status === "working") ??
-    sessions.find((session) => session.status === "waiting") ??
-    sessions.find((session) => session.status === "done" && session.conversationId !== acknowledgedConversationId) ??
+    sessions.find((session) => session.status === "error" && now.getTime() - Date.parse(session.lastActivityAt) <= STALE_AFTER_MS) ??
+    sessions.find(
+      (session) =>
+        session.status === "done" &&
+        session.conversationId !== acknowledgedConversationId &&
+        now.getTime() - Date.parse(session.lastActivityAt) <= DONE_SIGNAL_MS,
+    ) ??
     null;
-  const activityStatus = activitySession?.status ?? getGlyphStatus(displayView.status);
-  const activityKind: ActivityKind = activitySession?.activityKind ?? (displayView.status === "thinking" ? "thinking" : displayView.status === "stale" ? "tool" : displayView.status === "error" ? "error" : displayView.status === "closed" ? "done" : "session");
+  const fallbackActivityStatus = getGlyphStatus(displayView.status);
+  const hasRecentUnscopedDone =
+    !lastLiveEvent?.conversationId &&
+    (lastLiveEvent?.type === "turn_complete" || lastLiveEvent?.type === "turn_stop") &&
+    now.getTime() - Date.parse(lastLiveEvent.timestamp) <= DONE_SIGNAL_MS;
+  const hasRecentFallbackError = fallbackActivityStatus === "error" && presence.lastEventAt !== null && now.getTime() - Date.parse(presence.lastEventAt) <= STALE_AFTER_MS;
+  const activityStatus = activitySession?.status ?? (hasRecentUnscopedDone ? "done" : fallbackActivityStatus === "working" || fallbackActivityStatus === "attention" || hasRecentFallbackError ? fallbackActivityStatus : "idle");
+  const activityKind: ActivityKind = activitySession?.activityKind ?? (activityStatus === "attention" ? "attention" : activityStatus === "done" ? "done" : displayView.status === "thinking" ? "thinking" : displayView.status === "error" ? "error" : "session");
   const activityViewStatus: IStatusView["status"] = (() => {
     if (activityStatus === "working") return "tool-running";
-    if (activityStatus === "waiting") return "stale";
+    if (activityStatus === "attention") return "attention";
+    if (activityStatus === "inactive") return "stale";
     if (activityStatus === "done") return "closed";
     if (activityStatus === "error") return "error";
     return displayView.status;
   })();
   const glyphStatus = getGlyphStatus(activityViewStatus);
-  const isWorkingActivity = activityStatus === "working" || activityStatus === "waiting";
-  const hasLiveActivity = isWorkingActivity || activityStatus === "done" || activityStatus === "error";
+  const isWorkingActivity = activityStatus === "working";
+  const hasLiveActivity = isWorkingActivity || activityStatus === "attention" || activityStatus === "done" || activityStatus === "error";
   const pillDetail = (() => {
     if (activitySession?.status === "working") return activitySession.detail === "thinking" ? "Thinking" : activitySession.detail;
-    if (activitySession?.status === "waiting") return "Still?";
+    if (activityStatus === "attention") return activitySession?.detail ?? (lastLiveEvent?.type === "attention_requested" && lastLiveEvent.data.kind === "question" ? "Question" : "Approval needed");
     if (activitySession?.status === "done") return "Done";
     if (activityStatus === "error") return "Error";
     return project;
@@ -2513,7 +2604,7 @@ const App = () => {
                       const isGrouped = group.sessions.length > 1;
 
                       return (
-                      <li className={`session-row ${isGrouped ? "session-group" : ""} ${group.status === "done" ? "ended" : ""}`} key={group.key} aria-label={isGrouped ? `${group.project}, ${group.sessions.length} sessions` : `${group.project}, ${session.conversationId}`} onClick={() => openSession(session.conversationId)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") openSession(session.conversationId); }} role="button" tabIndex={0}>
+                      <li className={`session-row ${isGrouped ? "session-group" : ""} ${group.status === "done" ? "ended" : ""}`} data-status={group.status} key={group.key} aria-label={isGrouped ? `${group.project}, ${group.sessions.length} sessions` : `${group.project}, ${session.conversationId}`} onClick={() => openSession(session.conversationId)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") openSession(session.conversationId); }} role="button" tabIndex={0}>
                         <SessionMascot activityKind={group.activityKind} sessionId={session.conversationId} status={group.status} />
                         <span className="session-label">
                           <span className="session-main-line">

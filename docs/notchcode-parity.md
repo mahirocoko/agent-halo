@@ -15,6 +15,8 @@ Mahiro accepted Notchcode v1 as a read-only + dismiss + setup/control-plane surf
 | Compact session rows | `buildSessionSummaries()` feeds `.session-list` / `.session-row` with project, status, and last activity. | Done |
 | Session drill-down | Row click sets `selectedSessionId`; detail view shows path, status, permission mode, and recent activity. | Done |
 | Sticky done state | `conversation_close` maps to `closed` / `done`; closed sessions remain visible until acknowledge/dismiss. | Done |
+| Ambient attention/done wing | PermissionRequest or filtered question/decision activity expands a persistent orange Needs input wing; turn completion shows a timed green Done wing without OS notifications. | Covered |
+| Stale-state truth | Quiet unfinished events become low-priority inactive history rather than a fake waiting-for-user state. | Covered |
 | Dismiss ended sessions | Row/detail dismiss hides ended sessions and persists IDs in `localStorage` under `agent-halo.dismissed-sessions`. | Done |
 | Dismiss reload regression | `apps/desktop/tests/demo-dismiss.spec.ts` verifies dismiss survives reload and stale `Acknowledge` does not reappear. | Covered |
 | Setup/control plane | Setup view shows bridge, mod install status, next step, and session-control capability boundary. | Done |

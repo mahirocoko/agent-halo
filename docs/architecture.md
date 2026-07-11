@@ -38,7 +38,7 @@ Letta Code has richer runtime state than Claude/Codex hook-only flows: persisten
 
 1. **Bridge** — mod emits normalized local events over SSE and NDJSON.
 2. **Desktop shell** — Tauri or native macOS renderer subscribes to the bridge.
-3. **Presence model** — derive stable statuses such as idle, thinking, tool-running, waiting, error.
+3. **Presence model** — derive stable per-conversation statuses such as idle, thinking, tool-running, attention, inactive, done, and error.
 4. **Letta-specific surfaces** — memory dirty/synced, subagent/task activity, skill invocation, permission waits when public mod APIs expose them.
 
 
@@ -57,7 +57,7 @@ Raw events are normalized into a UI-facing presence model in `packages/protocol/
 The desktop frontend supports `?demo=1` so the Notchcode-inspired surface can be inspected without requiring a live Letta bridge. Demo mode cycles through synthetic `conversation_open`, `turn_start`, `tool_start`, and `conversation_close` events while using the same presence reducer and UI components as live mode.
 
 
-The desktop app now includes a first tray/menu-bar control plane with Show, Hide, and Quit actions. The overlay also keeps a closed/done state sticky until the user acknowledges it, matching Notchcode's principle that completion should not disappear before the operator notices it; dismissed ended sessions are remembered in local browser storage so they do not reappear after reload/HMR. The Tauri runtime resizes the transparent window between compact pill and expanded sheet states through `set_panel_open`, and its setup view checks the real installed mod path before offering install/reinstall and derives the next setup step from runtime, install, and bridge state. Bridge `/health` and `/snapshot` responses carry capability metadata so the desktop can expose supported setup/session affordances without pretending unsupported focus/end controls exist.
+The desktop app now includes a first tray/menu-bar control plane with Show, Hide, and Quit actions. The closed notch wing expands persistently for real needs-input activity and briefly for turn completion; it does not use OS notifications. Completed rows remain sticky until dismiss, while old incomplete activity becomes low-priority inactive history instead of masquerading as a user wait. The Tauri installer writes the mod plus an idempotent Stop/PermissionRequest hook relay while preserving existing hooks. The Tauri runtime resizes the transparent window between compact pill and expanded sheet states through `set_panel_open`, and its setup view checks the complete mod/hook install before offering install/reinstall.
 
 
 ## Notchcode visual contract

@@ -316,6 +316,14 @@ fn letta_mod_path() -> Result<PathBuf, String> {
         .join("agent-halo.js"))
 }
 
+fn letta_hook_path() -> Result<PathBuf, String> {
+    let home = std::env::var("HOME").map_err(|_| "HOME is not set".to_string())?;
+    Ok(PathBuf::from(home)
+        .join(".letta")
+        .join("hooks")
+        .join("agent-halo-hook.mjs"))
+}
+
 #[tauri::command]
 fn bridge_health() -> bool {
     let address = SocketAddr::from(([127, 0, 0, 1], 47_621));
@@ -3146,6 +3154,7 @@ fn unix_seconds_to_iso(seconds: i64) -> Option<String> {
 #[tauri::command]
 fn install_agent_halo_mod() -> Result<String, String> {
     let path = letta_mod_path()?;
+    let hook_path = letta_hook_path()?;
     let Some(parent) = path.parent() else {
         return Err("Failed to resolve Letta mods directory".to_string());
     };
@@ -3158,6 +3167,17 @@ fn install_agent_halo_mod() -> Result<String, String> {
     file.write_all(include_bytes!("../../../../mods/agent-halo.js"))
         .map_err(|error| format!("Failed to write mod file: {error}"))?;
 
+    let Some(hook_parent) = hook_path.parent() else {
+        return Err("Failed to resolve Letta hooks directory".to_string());
+    };
+    fs::create_dir_all(hook_parent)
+        .map_err(|error| format!("Failed to create hooks directory: {error}"))?;
+    fs::write(
+        &hook_path,
+        include_bytes!("../../../../hooks/agent-halo-hook.mjs"),
+    )
+    .map_err(|error| format!("Failed to write Agent Halo hook relay: {error}"))?;
+
     Ok(path.to_string_lossy().to_string())
 }
 
@@ -3169,7 +3189,8 @@ fn agent_halo_mod_path() -> Result<String, String> {
 #[tauri::command]
 fn agent_halo_mod_status() -> Result<(String, bool), String> {
     let path = letta_mod_path()?;
-    let installed = path.exists();
+    let hook_path = letta_hook_path()?;
+    let installed = path.exists() && hook_path.exists();
     Ok((path.to_string_lossy().to_string(), installed))
 }
 

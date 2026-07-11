@@ -10,6 +10,7 @@ type AgentHaloPresenceStatus =
   | "idle"
   | "thinking"
   | "tool-running"
+  | "attention"
   | "closed"
   | "error";
 ```
@@ -29,7 +30,8 @@ The current reducer lives in `packages/protocol/src/presence.ts`.
 | `compact_end` | `thinking` | Records before/after compaction stats and returns to thinking. |
 | `llm_start` | `thinking` | A provider request started; records model, message count, and context window. |
 | `llm_end` | `closed` / `thinking` / `error` | Records stop reason, duration, token usage, and provider-error summaries; terminal stop reasons close the turn, provider errors enter error state. |
-| `turn_stop` | `closed` | Local Letta `Stop` hook signal; means the assistant turn finished and should show as done/sticky. |
+| `attention_requested` | `attention` | An optional PermissionRequest/filtered Notification relay or direct `AskUserQuestion` lifecycle needs user input. It stays until later tool/turn/completion activity resolves it. |
+| `turn_complete` / legacy `turn_stop` | `closed` | Local Letta `Stop` hook signal; means the assistant turn finished and should show as done/sticky. |
 | `conversation_close` | `closed` | Captures message/tool counts when available. |
 | `bridge_error` | `error` | Reserved for bridge/runtime errors. |
 
@@ -37,7 +39,7 @@ The current reducer lives in `packages/protocol/src/presence.ts`.
 
 Letta Code mods now expose `tool_end`, `compact_start` / `compact_end`, and local-backend `llm_start` / `llm_end`; Letta Code 0.27.20 also emits `llm_end` for provider errors with nullable usage and an error summary. Agent Halo still keeps Mahiro's local Letta `Stop` hook via `POST /hook/stop` as a reliable turn-finished fallback because not every backend/surface emits every event. Viewers should still treat long-running `thinking` / `tool-running` states as potentially stale after a local timeout when terminal events are unavailable.
 
-The terminal viewer defaults to `staleAfterMs = 30000`.
+The terminal viewer defaults to `staleAfterMs = 30000`. The desktop maps a quiet active event to `inactive`, not `waiting`: only `attention_requested` means the agent actually needs user input. Inactive sessions remain in history but have lower priority than done/idle sessions and do not occupy the notch activity wing.
 
 ## Derived activity semantics
 
@@ -59,10 +61,11 @@ Current raw events:
 | `tool_end` success | derived tool kind | `work`/`idle` | Tool finished; status/output length are recorded without raw output. |
 | `compact_start` / `compact_end` | `compact` | `dust` | Context compaction started/completed; token/message shrink stats are available on end. |
 | `llm_start` / `llm_end` | `model` | `idle`/`work` | Provider request started/completed; duration and token usage are available on end. |
-| `turn_stop` / `conversation_close` | `done` | `idle` | Turn/session completed; candidate for settle/idle/done animation. |
+| `attention_requested` | `attention` | `coffee` | User input is required; the activity wing stays expanded until later activity resolves it. |
+| `turn_complete` / legacy `turn_stop` / `conversation_close` | `done` | `idle` | Turn/session completed; the activity wing shows Done briefly while the row remains sticky. |
 | `bridge_error` | `error` | `hurt` | Bridge or stream issue; candidate for hurt/fluster animation. |
 
-Important limitation: there is no native `plan_start`, `thinking_delta`, or assistant-text event in the current protocol. “Plan” is inferred from the `UpdatePlan` tool, “thinking” is inferred from `turn_start` / `llm_start`, and active work is inferred from tool/model/compaction lifecycle until `llm_end`, `turn_stop`, or staleness.
+Important limitation: there is no native `plan_start`, `thinking_delta`, or assistant-text event in the current protocol. “Plan” is inferred from the `UpdatePlan` tool, “thinking” is inferred from `turn_start` / `llm_start`, and active work is inferred from tool/model/compaction lifecycle until `llm_end`, `turn_complete`, or inactivity. General approval queue/result state remains unavailable.
 
 ## Privacy stance
 

@@ -54,6 +54,7 @@ The bridge exposes local-only endpoints:
 | `GET /snapshot` | Current capabilities and recent events |
 | `GET /events` | Live Server-Sent Events stream |
 | `POST /hook/stop` | Optional local Stop-hook bridge for turn completion fallback |
+| `POST /hook/attention` | Local PermissionRequest-hook bridge for needs-input activity |
 | `POST /ingest` | Multi-instance fan-in when another mod instance already owns the bridge port |
 
 The bridge also writes a local NDJSON event log:
@@ -81,10 +82,12 @@ Agent Halo currently consumes these Letta Code mod events when available:
 - `compact_end`
 - `llm_start`
 - `llm_end`
+- `turn_complete` from the installed Stop-hook relay
+- `attention_requested` from `AskUserQuestion` tool lifecycle when available, or an explicitly connected PermissionRequest/Notification hook
 
 The bridge keeps payloads intentionally small and privacy-aware. Tool results are represented by status and output length, not raw output. LLM activity stores model, stop reason, duration, and token counts. User text previews are disabled by default unless explicitly configured locally.
 
-Lower-level Letta Code app-server/device protocol events such as queue, approval, result, and process-control messages are not consumed in v1. Agent Halo will not fake those states from transcript text.
+Lower-level Letta Code app-server/device protocol events such as queue, approval result, and process-control messages are not consumed. Agent Halo uses the supported local `PermissionRequest` hook only to signal that user attention is required; it does not inspect transcript text or claim access to the full internal approval queue.
 
 ## Usage providers
 
@@ -139,6 +142,8 @@ You can also install the mod directly from the repository:
 ```bash
 pnpm mod:install
 ```
+
+The installer also copies a local hook relay to `~/.letta/hooks/agent-halo-hook.mjs`. It deliberately does **not** rewrite global `~/.letta/settings.json`, so existing voice/safety hooks and concurrent Letta settings writes remain untouched. `AskUserQuestion` is observed directly when its tool lifecycle is available; runtimes that render it outside the local tool manager can connect an existing `Notification` voice hook to the relay. Completion-adjacent notifications are suppressed so ordinary finished turns do not become false needs-input activity. Generic `PermissionRequest` attention remains optional and requires explicitly registering the relay after active Letta sessions are closed.
 
 ## Development
 

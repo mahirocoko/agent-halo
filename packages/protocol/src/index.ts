@@ -1,4 +1,4 @@
-export const AGENT_HALO_PROTOCOL_VERSION = 1 as const;
+export const AGENT_HALO_PROTOCOL_VERSION = 2 as const;
 
 
 export interface IAgentHaloBridgeCapabilities {
@@ -14,6 +14,7 @@ export interface IAgentHaloBridgeCapabilities {
     snapshot: boolean;
     sse: boolean;
     hookStop: boolean;
+    hookAttention: boolean;
     ingest: boolean;
   };
   sessionActions: {
@@ -36,6 +37,7 @@ export const createDefaultBridgeCapabilities = (): IAgentHaloBridgeCapabilities 
     snapshot: true,
     sse: true,
     hookStop: true,
+    hookAttention: true,
     ingest: true,
   },
   sessionActions: {
@@ -51,6 +53,8 @@ export type AgentHaloEventType =
   | "conversation_close"
   | "turn_start"
   | "turn_stop"
+  | "turn_complete"
+  | "attention_requested"
   | "tool_start"
   | "tool_end"
   | "compact_start"
@@ -113,6 +117,26 @@ export interface IAgentHaloTurnStopEvent extends IAgentHaloBaseEvent {
   data: {
     hookEventName: "Stop" | string;
     source: "hook" | string;
+    message?: string | null;
+  };
+}
+
+export interface IAgentHaloTurnCompleteEvent extends IAgentHaloBaseEvent {
+  type: "turn_complete";
+  data: {
+    hookEventName: "Stop" | string;
+    source: "hook" | string;
+    message?: string | null;
+  };
+}
+
+export interface IAgentHaloAttentionRequestedEvent extends IAgentHaloBaseEvent {
+  type: "attention_requested";
+  data: {
+    hookEventName: "PermissionRequest" | "AskUserQuestion" | string;
+    source: "hook" | "tool" | string;
+    kind: "approval" | "question" | string;
+    toolName?: string | null;
     message?: string | null;
   };
 }
@@ -198,6 +222,8 @@ export type AgentHaloEvent =
   | IAgentHaloConversationCloseEvent
   | IAgentHaloTurnStartEvent
   | IAgentHaloTurnStopEvent
+  | IAgentHaloTurnCompleteEvent
+  | IAgentHaloAttentionRequestedEvent
   | IAgentHaloToolStartEvent
   | IAgentHaloToolEndEvent
   | IAgentHaloCompactStartEvent

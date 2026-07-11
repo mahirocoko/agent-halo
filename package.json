@@ -15,7 +15,8 @@
     "desktop:install": "node scripts/install-desktop.mjs",
     "desktop:web": "pnpm --filter @agent-halo/desktop dev",
     "desktop:web:build": "pnpm --filter @agent-halo/desktop build",
-    "test:demo": "playwright test"
+    "test:demo": "playwright test",
+    "test:hooks": "node --test tests/hook-integration.test.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.61.0",
