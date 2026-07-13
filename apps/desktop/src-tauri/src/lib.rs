@@ -21,6 +21,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+mod keep_awake;
+
+use keep_awake::KeepAwakeState;
+
 #[cfg(target_os = "macos")]
 use objc2::MainThreadMarker;
 #[cfg(target_os = "macos")]
@@ -328,6 +332,11 @@ fn letta_hook_path() -> Result<PathBuf, String> {
 fn bridge_health() -> bool {
     let address = SocketAddr::from(([127, 0, 0, 1], 47_621));
     TcpStream::connect_timeout(&address, Duration::from_millis(350)).is_ok()
+}
+
+#[tauri::command]
+fn set_keep_awake(state: tauri::State<'_, KeepAwakeState>, active: bool) -> Result<bool, String> {
+    state.set_active(active)
 }
 
 #[tauri::command]
@@ -3607,7 +3616,8 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
 }
 
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
+        .manage(KeepAwakeState::default())
         .invoke_handler(tauri::generate_handler![
             agent_halo_mod_path,
             agent_halo_mod_status,
@@ -3621,6 +3631,7 @@ pub fn run() {
             install_agent_halo_mod,
             notch_metrics,
             open_external_url,
+            set_keep_awake,
             set_panel_open
         ])
         .setup(|app| {
@@ -3632,6 +3643,20 @@ pub fn run() {
             setup_tray(app)?;
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("failed to run Agent Halo desktop");
+        .build(tauri::generate_context!())
+        .expect("failed to build Agent Halo desktop");
+
+    app.run(|app_handle, event| match event {
+        tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
+            let _ = app_handle.state::<KeepAwakeState>().set_active(false);
+        }
+        tauri::RunEvent::WindowEvent {
+            label,
+            event: tauri::WindowEvent::Destroyed,
+            ..
+        } if label == "main" => {
+            let _ = app_handle.state::<KeepAwakeState>().set_active(false);
+        }
+        _ => {}
+    });
 }

@@ -28,6 +28,7 @@ It is designed for people who keep multiple Letta Code conversations, subagents,
 - Keeps completed sessions visible until you acknowledge, dismiss, or delete them locally.
 - Provides a native Ghostty focus fallback for matching terminal tabs/windows by cwd/title/session hints.
 - Shows local AI usage for supported providers when credentials or local usage sources are available.
+- Can keep the macOS display awake while current Letta work is actively running, without treating stale or completed sessions as active work.
 - Installs and verifies the local Letta Code mod from the desktop setup view.
 
 Agent Halo intentionally stays local. It uses the public Letta Code mod surface, a local bridge, local credentials, and local logs. It does not depend on a hosted dashboard and does not use transcript parsing as its primary source of truth.

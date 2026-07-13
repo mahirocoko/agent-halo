@@ -4,6 +4,7 @@ import {
   BarChart3,
   Check,
   ChevronLeft,
+  Coffee,
   Download,
   ExternalLink,
   Focus,
@@ -31,6 +32,7 @@ import "./styles.css";
 const BRIDGE_URL = "http://127.0.0.1:47621";
 const DEFAULT_USAGE_REFRESH_MS = 15 * 60_000;
 const USAGE_SETTINGS_STORAGE_KEY = "agent-halo.usage-settings";
+const KEEP_AWAKE_STORAGE_KEY = "agent-halo.keep-awake-while-working";
 const STALE_AFTER_MS = 30_000;
 const DONE_SIGNAL_MS = 8_000;
 const MAX_RECENT_EVENTS = 80;
@@ -469,6 +471,22 @@ const writeUsageSettings = (settings: IUsageSettings) => {
     window.localStorage.setItem(USAGE_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
   } catch {
     // Ignore storage errors; settings still apply for the current runtime session.
+  }
+};
+
+const readKeepAwakeEnabled = (): boolean => {
+  try {
+    return window.localStorage.getItem(KEEP_AWAKE_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+};
+
+const writeKeepAwakeEnabled = (enabled: boolean) => {
+  try {
+    window.localStorage.setItem(KEEP_AWAKE_STORAGE_KEY, `${enabled}`);
+  } catch {
+    // Ignore storage errors; the setting still applies for the current runtime session.
   }
 };
 
@@ -1917,10 +1935,14 @@ const App = () => {
   const [nativeClosedSurfaceWidth, setNativeClosedSurfaceWidth] = useState(DEFAULT_CAMERA_NOTCH_WIDTH);
   const [dismissedSessionIds, setDismissedSessionIds] = useState<DismissedSessionRegistry>(readDismissedSessionIds);
   const [deletedSessionIds, setDeletedSessionIds] = useState<DeletedSessionRegistry>(readDeletedSessionIds);
+  const [keepAwakeEnabled, setKeepAwakeEnabled] = useState(readKeepAwakeEnabled);
+  const [keepAwakeActive, setKeepAwakeActive] = useState(false);
+  const [keepAwakeError, setKeepAwakeError] = useState<string | null>(null);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const sheetInnerRef = useRef<HTMLDivElement | null>(null);
   const hoverOpenTimerRef = useRef<number | null>(null);
   const hoverCloseTimerRef = useRef<number | null>(null);
+  const keepAwakeRequestRef = useRef<Promise<unknown>>(Promise.resolve());
   const displayView =
     isDeletedAfter(deletedSessionIds, presence.conversationId, presence.lastEventAt) ||
     (view.status === "closed" && (acknowledgedConversationId === presence.conversationId || isDismissedAfter(dismissedSessionIds, presence.conversationId, presence.lastEventAt)))
@@ -2021,6 +2043,37 @@ const App = () => {
   const glyphStatus = getGlyphStatus(activityViewStatus);
   const isWorkingActivity = activityStatus === "working";
   const hasLiveActivity = isWorkingActivity || activityStatus === "attention" || activityStatus === "done" || activityStatus === "error";
+
+  useEffect(() => {
+    if (!canUseNativeControls) {
+      setKeepAwakeActive(false);
+      setKeepAwakeError(null);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const requestedActive = keepAwakeEnabled && isWorkingActivity;
+    const request = keepAwakeRequestRef.current
+      .catch(() => undefined)
+      .then(() => invoke<boolean>("set_keep_awake", { active: requestedActive }));
+    keepAwakeRequestRef.current = request;
+    void request
+      .then((active) => {
+        if (cancelled) return;
+        setKeepAwakeActive(active);
+        setKeepAwakeError(null);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setKeepAwakeActive(false);
+        setKeepAwakeError(error instanceof Error ? error.message : String(error || "Keep awake unavailable"));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canUseNativeControls, isWorkingActivity, keepAwakeEnabled]);
+
   const pillDetail = (() => {
     if (activitySession?.status === "working") return activitySession.detail === "thinking" ? "Thinking" : activitySession.detail;
     if (activityStatus === "attention") return activitySession?.detail ?? (lastLiveEvent?.type === "attention_requested" && lastLiveEvent.data.kind === "question" ? "Question" : "Approval needed");
@@ -2294,6 +2347,11 @@ const App = () => {
     writeUsageSettings(settings);
   };
 
+  const updateKeepAwakeEnabled = (enabled: boolean) => {
+    setKeepAwakeEnabled(enabled);
+    writeKeepAwakeEnabled(enabled);
+  };
+
   const backToSessions = () => {
     setSelectedSessionId(null);
     setSetupOpen(false);
@@ -2545,6 +2603,32 @@ const App = () => {
                             : "Focus/end unavailable in current bridge"}
                       </span>
                     </span>
+                  </div>
+                  <div className="setup-row">
+                    <span className="status-slot"><Coffee className="setup-icon" size={14} strokeWidth={2.3} /></span>
+                    <span className="setup-copy">
+                      <span className="setup-title">Keep display awake</span>
+                      <span className="setup-detail">
+                        {!keepAwakeEnabled
+                          ? "Off · display follows macOS idle settings"
+                          : !canUseNativeControls
+                            ? "Desktop runtime required"
+                            : keepAwakeError
+                              ? `Unavailable · ${keepAwakeError}`
+                              : keepAwakeActive
+                                ? "Active · Letta is working"
+                                : "On · waiting for active work"}
+                      </span>
+                    </span>
+                    <button
+                      className={`pill-btn ${keepAwakeEnabled ? "accent" : ""}`}
+                      type="button"
+                      onClick={() => updateKeepAwakeEnabled(!keepAwakeEnabled)}
+                      data-tauri-drag-region="false"
+                      aria-label={`${keepAwakeEnabled ? "Disable" : "Enable"} keep display awake`}
+                    >
+                      {keepAwakeEnabled ? "On" : "Off"}
+                    </button>
                   </div>
                   {nativeAction.message ? (
                     <div className="notice-row" data-online={nativeAction.bridgeOnline === true}>{nativeAction.message}</div>
