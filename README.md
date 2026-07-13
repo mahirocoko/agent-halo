@@ -25,7 +25,7 @@ It is designed for people who keep multiple Letta Code conversations, subagents,
 - Shows live Letta Code activity in a compact notch-style overlay.
 - Tracks conversation lifecycle, model turns, tool starts/ends, compaction, and local-backend LLM request activity.
 - Groups recent sessions by workspace so related subagents stay together.
-- Keeps completed sessions visible until you acknowledge, dismiss, or delete them locally.
+- Keeps completed sessions visible until you explicitly clear them, with per-session detail and Ghostty focus access inside expandable workspace groups.
 - Provides a native Ghostty focus fallback for matching terminal tabs/windows by cwd/title/session hints.
 - Shows local AI usage for supported providers when credentials or local usage sources are available.
 - Can keep the macOS display awake while current Letta work is actively running, without treating stale or completed sessions as active work.
@@ -205,7 +205,7 @@ Agent Halo is built around local state:
 
 - Bridge traffic stays on `127.0.0.1`.
 - Events are written to `~/.letta/mods/agent-halo.events.ndjson`.
-- Dismissed/deleted session state is stored in desktop renderer local storage.
+- Cleared completion tombstones and removed local session history are stored in desktop renderer local storage.
 - Provider usage reads local credentials, CLIs, language servers, or local history where available.
 - The bridge does not store raw tool output by default.
 - Text preview capture is opt-in through local config and disabled by default.

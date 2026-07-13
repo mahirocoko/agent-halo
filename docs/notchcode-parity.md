@@ -14,11 +14,12 @@ Mahiro accepted Notchcode v1 as a read-only + dismiss + setup/control-plane surf
 | Click-to-expand dropped sheet | Desktop state toggles between pill and `.sheet.view-panel.docked`; Tauri `set_panel_open` resizes the native transparent window. | Done |
 | Compact session rows | `buildSessionSummaries()` feeds `.session-list` / `.session-row` with project, status, and last activity. | Done |
 | Session drill-down | Row click sets `selectedSessionId`; detail view shows path, status, permission mode, and recent activity. | Done |
-| Sticky done state | `conversation_close` maps to `closed` / `done`; closed sessions remain visible until acknowledge/dismiss. | Done |
+| Sticky done state | `turn_complete` / `conversation_close` maps to `done`; completed sessions remain visible across quiet reloads until explicit Clear. Closing the ambient Done signal does not clear the row. | Done |
 | Ambient attention/done wing | PermissionRequest or filtered question/decision activity expands a persistent orange Needs input wing; turn completion shows a timed green Done wing without OS notifications. | Covered |
 | Stale-state truth | Quiet unfinished events become low-priority inactive history rather than a fake waiting-for-user state. | Covered |
-| Dismiss ended sessions | Row/detail dismiss hides ended sessions and persists IDs in `localStorage` under `agent-halo.dismissed-sessions`. | Done |
-| Dismiss reload regression | `apps/desktop/tests/demo-dismiss.spec.ts` verifies dismiss survives reload and stale `Acknowledge` does not reappear. | Covered |
+| Clear completed sessions | Per-session Clear hides completed rows and persists IDs in `localStorage` under `agent-halo.dismissed-sessions`; guarded Clear completed handles the current completed section. | Done |
+| Completion persistence regressions | `apps/desktop/tests/demo-dismiss.spec.ts` separately verifies quiet-reload persistence and fresh-activity resurrection after Clear. | Covered |
+| Expandable workspace groups | Active and Completed sections keep one compact scroll surface; grouped workspaces expose child detail, Focus, and per-session Clear actions. | Covered |
 | Setup/control plane | Setup view shows bridge, mod install status, next step, and session-control capability boundary. | Done |
 | Setup boundary regression | `apps/desktop/tests/demo-setup.spec.ts` verifies browser demo does not fake native install/check behavior or focus/end controls. | Covered |
 | Capability-aware bridge | `packages/protocol/src/index.ts` defines bridge capabilities; `/health` and `/snapshot` include them from `mods/agent-halo.js`. | Done |

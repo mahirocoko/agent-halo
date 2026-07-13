@@ -4,6 +4,8 @@ import {
   BarChart3,
   Check,
   ChevronLeft,
+  ChevronDown,
+  ChevronRight,
   Coffee,
   Download,
   ExternalLink,
@@ -141,6 +143,24 @@ interface IWorkspaceSessionGroup {
   lastActivityAt: string;
   primarySession: ISessionSummary;
   sessions: ISessionSummary[];
+}
+
+interface ISessionListRowProps {
+  child?: boolean;
+  onClear: (conversationId: string) => void;
+  onFocus: (session: ISessionSummary) => void;
+  onOpen: (conversationId: string) => void;
+  session: ISessionSummary;
+}
+
+interface IWorkspaceSessionGroupItemProps {
+  expanded: boolean;
+  group: IWorkspaceSessionGroup;
+  groupKey: string;
+  onClear: (conversationId: string) => void;
+  onFocus: (session: ISessionSummary) => void;
+  onOpen: (conversationId: string) => void;
+  onToggle: (groupKey: string) => void;
 }
 
 type SessionEventRegistry = Record<string, AgentHaloEvent[]>;
@@ -1102,6 +1122,109 @@ const SessionMascot = ({ activityKind, sessionId, status }: { activityKind?: Act
   );
 };
 
+const shortSessionId = (conversationId: string): string => conversationId.replace(/^local-conv-/, "").slice(-8);
+
+const sessionStatusLabel = (status: ISessionSummary["status"]): string => {
+  const labels: Record<ISessionSummary["status"], string> = {
+    attention: "Needs input",
+    done: "Done",
+    error: "Error",
+    idle: "Idle",
+    inactive: "Inactive",
+    working: "Working",
+  };
+  return labels[status];
+};
+
+const SessionListRow = ({ child = false, onClear, onFocus, onOpen, session }: ISessionListRowProps) => (
+  <li className={`session-row ${child ? "session-child-row" : ""} ${session.status === "done" ? "ended" : ""}`} data-status={session.status}>
+    <button
+      className="session-row-main"
+      type="button"
+      onClick={() => onOpen(session.conversationId)}
+      data-tauri-drag-region="false"
+      aria-label={`Open ${session.project} session details`}
+    >
+      {child ? <StatusGlyph status={session.status} /> : <SessionMascot activityKind={session.activityKind} sessionId={session.conversationId} status={session.status} />}
+      <span className="session-label">
+        <span className="session-main-line">
+          <span className="agent-badge">{child ? shortSessionId(session.conversationId) : "LC"}</span>
+          <span className="session-project">{child ? sessionStatusLabel(session.status) : session.project}</span>
+          <span className="session-meta">{session.detail}</span>
+        </span>
+        <span className="session-folder">{child ? session.project : session.workspace}</span>
+      </span>
+      <span className="session-time">{formatTime(session.lastActivityAt)}</span>
+    </button>
+    <div className="session-row-actions">
+      <button
+        className="row-btn row-focus"
+        type="button"
+        onClick={() => onFocus(session)}
+        data-tauri-drag-region="false"
+        aria-label={`Focus ${session.project} session in Ghostty`}
+      >
+        <Focus size={11} strokeWidth={2.4} />
+        Focus
+      </button>
+      {session.status === "done" ? (
+        <button
+          className="row-btn row-clear"
+          type="button"
+          onClick={() => onClear(session.conversationId)}
+          data-tauri-drag-region="false"
+          aria-label={`Clear completed ${session.project} session`}
+          title="Hide this completed session until it has fresh activity"
+        >
+          <X size={12} strokeWidth={2.5} />
+        </button>
+      ) : null}
+    </div>
+  </li>
+);
+
+const WorkspaceSessionGroupItem = ({ expanded, group, groupKey, onClear, onFocus, onOpen, onToggle }: IWorkspaceSessionGroupItemProps) => {
+  if (group.sessions.length === 1) {
+    return <SessionListRow session={group.sessions[0]} onClear={onClear} onFocus={onFocus} onOpen={onOpen} />;
+  }
+
+  return (
+    <li className="session-group-block" data-status={group.status}>
+      <div className="session-row session-group" data-status={group.status}>
+        <button
+          className="session-row-main session-group-main"
+          type="button"
+          onClick={() => onToggle(groupKey)}
+          data-tauri-drag-region="false"
+          aria-expanded={expanded}
+          aria-label={`${expanded ? "Collapse" : "Expand"} ${group.project}, ${group.sessions.length} sessions`}
+        >
+          <span className="session-disclosure" aria-hidden="true">
+            {expanded ? <ChevronDown size={12} strokeWidth={2.4} /> : <ChevronRight size={12} strokeWidth={2.4} />}
+          </span>
+          <SessionMascot activityKind={group.activityKind} sessionId={group.primarySession.conversationId} status={group.status} />
+          <span className="session-label">
+            <span className="session-main-line">
+              <span className="agent-badge">×{group.sessions.length}</span>
+              <span className="session-project">{group.project}</span>
+              <span className="session-meta">{group.detail}</span>
+            </span>
+            <span className="session-folder">{group.workspace}</span>
+          </span>
+          <span className="session-time">{formatTime(group.lastActivityAt)}</span>
+        </button>
+      </div>
+      {expanded ? (
+        <ul className="session-child-list" aria-label={`${group.project} sessions`}>
+          {group.sessions.map((session) => (
+            <SessionListRow child session={session} onClear={onClear} onFocus={onFocus} onOpen={onOpen} key={session.conversationId} />
+          ))}
+        </ul>
+      ) : null}
+    </li>
+  );
+};
+
 const createDemoEvent = (index: number): AgentHaloEvent => {
   const timestamp = new Date().toISOString();
   const demoSession = Math.floor(index / 10) % 3;
@@ -1170,6 +1293,22 @@ const createDemoScenarioEvents = (scenario: string): AgentHaloEvent[] => {
     return [
       { ...base, id: `${base.id}-open`, type: "conversation_open", data: { reason: "startup", previousConversationId: null } },
       { ...base, id: `${base.id}-done`, timestamp: timestampAt(1), type: "turn_complete", data: { hookEventName: "Stop", source: "hook", message: null } },
+    ];
+  }
+
+  if (scenario === "multi") {
+    const workspace = "/Users/mahiro/ghq/github.com/mahirocoko/agent-halo";
+    const otherWorkspace = "/Users/mahiro/ghq/github.com/mahirocoko/paoplew";
+    const sessionBase = (conversationId: string, cwd: string) => ({ ...base, conversationId, cwd });
+    return [
+      { ...sessionBase("local-conv-demo-active", workspace), id: `${base.id}-active-open`, timestamp: timestampAt(1), type: "conversation_open", data: { reason: "startup", previousConversationId: null } },
+      { ...sessionBase("local-conv-demo-active", workspace), id: `${base.id}-active-turn`, timestamp: timestampAt(8), type: "turn_start", data: { inputCount: 1 } },
+      { ...sessionBase("local-conv-demo-done-a", workspace), id: `${base.id}-done-a-open`, timestamp: timestampAt(2), type: "conversation_open", data: { reason: "startup", previousConversationId: null } },
+      { ...sessionBase("local-conv-demo-done-a", workspace), id: `${base.id}-done-a`, timestamp: timestampAt(7), type: "turn_complete", data: { hookEventName: "Stop", source: "hook", message: "Desktop pass complete" } },
+      { ...sessionBase("local-conv-demo-done-b", workspace), id: `${base.id}-done-b-open`, timestamp: timestampAt(3), type: "conversation_open", data: { reason: "startup", previousConversationId: null } },
+      { ...sessionBase("local-conv-demo-done-b", workspace), id: `${base.id}-done-b`, timestamp: timestampAt(6), type: "turn_complete", data: { hookEventName: "Stop", source: "hook", message: "Native checks complete" } },
+      { ...sessionBase("local-conv-demo-paoplew", otherWorkspace), id: `${base.id}-other-open`, timestamp: timestampAt(4), type: "conversation_open", data: { reason: "startup", previousConversationId: null } },
+      { ...sessionBase("local-conv-demo-paoplew", otherWorkspace), id: `${base.id}-other-done`, timestamp: timestampAt(5), type: "turn_complete", data: { hookEventName: "Stop", source: "hook", message: "Bills review complete" } },
     ];
   }
 
@@ -1938,6 +2077,9 @@ const App = () => {
   const [keepAwakeEnabled, setKeepAwakeEnabled] = useState(readKeepAwakeEnabled);
   const [keepAwakeActive, setKeepAwakeActive] = useState(false);
   const [keepAwakeError, setKeepAwakeError] = useState<string | null>(null);
+  const [expandedSessionGroupKeys, setExpandedSessionGroupKeys] = useState<Set<string>>(() => new Set());
+  const [clearCompletedArmed, setClearCompletedArmed] = useState(false);
+  const [pendingRemoveHistoryId, setPendingRemoveHistoryId] = useState<string | null>(null);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const sheetInnerRef = useRef<HTMLDivElement | null>(null);
   const hoverOpenTimerRef = useRef<number | null>(null);
@@ -1974,6 +2116,22 @@ const App = () => {
     return getUniqueSortedEvents([...selectedSession.events, ...fallbackEvents]).slice(0, 16);
   }, [recentEvents, selectedSession]);
   const sessionGroups = useMemo(() => buildWorkspaceSessionGroups(sessions), [sessions]);
+  const activeSessionGroups = useMemo(
+    () => buildWorkspaceSessionGroups(sessions.filter((session) => session.status !== "done")),
+    [sessions],
+  );
+  const completedSessions = useMemo(() => sessions.filter((session) => session.status === "done"), [sessions]);
+  const completedSessionGroups = useMemo(() => buildWorkspaceSessionGroups(completedSessions), [completedSessions]);
+
+  useEffect(() => {
+    if (!clearCompletedArmed) return undefined;
+    const timer = window.setTimeout(() => setClearCompletedArmed(false), 4_000);
+    return () => window.clearTimeout(timer);
+  }, [clearCompletedArmed]);
+
+  useEffect(() => {
+    setPendingRemoveHistoryId(null);
+  }, [selectedSessionId]);
 
   useEffect(() => {
     if (!presence.conversationId) return;
@@ -2368,16 +2526,31 @@ const App = () => {
     if (selectedSessionId === conversationId) setSelectedSessionId(null);
   };
 
-  const dismissSessionGroup = (group: IWorkspaceSessionGroup) => {
-    const dismissedAt = Date.now();
+  const clearCompletedSessions = () => {
+    if (!clearCompletedArmed) {
+      setClearCompletedArmed(true);
+      return;
+    }
+
+    const clearedAt = Date.now();
     setDismissedSessionIds((current) => {
       const next = { ...current };
-      for (const session of group.sessions) next[session.conversationId] = dismissedAt;
+      for (const session of completedSessions) next[session.conversationId] = clearedAt;
       writeDismissedSessionIds(next);
       return next;
     });
     setAcknowledgedConversationId(null);
-    if (selectedSessionId && group.sessions.some((session) => session.conversationId === selectedSessionId)) setSelectedSessionId(null);
+    if (selectedSessionId && completedSessions.some((session) => session.conversationId === selectedSessionId)) setSelectedSessionId(null);
+    setClearCompletedArmed(false);
+  };
+
+  const toggleSessionGroup = (groupKey: string) => {
+    setExpandedSessionGroupKeys((current) => {
+      const next = new Set(current);
+      if (next.has(groupKey)) next.delete(groupKey);
+      else next.add(groupKey);
+      return next;
+    });
   };
 
   const deleteSession = (conversationId: string) => {
@@ -2400,6 +2573,15 @@ const App = () => {
     });
     if (conversationId === acknowledgedConversationId) setAcknowledgedConversationId(null);
     if (selectedSessionId === conversationId) setSelectedSessionId(null);
+  };
+
+  const requestRemoveSessionHistory = (conversationId: string) => {
+    if (pendingRemoveHistoryId !== conversationId) {
+      setPendingRemoveHistoryId(conversationId);
+      return;
+    }
+    deleteSession(conversationId);
+    setPendingRemoveHistoryId(null);
   };
 
   const loadModStatus = async () => {
@@ -2467,8 +2649,9 @@ const App = () => {
         conversationId: session.conversationId,
         cwd: "cwd" in session ? session.cwd : session.workspacePath,
       });
-      setSessionAction({ ok: true, message });
-      closePanel({ suppressHover: true });
+      const exactMatch = message.startsWith("Focused Ghostty ·");
+      setSessionAction({ ok: exactMatch, message });
+      if (exactMatch) closePanel({ suppressHover: true });
     } catch (error) {
       setSessionAction({ ok: false, message: error instanceof Error ? error.message : "Ghostty focus failed" });
     }
@@ -2682,55 +2865,71 @@ const App = () => {
                 </div>
               ) : (
                 <>
-                  <ul className="session-list">
-                    {sessionGroups.map((group) => {
-                      const session = group.primarySession;
-                      const isGrouped = group.sessions.length > 1;
-
-                      return (
-                      <li className={`session-row ${isGrouped ? "session-group" : ""} ${group.status === "done" ? "ended" : ""}`} data-status={group.status} key={group.key} aria-label={isGrouped ? `${group.project}, ${group.sessions.length} sessions` : `${group.project}, ${session.conversationId}`} onClick={() => openSession(session.conversationId)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") openSession(session.conversationId); }} role="button" tabIndex={0}>
-                        <SessionMascot activityKind={group.activityKind} sessionId={session.conversationId} status={group.status} />
-                        <span className="session-label">
-                          <span className="session-main-line">
-                            <span className="agent-badge">{isGrouped ? `×${group.sessions.length}` : "LC"}</span>
-                            <span className="session-project">{group.project}</span>
-                            <span className="session-meta">{isGrouped ? group.detail : session.detail}</span>
-                          </span>
-                          <span className="session-folder">{group.workspace}</span>
-                        </span>
-                        <span className="session-time">{formatTime(group.lastActivityAt)}</span>
-                        <button
-                          className="row-btn row-focus"
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void focusSelectedSession(session);
-                          }}
-                          data-tauri-drag-region="false"
-                          aria-label={`Focus ${group.project} session in Ghostty`}
-                        >
-                          <Focus size={11} strokeWidth={2.4} />
-                          Focus
-                        </button>
-                        {group.status === "done" ? (
+                  {sessionAction.message ? (
+                    <div className="notice-row compact session-focus-notice" data-online={sessionAction.ok === true}>{sessionAction.message}</div>
+                  ) : null}
+                  <div className="session-sections">
+                    {activeSessionGroups.length > 0 ? (
+                      <section className="session-section" aria-labelledby="active-session-heading">
+                        <div className="session-section-head">
+                          <span id="active-session-heading">Active</span>
+                          <span className="session-section-count">{activeSessionGroups.reduce((count, group) => count + group.sessions.length, 0)}</span>
+                        </div>
+                        <ul className="session-list">
+                          {activeSessionGroups.map((group) => {
+                            const groupKey = `active:${group.key}`;
+                            return (
+                              <WorkspaceSessionGroupItem
+                                expanded={expandedSessionGroupKeys.has(groupKey)}
+                                group={group}
+                                groupKey={groupKey}
+                                onClear={dismissSession}
+                                onFocus={(session) => void focusSelectedSession(session)}
+                                onOpen={openSession}
+                                onToggle={toggleSessionGroup}
+                                key={groupKey}
+                              />
+                            );
+                          })}
+                        </ul>
+                      </section>
+                    ) : null}
+                    {completedSessionGroups.length > 0 ? (
+                      <section className="session-section completed-section" aria-labelledby="completed-session-heading">
+                        <div className="session-section-head">
+                          <span id="completed-session-heading">Completed</span>
+                          <span className="session-section-count">{completedSessions.length}</span>
+                          <span className="spacer" />
                           <button
-                            className="row-btn danger"
+                            className="session-section-action"
+                            data-armed={clearCompletedArmed}
                             type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              if (isGrouped) dismissSessionGroup(group);
-                              else dismissSession(session.conversationId);
-                            }}
+                            onClick={clearCompletedSessions}
                             data-tauri-drag-region="false"
-                          aria-label={isGrouped ? "Dismiss workspace sessions" : "Dismiss session"}
-                        >
-                            <X size={12} strokeWidth={2.5} />
-                        </button>
-                        ) : null}
-                      </li>
-                      );
-                    })}
-                  </ul>
+                          >
+                            {clearCompletedArmed ? `Confirm clear ${completedSessions.length}` : "Clear completed"}
+                          </button>
+                        </div>
+                        <ul className="session-list">
+                          {completedSessionGroups.map((group) => {
+                            const groupKey = `completed:${group.key}`;
+                            return (
+                              <WorkspaceSessionGroupItem
+                                expanded={expandedSessionGroupKeys.has(groupKey)}
+                                group={group}
+                                groupKey={groupKey}
+                                onClear={dismissSession}
+                                onFocus={(session) => void focusSelectedSession(session)}
+                                onOpen={openSession}
+                                onToggle={toggleSessionGroup}
+                                key={groupKey}
+                              />
+                            );
+                          })}
+                        </ul>
+                      </section>
+                    ) : null}
+                  </div>
 
                   <div className="sheet-divider soft" />
 
@@ -2765,14 +2964,20 @@ const App = () => {
                       Focus
                     </button>
                     {selectedSession.status === "done" ? (
-                      <button className="pill-btn danger" type="button" onClick={() => dismissSession(selectedSession.conversationId)} data-tauri-drag-region="false">
+                      <button className="pill-btn" type="button" onClick={() => dismissSession(selectedSession.conversationId)} data-tauri-drag-region="false" title="Hide until fresh activity arrives">
                         <X size={12} strokeWidth={2.4} />
-                        Dismiss
+                        Clear
                       </button>
                     ) : null}
-                    <button className="pill-btn danger" type="button" onClick={() => deleteSession(selectedSession.conversationId)} data-tauri-drag-region="false" title="Delete stuck session locally">
+                    <button
+                      className="pill-btn danger"
+                      type="button"
+                      onClick={() => requestRemoveSessionHistory(selectedSession.conversationId)}
+                      data-tauri-drag-region="false"
+                      title="Remove this session's locally stored activity"
+                    >
                       <Trash2 size={12} strokeWidth={2.3} />
-                      Delete
+                      {pendingRemoveHistoryId === selectedSession.conversationId ? "Confirm remove" : "Remove history"}
                     </button>
                     <button className="pill-btn" type="button" onClick={backToSessions} data-tauri-drag-region="false">
                       <List size={12} strokeWidth={2.3} />
@@ -2780,10 +2985,10 @@ const App = () => {
                     </button>
                   </div>
                 ) : null}
-                {activitySession?.status === "done" ? (
+                {!setupOpen && !selectedSession && activitySession?.status === "done" ? (
                   <button className="pill-btn accent" type="button" onClick={(event) => { event.stopPropagation(); acknowledgeDone(); }} data-tauri-drag-region="false">
                     <Check size={12} strokeWidth={2.4} />
-                    Acknowledge
+                    Close
                   </button>
                 ) : null}
               </div>
