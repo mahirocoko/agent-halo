@@ -1,7 +1,7 @@
 {
   "name": "Agent Halo Soft Cube",
   "version": 1,
-  "status": "runtime-candidate",
+  "status": "production-approved",
   "selectedFamily": "balanced-rounded-soft-cube",
   "forms": [
     "core",
@@ -96,7 +96,7 @@
   "colorStrategy": "Base cyan five-tone indexed assets; CSS filter variants preserve luminance planes while visible status text remains semantic truth.",
   "provenance": {
     "sourceLane": "manual-procedural-native-grid",
-    "usage": "runtime-candidate",
+    "usage": "production",
     "selectedBy": "Mahiro",
     "selectedCandidate": "A",
     "generatedAt": "2026-07-14T07:43:00.429862+00:00",
@@ -124,5 +124,7 @@
     "motes/idle.png": "11637a135af3f6a369b4ff8967c9eae27eebd626fbe9edc7f9fad6913d3bee31",
     "motes/working.png": "23da674f138a6e10cf12422c2b480ce5cc0d53f05a543beeef2e364bcdc7fd65"
   },
-  "productionApproved": false
+  "productionApproved": true,
+  "approvedAt": "2026-07-14",
+  "approvalEvidence": "Mahiro selected Candidate A, approved removal of the legacy cat, and requested the verified native refactor for commit after browser/native/runtime acceptance."
 }

@@ -1,0 +1,230 @@
+
+.status-slot {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex: none;
+}
+
+.status-idle {
+  background: #5b5b5f;
+}
+
+.status-inactive {
+  background: #3f3f43;
+}
+
+.status-error {
+  background: var(--danger);
+}
+
+.glyph-pulse {
+  color: var(--accent);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  animation: pulse-breathe 0.9s ease-in-out infinite alternate;
+}
+
+.glyph-attention {
+  color: var(--waiting);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
+  animation: blink 0.6s ease-in-out infinite alternate;
+}
+
+.glyph-check {
+  color: var(--done);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
+  animation: pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes pulse-breathe {
+  from {
+    transform: scale(0.7);
+    opacity: 0.55;
+  }
+  to {
+    transform: scale(1.05);
+    opacity: 1;
+  }
+}
+
+@keyframes blink {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.45;
+  }
+}
+
+@keyframes pop {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.25);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Panel content lives inside the same black halo-surface background. */
+.sheet-inner {
+  --sheet-inline-padding: clamp(40px, 4.4vw, 50px);
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  max-height: 440px;
+  overflow: hidden;
+  padding-inline: var(--sheet-inline-padding);
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.12s ease, transform 0.16s ease;
+}
+
+.halo-surface[data-state="closing"] .sheet-inner {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+.sheet-header,
+.sheet-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.sheet-header {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 24px 0 12px;
+  color: inherit;
+}
+
+.sheet-footer {
+  min-height: 38px;
+  box-sizing: border-box;
+  padding: 8px 0 14px;
+  border-top: 1px solid var(--hair);
+}
+
+.sheet-footer.session-context-footer {
+  min-height: 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 7px;
+  padding-top: 9px;
+}
+
+.session-context-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.pill-btn.danger.session-history-action {
+  width: 26px;
+  height: 24px;
+  justify-content: center;
+  padding: 0;
+  border-radius: 7px;
+  color: rgba(255, 118, 118, 0.66);
+  background: rgba(255, 80, 80, 0.09);
+}
+
+.pill-btn.danger.session-history-action.is-armed {
+  width: auto;
+  padding: 4px 9px;
+}
+
+.session-context-return {
+  width: 100%;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  color: var(--text-2);
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.session-context-return:hover,
+.session-context-return:focus-visible {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.055);
+  outline: none;
+}
+
+.session-context-return:focus-visible,
+.pill-btn:focus-visible,
+.gear-btn:focus-visible,
+.row-btn:focus-visible {
+  outline: 1px solid rgba(255, 157, 61, 0.78);
+  outline-offset: 2px;
+}
+
+.session-context-return-count {
+  min-width: 15px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  color: var(--text-3);
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 8px;
+  line-height: 1;
+  text-align: center;
+}
+
+.header-title {
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spacer {
+  flex: 1;
+  min-width: 0;
+}
+
+.sheet-divider {
+  height: 1px;
+  background: var(--hair);
+  flex: none;
+}
+
+.sheet-divider.soft {
+  margin: 8px 0;
+}

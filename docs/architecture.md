@@ -49,12 +49,12 @@ Raw events are normalized into a UI-facing presence model in `packages/protocol/
 
 ## Desktop renderer
 
-`apps/desktop` is the first Notchcode-like renderer. It uses Tauri so the app can become an always-on-top transparent desktop surface while the frontend stays protocol-driven React. The current window is a compact top-center notch/pill; future work should add native tray controls, monitor-aware notch geometry, and richer session details without changing the bridge contract.
+`apps/desktop` is the active Notchcode-like renderer. It uses Tauri for an always-on-top transparent macOS surface while the frontend stays protocol-driven React. `src/main.tsx` is the shell/native-window orchestrator; `src/features/session`, `presence`, `setup`, and `usage` own focused typed behavior, and ordered files under `src/styles/` preserve CSS cascade ownership. The app includes tray controls, monitor-aware native notch metrics, state-directed session detail, local usage, and setup without changing the bridge contract.
 
 
 ## Demo mode and visual QA
 
-The desktop frontend supports `?demo=1` so the Notchcode-inspired surface can be inspected without requiring a live Letta bridge. Demo mode cycles through synthetic `conversation_open`, `turn_start`, `tool_start`, and `conversation_close` events while using the same presence reducer and UI components as live mode.
+The desktop frontend supports `?demo=1` plus focused `demoScenario` values so the Notchcode-inspired surface can be inspected without a live Letta bridge. Demo events use the same presence reducer, bounded registry, selectors, components, accessibility behavior, and CSS as live mode.
 
 
 The desktop app now includes a first tray/menu-bar control plane with Show, Hide, and Quit actions. The closed notch wing expands persistently for real needs-input activity and briefly for turn completion; it does not use OS notifications. Completed rows remain sticky until explicit Clear, while old incomplete activity becomes low-priority inactive history instead of masquerading as a user wait. Active and Completed sessions share one compact scroll surface; workspace groups expand into child session rows so secondary completions retain detail and Ghostty focus access. The Sessions overview uses dense trusted project/status/activity/model/age anatomy, while selecting a session replaces the overview with a state-directed Working, Needs input, Done, Error, Inactive, or Idle context and a clear Back to sessions control. These views remain event-derived and do not fabricate task prompts, permission diffs, answer controls, or exact terminal capabilities. The Tauri installer writes the mod plus an idempotent Stop/PermissionRequest hook relay while preserving existing hooks. The Tauri runtime resizes the transparent window between compact pill and expanded sheet states through `set_panel_open`, and its setup view checks the complete mod/hook install before offering install/reinstall.
@@ -62,6 +62,6 @@ The desktop app now includes a first tray/menu-bar control plane with Show, Hide
 
 ## Notchcode visual contract
 
-Mahiro wants Agent Halo to match Notchcode taste for this project, not a generic AI dashboard. The desktop renderer should therefore use a black notch silhouette, click-to-expand dropped charcoal sheet, compact expandable session rows, session drill-down, completed-session Clear controls, compact setup/status view, small status glyphs, hairline dividers, and restrained orange/green state accents. Avoid blue/cyan glass panels, metric grids, large glowing status orbs, and decorative control-room copy unless Mahiro explicitly changes direction.
+Mahiro wants Agent Halo to match Notchcode taste for this project, not a generic AI dashboard. The desktop renderer should therefore use a black notch silhouette, pointer/keyboard-expand dropped sheet, compact expandable session rows, session drill-down, completed-session Clear controls, compact setup/status view, small status glyphs, hairline dividers, and restrained state accents. Avoid blue/cyan glass panels, metric grids, large glowing status orbs, and decorative control-room copy unless Mahiro explicitly changes direction.
 
 Concrete parity evidence and known gaps live in `docs/notchcode-parity.md`.

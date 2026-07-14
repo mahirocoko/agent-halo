@@ -26,6 +26,7 @@
 - TypeScript/workspace check: `pnpm check`
 - Browser demo regression: `pnpm test:demo`
 - Hook integration tests: `pnpm test:hooks`
+- Baseline-grounded bundle/session/bridge budgets: `pnpm test:performance`
 - Desktop web build: `pnpm desktop:web:build`
 - Native desktop build/install: `pnpm desktop:build` or `pnpm desktop:install`
 - Rust-only native check: run `cargo check` from `apps/desktop/src-tauri/`

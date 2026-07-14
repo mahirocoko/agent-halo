@@ -1,48 +1,43 @@
 import { invoke } from "@tauri-apps/api/core";
-import {
-  ArrowRight,
-  BarChart3,
-  Check,
-  ChevronLeft,
-  ChevronDown,
-  ChevronRight,
-  Coffee,
-  Download,
-  ExternalLink,
-  Focus,
-  List,
-  RefreshCw,
-  Settings,
-  Trash2,
-  TriangleAlert,
-  X,
-} from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { BarChart3, Check, ChevronLeft, Focus, List, Settings, Trash2, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createRoot } from "react-dom/client";
+import type { AgentHaloPresenceStatus } from "@agent-halo/protocol";
+import { ActivityMascot } from "./features/session/HaloSoftCube";
+import { SessionContextSummary, StatusGlyph, WorkspaceSessionGroupItem } from "./features/session/components";
 import {
-  createDefaultBridgeCapabilities,
-  createInitialPresence,
-  getPresenceView,
-  reducePresence,
-  type AgentHaloEvent,
-  type AgentHaloPresenceStatus,
-  type IAgentHaloBridgeCapabilities,
-  type IAgentHaloPresence,
-} from "@agent-halo/protocol";
+  formatTime,
+  getEventActivity,
+  getEventDetail,
+  projectName,
+  shortenPath,
+} from "./features/session/activity";
+import { DONE_SIGNAL_MS, STALE_AFTER_MS } from "./features/session/constants";
+import { getUniqueSortedEvents } from "./features/session/eventRegistry";
+import {
+  isDeletedAfter,
+  isDismissedAfter,
+  readDeletedSessionIds,
+  readDismissedSessionIds,
+  writeDeletedSessionIds,
+  writeDismissedSessionIds,
+  writeSessionEventRegistry,
+} from "./features/session/persistence";
+import {
+  buildSessionDetail,
+  buildSessionSummaries,
+  buildWorkspaceSessionGroups,
+} from "./features/session/selectors";
+import type { ActivityKind, DeletedSessionRegistry, DismissedSessionRegistry, ISessionDetail, ISessionSummary, IWorkspaceSessionGroup } from "./features/session/types";
+import { useAgentHaloPresence } from "./features/presence/useAgentHaloPresence";
+import { SetupPanel } from "./features/setup/SetupPanel";
+import { readUsageSettings, writeUsageSettings } from "./features/usage/adapters";
+import { AgentUsageList } from "./features/usage/components";
+import type { IUsageSettings } from "./features/usage/types";
+import { useAgentUsageList } from "./features/usage/useAgentUsageList";
 import "./styles.css";
 
-const BRIDGE_URL = "http://127.0.0.1:47621";
-const DEFAULT_USAGE_REFRESH_MS = 15 * 60_000;
-const USAGE_SETTINGS_STORAGE_KEY = "agent-halo.usage-settings";
 const KEEP_AWAKE_STORAGE_KEY = "agent-halo.keep-awake-while-working";
-const STALE_AFTER_MS = 30_000;
-const TRANSITION_STALE_AFTER_MS = 2 * 60_000;
-const LLM_STALE_AFTER_MS = 10 * 60_000;
-const TOOL_STALE_AFTER_MS = 30 * 60_000;
-const COMPACT_STALE_AFTER_MS = 10 * 60_000;
-const DONE_SIGNAL_MS = 8_000;
-const MAX_RECENT_EVENTS = 80;
-const MAX_SESSION_EVENTS_PER_SESSION = 32;
 const SEARCH_PARAMS = new URLSearchParams(window.location.search);
 const DEMO_MODE = SEARCH_PARAMS.has("demo");
 const DEMO_SCENARIO = SEARCH_PARAMS.get("demoScenario");
@@ -51,7 +46,6 @@ const DEFAULT_CLOSED_NOTCH_HEIGHT = 36;
 const MIN_LIVE_ACTIVITY_WING_WIDTH = 66;
 const MAX_LIVE_ACTIVITY_WING_WIDTH = 110;
 const LIVE_ACTIVITY_TEXT_WIDTH_BUFFER = 52;
-const PILL_WINDOW_HEIGHT = 42;
 const PANEL_WINDOW_WIDTH = 560;
 const PANEL_MIN_HEIGHT = 218;
 const PANEL_MAX_HEIGHT = 440;
@@ -62,15 +56,6 @@ const CLOSED_TOP_SHOULDER_RADIUS = 11;
 const OPEN_TOP_SHOULDER_RADIUS = 19;
 const CLOSED_BOTTOM_RADIUS = 15;
 const PANEL_BOTTOM_RADIUS = 22;
-const DISMISSED_SESSIONS_STORAGE_KEY = "agent-halo.dismissed-sessions";
-const DELETED_SESSIONS_STORAGE_KEY = "agent-halo.deleted-sessions";
-const SESSION_EVENTS_STORAGE_KEY = "agent-halo.session-events";
-
-interface IConnectionState {
-  status: "connecting" | "connected" | "disconnected" | "error";
-  message: string | null;
-}
-
 interface INativeActionState {
   bridgeOnline: boolean | null;
   message: string | null;
@@ -91,229 +76,7 @@ interface INotchMetrics {
   closedHeight: number;
 }
 
-interface ISessionSummary {
-  conversationId: string;
-  project: string;
-  workspace: string;
-  workspacePath: string | null;
-  detail: string;
-  activityKind: ActivityKind;
-  model: string;
-  status: "idle" | "working" | "attention" | "inactive" | "done" | "error";
-  lastActivityAt: string;
-}
-
-interface ISessionDetail extends ISessionSummary {
-  agentName: string;
-  cwd: string;
-  model: string;
-  permissionMode: string;
-  events: AgentHaloEvent[];
-}
-
-type ActivityKind =
-  | "session"
-  | "thinking"
-  | "planning"
-  | "tool"
-  | "shell"
-  | "editing"
-  | "delegating"
-  | "visual"
-  | "memory"
-  | "asking"
-  | "skill"
-  | "goal"
-  | "compact"
-  | "model"
-  | "attention"
-  | "done"
-  | "error"
-  | "bridge";
-
-interface IActivityDescriptor {
-  kind: ActivityKind;
-  label: string;
-  detail: string;
-}
-
-interface IWorkspaceSessionGroup {
-  key: string;
-  project: string;
-  workspace: string;
-  workspacePath: string | null;
-  status: ISessionSummary["status"];
-  activityKind: ActivityKind;
-  detail: string;
-  lastActivityAt: string;
-  primarySession: ISessionSummary;
-  sessions: ISessionSummary[];
-}
-
-interface ISessionListRowProps {
-  child?: boolean;
-  onClear: (conversationId: string) => void;
-  onFocus: (session: ISessionSummary) => void;
-  onOpen: (conversationId: string) => void;
-  session: ISessionSummary;
-}
-
-interface IWorkspaceSessionGroupItemProps {
-  expanded: boolean;
-  group: IWorkspaceSessionGroup;
-  groupKey: string;
-  onClear: (conversationId: string) => void;
-  onClearGroup: (group: IWorkspaceSessionGroup) => void;
-  onFocus: (session: ISessionSummary) => void;
-  onOpen: (conversationId: string) => void;
-  onToggle: (groupKey: string) => void;
-}
-
-type SessionEventRegistry = Record<string, AgentHaloEvent[]>;
-type DismissedSessionRegistry = Record<string, number>;
-type DeletedSessionRegistry = Record<string, number>;
-
-type UsageProviderId = "codex" | "agy" | "claude" | "cursor" | "grok";
 type MainPanelTab = "sessions" | "usage";
-type UsageMode = "left" | "used";
-type UsageResetMode = "relative" | "absolute";
-type UsageTimeFormat = "auto" | "12h" | "24h";
-type UsageSidebarSelection = UsageProviderId | "settings";
-
-interface IUsageProviderConfig {
-  id: UsageProviderId;
-  label: string;
-  command: "codex_usage" | "agy_usage" | "claude_usage" | "cursor_usage" | "grok_usage";
-  iconPath: string;
-  color: string;
-  links?: Array<{ label: string; url: string }>;
-}
-
-interface IUsageSettings {
-  refreshMs: number;
-  usageMode: UsageMode;
-  resetMode: UsageResetMode;
-  timeFormat: UsageTimeFormat;
-}
-
-interface IUsageMetricLine {
-  type: "text" | "progress" | "badge" | "barChart" | string;
-  label: string;
-  used?: number;
-  limit?: number;
-  value?: string;
-  text?: string;
-  points?: IUsageChartPoint[];
-  note?: string;
-  color?: string;
-  resetsAt?: string;
-}
-
-interface IUsageChartPoint {
-  label: string;
-  value: number;
-  valueLabel?: string;
-}
-
-interface IAgentUsageSnapshot {
-  providerId: string;
-  displayName?: string;
-  plan?: string | null;
-  lines?: IUsageMetricLine[];
-  fetchedAt?: string;
-}
-
-interface IUsageMetric {
-  label: string;
-  groupLabel: string | null;
-  groupModels: string[];
-  limitLabel: string | null;
-  value: number | null;
-  statusLevel: "ok" | "warning" | "danger";
-  remainingLabel: string | null;
-  resetLabel: string | null;
-}
-
-interface IUsageMetricGroup {
-  label: string;
-  models: string[];
-  metrics: IUsageMetric[];
-}
-
-interface IAgentUsageState {
-  status: "loading" | "online" | "offline" | "error";
-  providerId: UsageProviderId;
-  message: string | null;
-  fetchedAt: string | null;
-  plan: string | null;
-  metrics: IUsageMetric[];
-  sessionPercent: number | null;
-  weeklyPercent: number | null;
-  reviewsPercent: number | null;
-  rateLimitResets: string | null;
-  credits: string | null;
-  today: string | null;
-  yesterday: string | null;
-  latestTokenLog: string | null;
-  last30Days: string | null;
-  usageTrend: IUsageMetricLine | null;
-  dailyTokenRows: Array<{ label: string; value: string }>;
-  modelShares: Array<{ label: string; value: string }>;
-}
-
-const USAGE_PROVIDERS: IUsageProviderConfig[] = [
-  {
-    id: "codex",
-    label: "Codex",
-    command: "codex_usage",
-    iconPath: "/provider-icons/codex.svg",
-    color: "#10a37f",
-    links: [
-      { label: "Status", url: "https://status.openai.com/" },
-      { label: "Usage dashboard", url: "https://chatgpt.com/codex/settings/usage" },
-    ],
-  },
-  { id: "agy", label: "Antigravity", command: "agy_usage", iconPath: "/provider-icons/antigravity.svg", color: "#4285f4" },
-  {
-    id: "claude",
-    label: "Claude Code",
-    command: "claude_usage",
-    iconPath: "/provider-icons/claude.svg",
-    color: "#d97757",
-    links: [
-      { label: "Status", url: "https://status.anthropic.com/" },
-      { label: "Console", url: "https://console.anthropic.com/" },
-    ],
-  },
-  {
-    id: "cursor",
-    label: "Cursor",
-    command: "cursor_usage",
-    iconPath: "/provider-icons/cursor.svg",
-    color: "#ffffff",
-    links: [
-      { label: "Status", url: "https://status.cursor.com/" },
-      { label: "Dashboard", url: "https://www.cursor.com/dashboard" },
-    ],
-  },
-  {
-    id: "grok",
-    label: "Grok",
-    command: "grok_usage",
-    iconPath: "/provider-icons/grok.svg",
-    color: "#d9d9d9",
-    links: [
-      { label: "Usage", url: "https://grok.com/?_s=usage" },
-    ],
-  },
-];
-
-const DEFAULT_USAGE_SETTINGS: IUsageSettings = {
-  refreshMs: DEFAULT_USAGE_REFRESH_MS,
-  usageMode: "left",
-  resetMode: "relative",
-  timeFormat: "auto",
-};
 
 const estimateLiveActivityWingWidth = (label: string): number => {
   const textWidth = Math.ceil(label.length * 5.6);
@@ -350,1867 +113,26 @@ interface IStatusView {
   staleForMs: number;
 }
 
-const readBooleanField = (value: unknown, key: string, fallback: boolean): boolean => {
-  if (typeof value !== "object" || value === null) return fallback;
-  const candidate = (value as Record<string, unknown>)[key];
-  return typeof candidate === "boolean" ? candidate : fallback;
-};
-
-const normalizeBridgeCapabilities = (value: unknown): IAgentHaloBridgeCapabilities => {
-  const fallback = createDefaultBridgeCapabilities();
-  if (typeof value !== "object" || value === null) return fallback;
-  const record = value as Record<string, unknown>;
-  const events = record.events;
-  const endpoints = record.endpoints;
-  const sessionActions = record.sessionActions;
-
-  return {
-    events: {
-      lifecycle: readBooleanField(events, "lifecycle", fallback.events.lifecycle),
-      turns: readBooleanField(events, "turns", fallback.events.turns),
-      tools: readBooleanField(events, "tools", fallback.events.tools),
-      compact: readBooleanField(events, "compact", fallback.events.compact),
-      llm: readBooleanField(events, "llm", fallback.events.llm),
-    },
-    endpoints: {
-      health: readBooleanField(endpoints, "health", fallback.endpoints.health),
-      snapshot: readBooleanField(endpoints, "snapshot", fallback.endpoints.snapshot),
-      sse: readBooleanField(endpoints, "sse", fallback.endpoints.sse),
-      hookStop: readBooleanField(endpoints, "hookStop", fallback.endpoints.hookStop),
-      hookAttention: readBooleanField(endpoints, "hookAttention", fallback.endpoints.hookAttention),
-      ingest: readBooleanField(endpoints, "ingest", fallback.endpoints.ingest),
-    },
-    sessionActions: {
-      focusTerminal: readBooleanField(sessionActions, "focusTerminal", fallback.sessionActions.focusTerminal),
-      endSession: readBooleanField(sessionActions, "endSession", fallback.sessionActions.endSession),
-      dismissEnded: readBooleanField(sessionActions, "dismissEnded", fallback.sessionActions.dismissEnded),
-    },
-  };
-};
-
-const isSessionEventRegistry = (value: unknown): value is SessionEventRegistry =>
-  typeof value === "object" &&
-  value !== null &&
-  !Array.isArray(value) &&
-  Object.values(value).every(
-    (events) =>
-      Array.isArray(events) &&
-      events.every(
-        (event) =>
-          typeof event === "object" &&
-          event !== null &&
-          typeof (event as AgentHaloEvent).id === "string" &&
-          typeof (event as AgentHaloEvent).timestamp === "string" &&
-          typeof (event as AgentHaloEvent).conversationId === "string",
-      ),
-  );
-
-const normalizeSessionEventIdentity = (event: AgentHaloEvent): AgentHaloEvent => {
-  if (event.conversationId !== "default") return event;
-  const fallbackConversationId = event.agentId
-    ? `agent:${event.agentId}`
-    : event.cwd
-      ? `workspace:${event.cwd}`
-      : "default";
-  return { ...event, conversationId: fallbackConversationId };
-};
-
-const normalizeSessionEventRegistry = (registry: SessionEventRegistry): SessionEventRegistry => {
-  const normalized: SessionEventRegistry = {};
-  for (const event of Object.values(registry).flat()) {
-    const nextEvent = normalizeSessionEventIdentity(event);
-    if (!nextEvent.conversationId) continue;
-    const existing = normalized[nextEvent.conversationId] ?? [];
-    const byId = new Map(existing.map((item) => [item.id, item]));
-    byId.set(nextEvent.id, nextEvent);
-    normalized[nextEvent.conversationId] = [...byId.values()]
-      .sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp))
-      .slice(0, MAX_SESSION_EVENTS_PER_SESSION);
-  }
-  return normalized;
-};
-
-const readSessionEventRegistry = (): SessionEventRegistry => {
-  try {
-    const raw = window.localStorage.getItem(SESSION_EVENTS_STORAGE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    if (!isSessionEventRegistry(parsed)) return {};
-    const normalized = normalizeSessionEventRegistry(parsed);
-    window.localStorage.setItem(SESSION_EVENTS_STORAGE_KEY, JSON.stringify(normalized));
-    return normalized;
-  } catch {
-    return {};
-  }
-};
-
-const writeSessionEventRegistry = (registry: SessionEventRegistry) => {
-  try {
-    window.localStorage.setItem(SESSION_EVENTS_STORAGE_KEY, JSON.stringify(registry));
-  } catch {
-    // Ignore storage errors; the in-memory registry still prevents SSE/recent-window churn.
-  }
-};
-
-const readDismissedSessionIds = (): DismissedSessionRegistry => {
-  try {
-    const raw = window.localStorage.getItem(DISMISSED_SESSIONS_STORAGE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return Object.fromEntries(parsed.filter((item): item is string => typeof item === "string").map((id) => [id, 0]));
-    }
-    if (typeof parsed !== "object" || parsed === null) return {};
-    return Object.fromEntries(
-      Object.entries(parsed).filter((entry): entry is [string, number] => typeof entry[0] === "string" && typeof entry[1] === "number"),
-    );
-  } catch {
-    return {};
-  }
-};
-
-const writeDismissedSessionIds = (registry: DismissedSessionRegistry) => {
-  try {
-    window.localStorage.setItem(DISMISSED_SESSIONS_STORAGE_KEY, JSON.stringify(registry));
-  } catch {
-    // Ignore storage errors; dismissal still works for the current runtime session.
-  }
-};
-
-const readDeletedSessionIds = (): DeletedSessionRegistry => {
-  try {
-    const raw = window.localStorage.getItem(DELETED_SESSIONS_STORAGE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return {};
-    return Object.fromEntries(
-      Object.entries(parsed).filter((entry): entry is [string, number] => typeof entry[0] === "string" && typeof entry[1] === "number"),
-    );
-  } catch {
-    return {};
-  }
-};
-
-const writeDeletedSessionIds = (registry: DeletedSessionRegistry) => {
-  try {
-    window.localStorage.setItem(DELETED_SESSIONS_STORAGE_KEY, JSON.stringify(registry));
-  } catch {
-    // Ignore storage errors; the deleted tombstone still works for the current runtime session.
-  }
-};
-
-const isUsageMode = (value: unknown): value is UsageMode => value === "left" || value === "used";
-const isUsageResetMode = (value: unknown): value is UsageResetMode => value === "relative" || value === "absolute";
-const isUsageTimeFormat = (value: unknown): value is UsageTimeFormat => value === "auto" || value === "12h" || value === "24h";
-const isRefreshMs = (value: unknown): value is number => typeof value === "number" && [5, 15, 30, 60].includes(value / 60_000);
-
-const readUsageSettings = (): IUsageSettings => {
-  try {
-    const raw = window.localStorage.getItem(USAGE_SETTINGS_STORAGE_KEY);
-    if (!raw) return DEFAULT_USAGE_SETTINGS;
-    const parsed = JSON.parse(raw) as Partial<IUsageSettings>;
-    return {
-      refreshMs: isRefreshMs(parsed.refreshMs) ? parsed.refreshMs : DEFAULT_USAGE_SETTINGS.refreshMs,
-      usageMode: isUsageMode(parsed.usageMode) ? parsed.usageMode : DEFAULT_USAGE_SETTINGS.usageMode,
-      resetMode: isUsageResetMode(parsed.resetMode) ? parsed.resetMode : DEFAULT_USAGE_SETTINGS.resetMode,
-      timeFormat: isUsageTimeFormat(parsed.timeFormat) ? parsed.timeFormat : DEFAULT_USAGE_SETTINGS.timeFormat,
-    };
-  } catch {
-    return DEFAULT_USAGE_SETTINGS;
-  }
-};
-
-const writeUsageSettings = (settings: IUsageSettings) => {
-  try {
-    window.localStorage.setItem(USAGE_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
-  } catch {
-    // Ignore storage errors; settings still apply for the current runtime session.
-  }
-};
-
-const readKeepAwakeEnabled = (): boolean => {
-  try {
-    return window.localStorage.getItem(KEEP_AWAKE_STORAGE_KEY) === "true";
-  } catch {
-    return false;
-  }
-};
-
-const writeKeepAwakeEnabled = (enabled: boolean) => {
-  try {
-    window.localStorage.setItem(KEEP_AWAKE_STORAGE_KEY, `${enabled}`);
-  } catch {
-    // Ignore storage errors; the setting still applies for the current runtime session.
-  }
-};
-
-const isDismissedAfter = (registry: DismissedSessionRegistry, conversationId: string | null | undefined, latestEventAt: string | null | undefined): boolean => {
-  if (!conversationId || !latestEventAt) return false;
-  const dismissedAt = registry[conversationId];
-  if (typeof dismissedAt !== "number") return false;
-  const latestEventMs = Date.parse(latestEventAt);
-  if (!Number.isFinite(latestEventMs)) return false;
-  return dismissedAt >= latestEventMs;
-};
-
-const isDeletedAfter = (registry: DeletedSessionRegistry, conversationId: string | null | undefined, latestEventAt: string | null | undefined): boolean => {
-  if (!conversationId || !latestEventAt) return false;
-  const deletedAt = registry[conversationId];
-  if (typeof deletedAt !== "number") return false;
-  const latestEventMs = Date.parse(latestEventAt);
-  if (!Number.isFinite(latestEventMs)) return false;
-  return deletedAt >= latestEventMs;
-};
-
-const shortenPath = (path: string | null | undefined): string => {
-  if (!path) return "No workspace";
-  const home = window.__AGENT_HALO_HOME__ ?? "";
-  const normalized = home ? path.replace(home, "~") : path;
-  const segments = normalized.split("/").filter(Boolean);
-  if (segments.length <= 3) return normalized;
-  return `…/${segments.slice(-3).join("/")}`;
-};
-
-const projectName = (path: string | null | undefined): string => {
-  if (!path) return "Agent Halo";
-  return path.split("/").filter(Boolean).at(-1) ?? "Agent Halo";
-};
-
-const isInternalWorkspacePath = (path: string | null | undefined): boolean => {
-  if (!path) return false;
-  return path.includes("/.letta/lc-local-backend/memfs/") || path.includes("/.letta/mod-cache/") || path.endsWith("/.letta/mods") || path.endsWith("/memory");
-};
-
-const getSessionWorkspacePath = (events: AgentHaloEvent[], fallbackPath?: string | null): string | null => {
-  const preferred = events.find((event) => event.cwd && !isInternalWorkspacePath(event.cwd));
-  if (preferred?.cwd) return preferred.cwd;
-  return fallbackPath && !isInternalWorkspacePath(fallbackPath) ? fallbackPath : null;
-};
-
-const isInternalOnlySession = (events: AgentHaloEvent[]): boolean =>
-  events.length > 0 && events.every((event) => !event.cwd || isInternalWorkspacePath(event.cwd));
-
-const sortEventsNewestFirst = (events: AgentHaloEvent[]): AgentHaloEvent[] =>
-  [...events].sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));
-
-const mergeSessionEvents = (current: SessionEventRegistry, incoming: AgentHaloEvent[]): SessionEventRegistry => {
-  if (incoming.length === 0) return current;
-
-  const next: SessionEventRegistry = { ...current };
-
-  for (const rawEvent of incoming) {
-    const event = normalizeSessionEventIdentity(rawEvent);
-    if (!event.conversationId) continue;
-    const existing = next[event.conversationId] ?? [];
-    const byId = new Map<string, AgentHaloEvent>();
-    for (const item of existing) byId.set(item.id, item);
-    byId.set(event.id, event);
-    next[event.conversationId] = sortEventsNewestFirst([...byId.values()]).slice(0, MAX_SESSION_EVENTS_PER_SESSION);
-  }
-
-  return next;
-};
-
-const flattenSessionEvents = (registry: SessionEventRegistry): AgentHaloEvent[] =>
-  sortEventsNewestFirst(Object.values(registry).flat());
-
-const formatTime = (timestamp: string | null): string => {
-  if (!timestamp) return "—";
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).format(new Date(timestamp));
-};
-
-const formatRelativeAge = (timestamp: string): string => {
-  const elapsedSeconds = Math.max(0, Math.floor((Date.now() - Date.parse(timestamp)) / 1_000));
-  if (elapsedSeconds < 60) return "<1m";
-  if (elapsedSeconds < 60 * 60) return `${Math.floor(elapsedSeconds / 60)}m`;
-  if (elapsedSeconds < 24 * 60 * 60) return `${Math.floor(elapsedSeconds / (60 * 60))}h`;
-  return `${Math.floor(elapsedSeconds / (24 * 60 * 60))}d`;
-};
-
-const shortModelName = (model: string): string => {
-  const segment = model.split("/").filter(Boolean).at(-1) ?? model;
-  return segment.replace(/^chatgpt-plus-pro\//, "") || "Letta";
-};
-
-const getToolActivityKind = (toolName: string): ActivityKind => {
-  if (toolName === "UpdatePlan") return "planning";
-  if (toolName === "exec_command" || toolName === "write_stdin" || toolName === "TaskOutput" || toolName === "TaskStop") return "shell";
-  if (toolName === "ApplyPatch") return "editing";
-  if (toolName === "Agent" || toolName === "Task") return "delegating";
-  if (toolName === "ViewImage") return "visual";
-  if (toolName === "memory_apply_patch") return "memory";
-  if (toolName === "AskUserQuestion") return "asking";
-  if (toolName === "Skill") return "skill";
-  if (toolName === "CreateGoal" || toolName === "UpdateGoal" || toolName === "GetGoal") return "goal";
-  return "tool";
-};
-
-const getToolActivityLabel = (kind: ActivityKind): string => {
-  switch (kind) {
-    case "planning":
-      return "plan";
-    case "shell":
-      return "shell";
-    case "editing":
-      return "edit";
-    case "delegating":
-      return "agent";
-    case "visual":
-      return "visual";
-    case "memory":
-      return "memory";
-    case "asking":
-      return "ask";
-    case "skill":
-      return "skill";
-    case "goal":
-      return "goal";
-    case "compact":
-      return "compact";
-    case "model":
-      return "model";
-    default:
-      return "tool";
-  }
-};
-
-const formatCompactNumber = (value: number | null | undefined): string | null => {
-  if (typeof value !== "number" || !Number.isFinite(value)) return null;
-  return new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 }).format(value);
-};
-
-const getLlmUsageTotalTokens = (usage: { promptTokens: number | null; completionTokens: number | null; totalTokens: number | null } | null | undefined): number | null => {
-  if (!usage) return null;
-  if (typeof usage.promptTokens === "number" && typeof usage.completionTokens === "number") {
-    return usage.promptTokens + usage.completionTokens;
-  }
-  return typeof usage.totalTokens === "number" ? usage.totalTokens : null;
-};
-
-const isTerminalLlmStopReason = (value: string | null | undefined): boolean => {
-  const reason = value?.toLowerCase() ?? "";
-  return reason.includes("end") || reason.includes("stop") || reason.includes("done") || reason.includes("complete");
-};
-
-const getToolActivityDetail = (toolName: string): string => {
-  switch (toolName) {
-    case "UpdatePlan":
-      return "update plan";
-    case "UpdateGoal":
-      return "update goal";
-    case "GetGoal":
-      return "read goal";
-    case "CreateGoal":
-      return "create goal";
-    case "exec_command":
-      return "command";
-    case "write_stdin":
-      return "terminal input";
-    case "TaskOutput":
-      return "task output";
-    case "TaskStop":
-      return "stop task";
-    case "ApplyPatch":
-      return "patch files";
-    case "Agent":
-    case "Task":
-      return "subagent task";
-    case "ViewImage":
-      return "inspect image";
-    case "memory_apply_patch":
-      return "write memory";
-    case "AskUserQuestion":
-      return "ask user";
-    case "Skill":
-      return "run skill";
-    default:
-      return toolName;
-  }
-};
-
-const getEventActivity = (event: AgentHaloEvent): IActivityDescriptor => {
-  switch (event.type) {
-    case "bridge_ready":
-      return { kind: "bridge", label: "bridge", detail: `:${event.data.port}` };
-    case "conversation_open":
-      return { kind: "session", label: "open", detail: event.data.reason };
-    case "conversation_close":
-      return { kind: "done", label: "closed", detail: event.data.reason };
-    case "turn_start":
-      return { kind: "thinking", label: "thinking", detail: `${event.data.inputCount} input` };
-    case "turn_stop":
-    case "turn_complete":
-      return { kind: "done", label: "done", detail: event.data.message ?? "turn complete" };
-    case "attention_requested":
-      return {
-        kind: "attention",
-        label: event.data.kind === "question" ? "question" : "approval",
-        detail: event.data.kind === "question" ? "Question" : "Approval needed",
-      };
-    case "tool_start": {
-      const kind = getToolActivityKind(event.data.toolName);
-      return { kind, label: getToolActivityLabel(kind), detail: getToolActivityDetail(event.data.toolName) };
-    }
-    case "tool_end": {
-      if (event.data.status === "error") {
-        return { kind: "error", label: "error", detail: `${getToolActivityDetail(event.data.toolName)} failed` };
-      }
-      const kind = getToolActivityKind(event.data.toolName);
-      return { kind, label: "done", detail: `${getToolActivityDetail(event.data.toolName)} complete` };
-    }
-    case "compact_start":
-      return { kind: "compact", label: "compact", detail: event.data.trigger };
-    case "compact_end": {
-      const before = formatCompactNumber(event.data.contextTokensBefore);
-      const after = formatCompactNumber(event.data.contextTokensAfter);
-      const detail = before && after ? `${before}→${after} tokens` : event.data.trigger;
-      return { kind: "compact", label: "compacted", detail };
-    }
-    case "llm_start":
-      return { kind: "model", label: "model", detail: event.data.model.split("/").slice(-1)[0] ?? event.data.model };
-    case "llm_end": {
-      if (event.data.error) {
-        const retry = event.data.error.retryable === true ? "retryable" : event.data.error.retryable === false ? "not retryable" : null;
-        return { kind: "error", label: "model error", detail: [event.data.error.message, retry].filter(Boolean).join(" · ") };
-      }
-      const tokens = formatCompactNumber(getLlmUsageTotalTokens(event.data.usage));
-      const seconds = typeof event.data.durationMs === "number" ? `${Math.max(0.1, event.data.durationMs / 1000).toFixed(1)}s` : null;
-      const parts = [tokens ? `${tokens} tokens` : null, seconds].filter(Boolean);
-      return { kind: "model", label: "model", detail: parts.length > 0 ? parts.join(" · ") : event.data.stopReason ?? "complete" };
-    }
-    case "bridge_error":
-      return { kind: "error", label: "error", detail: event.data.message };
-  }
-};
-
-const getUniqueSortedEvents = (events: AgentHaloEvent[]): AgentHaloEvent[] => {
-  const byId = new Map<string, AgentHaloEvent>();
-  for (const event of events) byId.set(event.id, event);
-  return sortEventsNewestFirst([...byId.values()]);
-};
-
-
-const clampPercent = (value: number | null): number | null => {
-  if (value === null || !Number.isFinite(value)) return null;
-  return Math.max(0, Math.min(100, Math.round(value)));
-};
-
-const findUsageLine = (lines: IUsageMetricLine[], label: string): IUsageMetricLine | null =>
-  lines.find((line) => line.label.toLowerCase() === label.toLowerCase()) ?? null;
-
-const readProgressPercent = (line: IUsageMetricLine | null): number | null => {
-  if (!line || line.type !== "progress" || typeof line.used !== "number") return null;
-  if (typeof line.limit === "number" && line.limit > 0 && line.limit !== 100) return clampPercent((line.used / line.limit) * 100);
-  return clampPercent(line.used);
-};
-
-const readTextValue = (line: IUsageMetricLine | null): string | null => {
-  if (!line) return null;
-  if (typeof line.value === "string" && line.value.trim()) return line.value.trim();
-  if (typeof line.text === "string" && line.text.trim()) return line.text.trim();
-  return null;
-};
-
-const CODEX_KNOWN_TEXT_LABELS = new Set(["rate limit resets", "credits", "today", "yesterday", "latest token log", "last 30 days"]);
-
-const readCodexModelShares = (lines: IUsageMetricLine[]): Array<{ label: string; value: string }> =>
-  lines
-    .filter((line) => line.type === "text" && !CODEX_KNOWN_TEXT_LABELS.has(line.label.toLowerCase()))
-    .filter((line) => !line.label.toLowerCase().startsWith("daily "))
-    .map((line) => ({ label: line.label, value: readTextValue(line) ?? "" }))
-    .filter((line) => /%$/.test(line.value));
-
-const readCodexDailyTokenRows = (lines: IUsageMetricLine[]): Array<{ label: string; value: string }> =>
-  lines
-    .filter((line) => line.type === "text" && line.label.toLowerCase().startsWith("daily "))
-    .map((line) => ({ label: line.label.replace(/^Daily\s+/i, ""), value: readTextValue(line) ?? "" }))
-    .filter((line) => line.value.length > 0);
-
-
-const formatDurationShort = (ms: number): string => {
-  const totalMinutes = Math.max(0, Math.round(ms / 60_000));
-  const days = Math.floor(totalMinutes / 1_440);
-  const hours = Math.floor((totalMinutes % 1_440) / 60);
-  const minutes = totalMinutes % 60;
-  if (days > 0) return `${days}d ${hours}h`;
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  return `${minutes}m`;
-};
-
-const formatAbsoluteTime = (timestamp: string, format: UsageTimeFormat): string | null => {
-  const date = new Date(timestamp);
-  if (!Number.isFinite(date.getTime())) return null;
-  const hour12 = format === "auto" ? undefined : format === "12h";
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12,
-  }).format(date);
-};
-
-const formatResetLabel = (resetsAt: string | undefined, settings: IUsageSettings): string | null => {
-  if (!resetsAt) return null;
-  if (settings.resetMode === "absolute") {
-    const time = formatAbsoluteTime(resetsAt, settings.timeFormat);
-    return time ? `Reset at ${time}` : null;
-  }
-  const resetMs = Date.parse(resetsAt);
-  if (!Number.isFinite(resetMs)) return null;
-  const delta = resetMs - Date.now();
-  if (delta <= 0) return "Reset soon";
-  return `Resets in ${formatDurationShort(delta)}`;
-};
-
-const ANTIGRAVITY_USAGE_GROUPS: IUsageMetricGroup[] = [
-  { label: "Gemini models", models: ["Gemini Flash", "Gemini Pro"], metrics: [] },
-  { label: "Claude and GPT models", models: ["Claude Opus", "Claude Sonnet", "GPT-OSS"], metrics: [] },
-];
-
-const normalizeUsageGroupLabel = (label: string): string | null => {
-  const lower = label.toLowerCase();
-  if (lower.includes("gemini")) return "Gemini models";
-  if (lower.includes("claude") || lower.includes("gpt")) return "Claude and GPT models";
-  return null;
-};
-
-const modelsForUsageGroup = (groupLabel: string | null): string[] =>
-  ANTIGRAVITY_USAGE_GROUPS.find((group) => group.label === groupLabel)?.models ?? [];
-
-const limitLabelForUsageLine = (line: IUsageMetricLine, groupLabel: string | null): string | null => {
-  if (!groupLabel) return null;
-  const lower = line.label.toLowerCase();
-  if (lower.includes("five") || lower.includes("5h")) return "Five Hour Limit";
-  return "Weekly Limit";
-};
-
-const createUsageMetric = (line: IUsageMetricLine, settings: IUsageSettings): IUsageMetric => {
-  const used = readProgressPercent(line);
-  const left = used === null ? null : Math.max(0, 100 - used);
-  const value = settings.usageMode === "used" ? used : left;
-  const groupLabel = normalizeUsageGroupLabel(line.label);
-  const limitLabel = limitLabelForUsageLine(line, groupLabel);
-  const isQuotaAvailable = groupLabel !== null && limitLabel === "Five Hour Limit" && settings.usageMode === "left" && left === 100;
-  const statusLevel = used === null
-    ? "ok"
-    : settings.usageMode === "used"
-      ? used >= 80 ? "danger" : used >= 55 ? "warning" : "ok"
-      : left !== null && left <= 20 ? "danger" : left !== null && left <= 45 ? "warning" : "ok";
-  return {
-    label: line.label,
-    groupLabel,
-    groupModels: modelsForUsageGroup(groupLabel),
-    limitLabel,
-    value,
-    statusLevel,
-    remainingLabel: isQuotaAvailable ? "Quota available" : value === null ? null : `${value}% ${groupLabel && settings.usageMode === "left" ? "remaining" : settings.usageMode}`,
-    resetLabel: isQuotaAvailable ? null : formatResetLabel(line.resetsAt, settings),
-  };
-};
-
-const createAgentUsageState = (providerId: UsageProviderId, partial: Partial<IAgentUsageState> = {}): IAgentUsageState => ({
-  status: "loading",
-  providerId,
-  message: null,
-  fetchedAt: null,
-  plan: null,
-  metrics: [],
-  sessionPercent: null,
-  weeklyPercent: null,
-  reviewsPercent: null,
-  rateLimitResets: null,
-  credits: null,
-  today: null,
-  yesterday: null,
-  latestTokenLog: null,
-  last30Days: null,
-  usageTrend: null,
-  dailyTokenRows: [],
-  modelShares: [],
-  ...partial,
-});
-
-const parseAgentUsageSnapshot = (providerId: UsageProviderId, snapshot: IAgentUsageSnapshot, settings: IUsageSettings): IAgentUsageState => {
-  const lines = Array.isArray(snapshot.lines) ? snapshot.lines : [];
-  const metrics = lines
-    .filter((line) => line.type === "progress")
-    .map((line) => createUsageMetric(line, settings));
-
-  return createAgentUsageState(providerId, {
-    status: "online",
-    message: readTextValue(findUsageLine(lines, "Status")),
-    fetchedAt: snapshot.fetchedAt ?? new Date().toISOString(),
-    plan: snapshot.plan ?? null,
-    metrics,
-    sessionPercent: readProgressPercent(findUsageLine(lines, "Session")),
-    weeklyPercent: readProgressPercent(findUsageLine(lines, "Weekly")),
-    reviewsPercent: readProgressPercent(findUsageLine(lines, "Reviews")),
-    rateLimitResets: readTextValue(findUsageLine(lines, "Rate Limit Resets")),
-    credits: readTextValue(findUsageLine(lines, "Credits")),
-    today: readTextValue(findUsageLine(lines, "Today")),
-    yesterday: readTextValue(findUsageLine(lines, "Yesterday")),
-    latestTokenLog: readTextValue(findUsageLine(lines, "Latest Token Log")),
-    last30Days: readTextValue(findUsageLine(lines, "Last 30 Days")),
-    usageTrend: lines.find((line) => line.type === "barChart" && line.label.toLowerCase() === "usage trend") ?? null,
-    dailyTokenRows: providerId === "codex" ? readCodexDailyTokenRows(lines) : [],
-    modelShares: providerId === "codex" ? readCodexModelShares(lines) : [],
-  });
-};
-
-const getEventDetail = (event: AgentHaloEvent): string => {
-  const activity = getEventActivity(event);
-  return `${activity.label} · ${activity.detail}`;
-};
-
-const getStatusCopy = (view: IStatusView): string => {
-  const statusCopy: Record<IStatusView["status"], string> = {
-    offline: "Bridge offline",
-    idle: "Agent idle",
-    thinking: "Thinking",
-    "tool-running": "Using tool",
-    stale: "Activity quiet",
-    attention: "Needs input",
-    closed: "Done",
-    error: "Bridge error",
-  };
-
-  return statusCopy[view.status] ?? view.label;
-};
-
 const getGlyphStatus = (status: IStatusView["status"]): ISessionSummary["status"] => {
-  switch (status) {
-    case "thinking":
-    case "tool-running":
-      return "working";
-    case "stale":
-      return "inactive";
-    case "attention":
-      return "attention";
-    case "closed":
-      return "done";
-    case "error":
-    case "offline":
-      return "error";
-    default:
-      return "idle";
-  }
-};
-
-const staleAfterMsForEvent = (event: AgentHaloEvent): number => {
-  switch (event.type) {
-    case "llm_start":
-      return LLM_STALE_AFTER_MS;
-    case "tool_start":
-      return TOOL_STALE_AFTER_MS;
-    case "compact_start":
-      return COMPACT_STALE_AFTER_MS;
-    case "turn_start":
-    case "tool_end":
-    case "compact_end":
-    case "llm_end":
-    case "bridge_error":
-      return TRANSITION_STALE_AFTER_MS;
-    default:
-      return STALE_AFTER_MS;
-  }
-};
-
-const getEventSessionStatus = (event: AgentHaloEvent, now: Date = new Date()): ISessionSummary["status"] => {
-  const isInactive = now.getTime() - Date.parse(event.timestamp) > staleAfterMsForEvent(event);
-  switch (event.type) {
-    case "conversation_close":
-    case "turn_stop":
-    case "turn_complete":
-      return "done";
-    case "attention_requested":
-      return "attention";
-    case "turn_start":
-    case "tool_start":
-    case "compact_start":
-    case "compact_end":
-    case "llm_start":
-      return isInactive ? "inactive" : "working";
-    case "tool_end":
-      return event.data.status === "error" ? (isInactive ? "inactive" : "error") : isInactive ? "inactive" : "working";
-    case "llm_end":
-      return isTerminalLlmStopReason(event.data.stopReason) ? "done" : event.data.error && !isInactive ? "error" : isInactive ? "inactive" : "working";
-    case "bridge_error":
-      return isInactive ? "inactive" : "error";
-    default:
-      return "idle";
-  }
-};
-
-const sessionStatusPriority: Record<ISessionSummary["status"], number> = {
-  attention: 6,
-  error: 5,
-  working: 4,
-  done: 3,
-  idle: 2,
-  inactive: 1,
-};
-
-const compareSessionsByActivity = (a: ISessionSummary, b: ISessionSummary): number => Date.parse(b.lastActivityAt) - Date.parse(a.lastActivityAt);
-
-const getWorkspaceGroupKey = (session: ISessionSummary): string => session.workspacePath ? `cwd:${session.workspacePath}` : `session:${session.conversationId}`;
-
-const buildWorkspaceSessionGroups = (sessions: ISessionSummary[]): IWorkspaceSessionGroup[] => {
-  const grouped = new Map<string, ISessionSummary[]>();
-
-  for (const session of sessions) {
-    const key = getWorkspaceGroupKey(session);
-    grouped.set(key, [...(grouped.get(key) ?? []), session]);
-  }
-
-  return [...grouped.entries()]
-    .map(([key, groupSessions]) => {
-      const sortedSessions = [...groupSessions].sort((a, b) => {
-        const statusDelta = sessionStatusPriority[b.status] - sessionStatusPriority[a.status];
-        return statusDelta !== 0 ? statusDelta : compareSessionsByActivity(a, b);
-      });
-      const primarySession = sortedSessions[0];
-      const latestSession = [...groupSessions].sort(compareSessionsByActivity)[0] ?? primarySession;
-      const status = primarySession.status;
-      const activeCount = groupSessions.filter((session) => session.status === "working" || session.status === "attention").length;
-      const doneCount = groupSessions.filter((session) => session.status === "done").length;
-      const detail = activeCount > 0
-        ? `${activeCount} active · ${groupSessions.length} sessions`
-        : doneCount === groupSessions.length
-          ? `${doneCount} done sessions`
-          : `${groupSessions.length} sessions`;
-
-      return {
-        key,
-        project: primarySession.project,
-        workspace: primarySession.workspace,
-        workspacePath: primarySession.workspacePath,
-        status,
-        activityKind: primarySession.activityKind,
-        detail,
-        lastActivityAt: latestSession.lastActivityAt,
-        primarySession,
-        sessions: groupSessions.sort(compareSessionsByActivity),
-      } satisfies IWorkspaceSessionGroup;
-    })
-    .sort((a, b) => {
-      const statusDelta = sessionStatusPriority[b.status] - sessionStatusPriority[a.status];
-      return statusDelta !== 0 ? statusDelta : Date.parse(b.lastActivityAt) - Date.parse(a.lastActivityAt);
-    });
-};
-
-const HALO_PET_FORMS = ["core", "cat-corner", "sprout"] as const;
-const HALO_PET_PALETTE_COUNT = 6;
-
-type HaloPetForm = (typeof HALO_PET_FORMS)[number];
-type HaloPetState = "idle" | "working" | "attention" | "done" | "error";
-
-const hashSessionId = (value: string): number => {
-  let hash = 0;
-  for (let index = 0; index < value.length; index += 1) hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
-  return hash;
-};
-
-const getMascotVariant = (sessionId: string | null | undefined) => hashSessionId(sessionId || "agent-halo") % HALO_PET_PALETTE_COUNT;
-
-const getHaloPetState = (status?: ISessionSummary["status"], activityKind?: ActivityKind): HaloPetState => {
-  if (status === "error" || activityKind === "error") return "error";
-  if (status === "attention" || activityKind === "attention" || activityKind === "asking") return "attention";
-  if (status === "done" || activityKind === "done") return "done";
-  if (status === "working") return "working";
+  if (status === "thinking" || status === "tool-running") return "working";
+  if (status === "stale") return "inactive";
+  if (status === "attention") return "attention";
+  if (status === "closed") return "done";
+  if (status === "error" || status === "offline") return "error";
   return "idle";
 };
 
-const getHaloPetStyle = (form: HaloPetForm, state: HaloPetState) => {
-  return {
-    "--halo-pet-body": `url("/mascots/halo-soft-cube/body/${form}/${state}.png")`,
-    "--halo-pet-mote": `url("/mascots/halo-soft-cube/motes/${state}.png")`,
-  } as CSSProperties & Record<"--halo-pet-body" | "--halo-pet-mote", string>;
+const readKeepAwakeEnabled = (): boolean => {
+  try { return window.localStorage.getItem(KEEP_AWAKE_STORAGE_KEY) === "true"; } catch { return false; }
 };
-
-const StatusGlyph = ({ status }: { status: ISessionSummary["status"] }) => {
-  if (status === "working") return <span className="status-slot"><span className="glyph-pulse">✱</span></span>;
-  if (status === "attention") return <span className="status-slot"><span className="glyph-attention">!</span></span>;
-  if (status === "done") return <span className="status-slot"><span className="glyph-check">✓</span></span>;
-  return <span className="status-slot"><span className={`status-dot status-${status}`} /></span>;
-};
-
-const HaloPet = ({ activityKind, className, sessionId, status }: { activityKind?: ActivityKind; className: string; sessionId?: string | null; status?: ISessionSummary["status"] }) => {
-  const variant = getMascotVariant(sessionId);
-  const form = HALO_PET_FORMS[variant % HALO_PET_FORMS.length] ?? "core";
-  const state = getHaloPetState(status, activityKind);
-
-  return (
-    <span
-      className={`${className} halo-soft-cube`}
-      data-status={status ?? "idle"}
-      data-kind={activityKind}
-      data-state={state}
-      data-form={form}
-      data-palette={variant}
-      style={getHaloPetStyle(form, state)}
-      aria-hidden="true"
-    >
-      <span className="halo-soft-cube-body" />
-      <span className="halo-soft-cube-mote" />
-    </span>
-  );
-};
-
-const ActivityMascot = ({ activityKind, sessionId, status }: { activityKind?: ActivityKind; sessionId?: string | null; status?: ISessionSummary["status"] }) => {
-  return <HaloPet className="activity-mascot" activityKind={activityKind} sessionId={sessionId} status={status} />;
-};
-
-const SessionMascot = ({ activityKind, sessionId, status }: { activityKind?: ActivityKind; sessionId?: string | null; status?: ISessionSummary["status"] }) => {
-  return <HaloPet className="session-mascot" activityKind={activityKind} sessionId={sessionId} status={status} />;
-};
-
-const shortSessionId = (conversationId: string): string => conversationId.replace(/^local-conv-/, "").slice(-8);
-
-const sessionStatusLabel = (status: ISessionSummary["status"]): string => {
-  const labels: Record<ISessionSummary["status"], string> = {
-    attention: "Needs input",
-    done: "Done",
-    error: "Error",
-    idle: "Idle",
-    inactive: "Inactive",
-    working: "Working",
-  };
-  return labels[status];
-};
-
-const getSessionContextCopy = (session: ISessionDetail): { eyebrow: string; title: string; detail: string } => {
-  const latestEvent = session.events[0];
-  switch (session.status) {
-    case "working":
-      return {
-        eyebrow: "Current activity",
-        title: session.activityKind === "thinking" || session.activityKind === "model" ? "Model is working" : "Working",
-        detail: session.detail,
-      };
-    case "attention": {
-      const kind = latestEvent?.type === "attention_requested" ? latestEvent.data.kind : null;
-      return {
-        eyebrow: "Needs input",
-        title: kind === "question" || session.activityKind === "asking" ? "Question requested" : "Approval requested",
-        detail: session.detail,
-      };
-    }
-    case "done":
-      return { eyebrow: "Completed", title: "Turn completed", detail: session.detail };
-    case "error":
-      return { eyebrow: "Error", title: "Activity failed", detail: session.detail };
-    case "inactive":
-      return { eyebrow: "Inactive", title: "Activity paused", detail: "No recent terminal event" };
-    case "idle":
-      return { eyebrow: "Idle", title: "Ready", detail: session.detail };
-  }
-};
-
-const SessionContextSummary = ({ session }: { session: ISessionDetail }) => {
-  const copy = getSessionContextCopy(session);
-
-  return (
-    <section className="session-context-summary" data-status={session.status} aria-labelledby="session-context-title">
-      <SessionMascot activityKind={session.activityKind} sessionId={session.conversationId} status={session.status} />
-      <span className="session-context-copy">
-        <span className="session-context-eyebrow">{copy.eyebrow}</span>
-        <span className="session-context-title" id="session-context-title">{copy.title}</span>
-        <span className="session-context-detail">{copy.detail}</span>
-      </span>
-      <span className="session-context-meta">
-        <span className="session-model">{shortModelName(session.model)}</span>
-        <span className="session-age" title={formatTime(session.lastActivityAt)}>{formatRelativeAge(session.lastActivityAt)}</span>
-      </span>
-    </section>
-  );
-};
-
-const SessionListRow = ({ child = false, onClear, onFocus, onOpen, session }: ISessionListRowProps) => (
-  <li className={`session-row ${child ? "session-child-row" : ""} ${session.status === "done" ? "ended" : ""}`} data-status={session.status}>
-    <button
-      className="session-row-main"
-      type="button"
-      onClick={() => onOpen(session.conversationId)}
-      data-tauri-drag-region="false"
-      aria-label={`Open ${session.project} session details`}
-    >
-      {child ? <StatusGlyph status={session.status} /> : <SessionMascot activityKind={session.activityKind} sessionId={session.conversationId} status={session.status} />}
-      <span className="session-label">
-        <span className="session-title-line">
-          <span className="session-project">{child ? shortSessionId(session.conversationId) : session.project}</span>
-          <span className={`session-inline-status status-text-${session.status}`}>{sessionStatusLabel(session.status)}</span>
-        </span>
-        <span className="session-activity">{session.detail}</span>
-        <span className="session-folder">{child ? session.project : session.workspace}</span>
-      </span>
-      <span className="session-row-metadata" title={formatTime(session.lastActivityAt)}>
-        <span className="session-model">{shortModelName(session.model)}</span>
-        <span className="session-age">{formatRelativeAge(session.lastActivityAt)}</span>
-      </span>
-    </button>
-    <div className="session-row-actions">
-      <button
-        className="row-btn row-focus"
-        type="button"
-        onClick={() => onFocus(session)}
-        data-tauri-drag-region="false"
-        aria-label={`Focus ${session.project} session in Ghostty`}
-      >
-        <Focus size={11} strokeWidth={2.4} />
-      </button>
-      {session.status === "done" ? (
-        <button
-          className="row-btn row-clear"
-          type="button"
-          onClick={() => onClear(session.conversationId)}
-          data-tauri-drag-region="false"
-          aria-label={`Clear completed ${session.project} session`}
-          title="Hide this completed session until it has fresh activity"
-        >
-          <X size={12} strokeWidth={2.5} />
-        </button>
-      ) : null}
-    </div>
-  </li>
-);
-
-const WorkspaceSessionGroupItem = ({ expanded, group, groupKey, onClear, onClearGroup, onFocus, onOpen, onToggle }: IWorkspaceSessionGroupItemProps) => {
-  if (group.sessions.length === 1) {
-    return <SessionListRow session={group.sessions[0]} onClear={onClear} onFocus={onFocus} onOpen={onOpen} />;
-  }
-
-  return (
-    <li className="session-group-block" data-status={group.status}>
-      <div className="session-row session-group" data-status={group.status}>
-        <button
-          className="session-row-main session-group-main"
-          type="button"
-          onClick={() => onToggle(groupKey)}
-          data-tauri-drag-region="false"
-          aria-expanded={expanded}
-          aria-label={`${expanded ? "Collapse" : "Expand"} ${group.project}, ${group.sessions.length} sessions`}
-        >
-          <span className="session-disclosure" aria-hidden="true">
-            {expanded ? <ChevronDown size={12} strokeWidth={2.4} /> : <ChevronRight size={12} strokeWidth={2.4} />}
-          </span>
-          <SessionMascot activityKind={group.activityKind} sessionId={group.primarySession.conversationId} status={group.status} />
-          <span className="session-label">
-            <span className="session-title-line">
-              <span className="session-project">{group.project}</span>
-              <span className="session-group-count">×{group.sessions.length}</span>
-              <span className={`session-inline-status status-text-${group.status}`}>{sessionStatusLabel(group.status)}</span>
-            </span>
-            <span className="session-activity">{group.detail}</span>
-            <span className="session-folder">{group.workspace}</span>
-          </span>
-          <span className="session-row-metadata" title={formatTime(group.lastActivityAt)}>
-            <span className="session-model">{shortModelName(group.primarySession.model)}</span>
-            <span className="session-age">{formatRelativeAge(group.lastActivityAt)}</span>
-          </span>
-        </button>
-        {group.sessions.every((session) => session.status === "done") ? (
-          <div className="session-row-actions">
-            <button
-              className="row-btn row-clear"
-              type="button"
-              onClick={() => onClearGroup(group)}
-              data-tauri-drag-region="false"
-              aria-label={`Clear completed ${group.project} group`}
-              title="Hide every completed session in this group until it has fresh activity"
-            >
-              <X size={12} strokeWidth={2.5} />
-            </button>
-          </div>
-        ) : null}
-      </div>
-      {expanded ? (
-        <ul className="session-child-list" aria-label={`${group.project} sessions`}>
-          {group.sessions.map((session) => (
-            <SessionListRow child session={session} onClear={onClear} onFocus={onFocus} onOpen={onOpen} key={session.conversationId} />
-          ))}
-        </ul>
-      ) : null}
-    </li>
-  );
-};
-
-const createDemoEvent = (index: number): AgentHaloEvent => {
-  const timestamp = new Date().toISOString();
-  const demoSession = Math.floor(index / 10) % 3;
-  const base = {
-    version: 2 as const,
-    id: `demo-${index}-${crypto.randomUUID()}`,
-    timestamp,
-    agentId: "agent-demo-mahiro-code",
-    agentName: "Mahiro Code",
-    conversationId: `local-conv-demo-${demoSession + 1}`,
-    cwd: "/Users/mahiro/ghq/github.com/mahirocoko/agent-halo",
-    model: "gpt-5.5",
-    permissionMode: "unrestricted",
-  };
-
-  switch (index % 10) {
-    case 0:
-      return { ...base, type: "conversation_open", data: { reason: "startup", previousConversationId: null } };
-    case 1:
-      return { ...base, type: "turn_start", data: { inputCount: 1 } };
-    case 2:
-      return { ...base, type: "tool_start", data: { toolCallId: "demo-tool", toolName: "exec_command", argKeys: ["cmd"] } };
-    case 3:
-      return { ...base, type: "tool_end", data: { toolCallId: "demo-tool", toolName: "exec_command", status: "success", outputLength: 420 } };
-    case 4:
-      return { ...base, type: "compact_start", data: { trigger: "context_window_overflow" } };
-    case 5:
-      return { ...base, type: "compact_end", data: { trigger: "context_window_overflow", messagesBefore: 220, messagesAfter: 120, contextTokensBefore: 190000, contextTokensAfter: 90000 } };
-    case 6:
-      return { ...base, type: "tool_start", data: { toolCallId: "demo-tool-2", toolName: "AskUserQuestion", argKeys: ["questions"] } };
-    case 7:
-      return { ...base, type: "attention_requested", data: { hookEventName: "AskUserQuestion", source: "tool", kind: "question", toolName: "AskUserQuestion", message: "Question" } };
-    case 8:
-      return { ...base, type: "tool_end", data: { toolCallId: "demo-tool-2", toolName: "AskUserQuestion", status: "success", outputLength: 64 } };
-    default:
-      return { ...base, type: "turn_complete", data: { hookEventName: "Stop", source: "hook", message: null } };
-  }
-};
-
-const createDemoScenarioEvents = (scenario: string): AgentHaloEvent[] => {
-  const now = Date.now();
-  const timestamp = new Date(now).toISOString();
-  const timestampAt = (offset: number) => new Date(now + offset).toISOString();
-  const base = {
-    version: 2 as const,
-    id: `demo-scenario-${scenario}-${crypto.randomUUID()}`,
-    timestamp,
-    agentId: "agent-demo-mahiro-code",
-    agentName: "Mahiro Code",
-    conversationId: `local-conv-demo-${scenario}`,
-    cwd: "/Users/mahiro/ghq/github.com/mahirocoko/agent-halo",
-    model: "gpt-5.6-sol",
-    permissionMode: "unrestricted",
-  };
-
-  if (scenario === "attention") {
-    return [
-      { ...base, id: `${base.id}-open`, type: "conversation_open", data: { reason: "startup", previousConversationId: null } },
-      { ...base, id: `${base.id}-turn`, timestamp: timestampAt(1), type: "turn_start", data: { inputCount: 1 } },
-      { ...base, id: `${base.id}-tool`, timestamp: timestampAt(2), type: "tool_start", data: { toolCallId: "demo-question", toolName: "AskUserQuestion", argKeys: ["questions"] } },
-      { ...base, id: `${base.id}-attention`, timestamp: timestampAt(3), type: "attention_requested", data: { hookEventName: "AskUserQuestion", source: "tool", kind: "question", toolName: "AskUserQuestion", message: "Question" } },
-    ];
-  }
-
-  if (scenario === "done") {
-    return [
-      { ...base, id: `${base.id}-open`, type: "conversation_open", data: { reason: "startup", previousConversationId: null } },
-      { ...base, id: `${base.id}-done`, timestamp: timestampAt(1), type: "turn_complete", data: { hookEventName: "Stop", source: "hook", message: null } },
-    ];
-  }
-
-  if (scenario === "error") {
-    return [
-      { ...base, id: `${base.id}-open`, type: "conversation_open", data: { reason: "startup", previousConversationId: null } },
-      {
-        ...base,
-        id: `${base.id}-error`,
-        timestamp: timestampAt(1),
-        type: "llm_end",
-        data: {
-          model: "gpt-5.6-sol",
-          stopReason: "llm_api_error",
-          durationMs: 12_000,
-          usage: null,
-          error: { message: "Provider request failed", errorType: "provider_error", retryable: true },
-        },
-      },
-    ];
-  }
-
-  if (scenario === "multi") {
-    const workspace = "/Users/mahiro/ghq/github.com/mahirocoko/agent-halo";
-    const otherWorkspace = "/Users/mahiro/ghq/github.com/mahirocoko/paoplew";
-    const sessionBase = (conversationId: string, cwd: string) => ({ ...base, conversationId, cwd });
-    return [
-      { ...sessionBase("local-conv-demo-active", workspace), id: `${base.id}-active-open`, timestamp: timestampAt(1), type: "conversation_open", data: { reason: "startup", previousConversationId: null } },
-      { ...sessionBase("local-conv-demo-active", workspace), id: `${base.id}-active-turn`, timestamp: timestampAt(8), type: "turn_start", data: { inputCount: 1 } },
-      { ...sessionBase("local-conv-demo-done-a", workspace), id: `${base.id}-done-a-open`, timestamp: timestampAt(2), type: "conversation_open", data: { reason: "startup", previousConversationId: null } },
-      { ...sessionBase("local-conv-demo-done-a", workspace), id: `${base.id}-done-a`, timestamp: timestampAt(7), type: "turn_complete", data: { hookEventName: "Stop", source: "hook", message: "Desktop pass complete" } },
-      { ...sessionBase("local-conv-demo-done-b", workspace), id: `${base.id}-done-b-open`, timestamp: timestampAt(3), type: "conversation_open", data: { reason: "startup", previousConversationId: null } },
-      { ...sessionBase("local-conv-demo-done-b", workspace), id: `${base.id}-done-b`, timestamp: timestampAt(6), type: "turn_complete", data: { hookEventName: "Stop", source: "hook", message: "Native checks complete" } },
-      { ...sessionBase("local-conv-demo-paoplew", otherWorkspace), id: `${base.id}-other-open`, timestamp: timestampAt(4), type: "conversation_open", data: { reason: "startup", previousConversationId: null } },
-      { ...sessionBase("local-conv-demo-paoplew", otherWorkspace), id: `${base.id}-other-done`, timestamp: timestampAt(5), type: "turn_complete", data: { hookEventName: "Stop", source: "hook", message: "Bills review complete" } },
-    ];
-  }
-
-  if (scenario === "long-llm") {
-    const longLlmTimestamp = new Date(Date.now() - 90_000).toISOString();
-    return [
-      { ...base, id: `${base.id}-open`, timestamp: longLlmTimestamp, type: "conversation_open", data: { reason: "startup", previousConversationId: null } },
-      { ...base, id: `${base.id}-llm`, timestamp: new Date(Date.parse(longLlmTimestamp) + 1).toISOString(), type: "llm_start", data: { model: "gpt-5.6-sol", messageCount: 20, contextWindow: 372_000 } },
-    ];
-  }
-
-  if (scenario === "long-tool") {
-    const longToolTimestamp = new Date(Date.now() - 5 * 60_000).toISOString();
-    return [
-      { ...base, id: `${base.id}-open`, timestamp: longToolTimestamp, type: "conversation_open", data: { reason: "startup", previousConversationId: null } },
-      { ...base, id: `${base.id}-tool`, timestamp: new Date(Date.parse(longToolTimestamp) + 1).toISOString(), type: "tool_start", data: { toolCallId: "long-tool", toolName: "TaskOutput", argKeys: ["task_id", "timeout"] } },
-    ];
-  }
-
-  const inactiveTime = Date.now() - LLM_STALE_AFTER_MS - 60_000;
-  const inactiveTimestamp = new Date(inactiveTime).toISOString();
-  return [
-    { ...base, id: `${base.id}-open`, timestamp: inactiveTimestamp, type: "conversation_open", data: { reason: "startup", previousConversationId: null } },
-    { ...base, id: `${base.id}-inactive`, timestamp: new Date(inactiveTime + 1).toISOString(), type: "llm_start", data: { model: "gpt-5.6-sol", messageCount: 10, contextWindow: 200_000 } },
-  ];
-};
-
-const buildSessionSummaries = (events: AgentHaloEvent[], presence: IAgentHaloPresence, now: Date): ISessionSummary[] => {
-  const groupedEvents = new Map<string, AgentHaloEvent[]>();
-
-  for (const event of events) {
-    if (!event.conversationId) continue;
-    const sessionEvents = groupedEvents.get(event.conversationId) ?? [];
-    sessionEvents.push(event);
-    groupedEvents.set(event.conversationId, sessionEvents);
-  }
-
-  const sessions = new Map<string, ISessionSummary>();
-
-  for (const [conversationId, sessionEvents] of groupedEvents) {
-    if (conversationId === "default" && isInternalOnlySession(sessionEvents)) continue;
-    const latestEvent = sessionEvents[0];
-    if (!latestEvent) continue;
-    const activity = getEventActivity(latestEvent);
-    const workspacePath = getSessionWorkspacePath(sessionEvents, latestEvent.cwd);
-    const sessionModel = sessionEvents.find((event) => event.model)?.model ?? "Letta";
-    sessions.set(conversationId, {
-      conversationId,
-      project: projectName(workspacePath ?? latestEvent.cwd),
-      workspace: shortenPath(workspacePath ?? latestEvent.cwd),
-      workspacePath,
-      detail: activity.detail,
-      activityKind: activity.kind,
-      model: sessionModel,
-      status: getEventSessionStatus(latestEvent, now),
-      lastActivityAt: latestEvent.timestamp,
-    });
-  }
-
-  if (presence.conversationId && !sessions.has(presence.conversationId)) {
-    const sessionEvents = groupedEvents.get(presence.conversationId) ?? [];
-    const currentEvent = sessionEvents[0]
-      ? ({ ...sessionEvents[0], cwd: presence.cwd } satisfies AgentHaloEvent)
-      : null;
-    const workspacePath = getSessionWorkspacePath(currentEvent ? [currentEvent, ...sessionEvents] : sessionEvents, presence.cwd);
-    sessions.set(presence.conversationId, {
-      conversationId: presence.conversationId,
-      project: projectName(workspacePath ?? presence.cwd),
-      workspace: shortenPath(workspacePath ?? presence.cwd),
-      workspacePath,
-      detail: "idle",
-      activityKind: "session",
-      model: presence.model ?? "Letta",
-      status: "idle",
-      lastActivityAt: presence.lastEventAt ?? new Date(0).toISOString(),
-    });
-  }
-
-  return [...sessions.values()];
-};
-
-
-
-const buildSessionDetail = (
-  conversationId: string | null,
-  sessions: ISessionSummary[],
-  events: AgentHaloEvent[],
-  presence: IAgentHaloPresence,
-): ISessionDetail | null => {
-  if (!conversationId) return null;
-
-  const summary = sessions.find((session) => session.conversationId === conversationId);
-  if (!summary) return null;
-
-  const sessionEvents = events.filter((event) => event.conversationId === conversationId);
-  const latestEvent = sessionEvents[0];
-  const isCurrent = presence.conversationId === conversationId;
-  const workspacePath = summary.workspacePath ?? getSessionWorkspacePath(sessionEvents, latestEvent?.cwd);
-
-  return {
-    ...summary,
-    agentName: (isCurrent ? presence.agentName : latestEvent?.agentName) ?? "Mahiro Code",
-    cwd: workspacePath ?? (isCurrent ? presence.cwd : latestEvent?.cwd) ?? "No workspace",
-    model: (isCurrent ? presence.model : latestEvent?.model) ?? "Letta Code",
-    permissionMode: (isCurrent ? presence.permissionMode : latestEvent?.permissionMode) ?? "—",
-    detail: summary.detail,
-    events: sessionEvents,
-  };
-};
-
-const applyEvent = (presence: IAgentHaloPresence, event: AgentHaloEvent) => reducePresence(presence, event);
-
-const appendRecentEvent = (events: AgentHaloEvent[], event: AgentHaloEvent): AgentHaloEvent[] =>
-  [event, ...events].slice(0, MAX_RECENT_EVENTS);
-
-const createDemoMetric = (label: string, value: number, remainingLabel: string, resetLabel: string | null, statusLevel: IUsageMetric["statusLevel"] = "ok"): IUsageMetric => {
-  const groupLabel = normalizeUsageGroupLabel(label);
-  return {
-    label,
-    groupLabel,
-    groupModels: modelsForUsageGroup(groupLabel),
-    limitLabel: groupLabel ? "Weekly Limit" : null,
-    value,
-    statusLevel,
-    remainingLabel,
-    resetLabel,
-  };
-};
-
-const demoUsageForProvider = (provider: IUsageProviderConfig): IAgentUsageState =>
-  createAgentUsageState(provider.id, {
-    status: "online",
-    fetchedAt: new Date().toISOString(),
-    plan: provider.id === "codex" ? "Pro" : "Max",
-    metrics: provider.id === "codex"
-      ? [
-          createDemoMetric("Session", 73, "73% left", "Resets in 2h 18m"),
-          createDemoMetric("Weekly", 91, "91% left", "Resets in 4d 7h"),
-          createDemoMetric("Reviews", 96, "96% left", null),
-        ]
-      : [
-          createDemoMetric("Gemini models", 82, "82% left", "Resets in 4h 31m"),
-          createDemoMetric("Claude and GPT models", 42, "42% left", "Resets in 1d 19h", "warning"),
-        ],
-    sessionPercent: provider.id === "codex" ? 27 : null,
-    weeklyPercent: provider.id === "codex" ? 9 : null,
-    reviewsPercent: provider.id === "codex" ? 4 : null,
-    rateLimitResets: provider.id === "codex" ? "1 available" : null,
-    credits: provider.id === "codex" ? "$0.00 · 0 credits" : null,
-    today: null,
-    last30Days: null,
-  });
-
-const useAgentUsageList = (settings: IUsageSettings) => {
-  const settingsRef = useRef(settings);
-  const [usages, setUsages] = useState<Record<UsageProviderId, IAgentUsageState>>(() =>
-    Object.fromEntries(USAGE_PROVIDERS.map((provider) => [provider.id, createAgentUsageState(provider.id)])) as Record<UsageProviderId, IAgentUsageState>,
-  );
-  const [snapshots, setSnapshots] = useState<Partial<Record<UsageProviderId, IAgentUsageSnapshot>>>({});
-  const [relativeResetTick, setRelativeResetTick] = useState(0);
-
-  useEffect(() => {
-    settingsRef.current = settings;
-  }, [settings]);
-
-  const refreshProvider = async (provider: IUsageProviderConfig) => {
-    if (DEMO_MODE) {
-      setUsages((current) => ({ ...current, [provider.id]: demoUsageForProvider(provider) }));
-      return;
-    }
-
-    if (typeof window.__TAURI_INTERNALS__ === "undefined") {
-      setSnapshots((current) => {
-        const next = { ...current };
-        delete next[provider.id];
-        return next;
-      });
-      setUsages((current) => ({
-        ...current,
-        [provider.id]: createAgentUsageState(provider.id, { status: "offline", message: "Agent Halo desktop runtime needed" }),
-      }));
-      return;
-    }
-
-    try {
-      const snapshot = await invoke<IAgentUsageSnapshot>(provider.command);
-      setSnapshots((current) => ({ ...current, [provider.id]: snapshot }));
-      setUsages((current) => ({ ...current, [provider.id]: parseAgentUsageSnapshot(provider.id, snapshot, settingsRef.current) }));
-    } catch (error) {
-      setSnapshots((current) => {
-        const next = { ...current };
-        delete next[provider.id];
-        return next;
-      });
-      setUsages((current) => ({
-        ...current,
-        [provider.id]: createAgentUsageState(provider.id, {
-          status: "offline",
-          message: error instanceof Error ? error.message : String(error || `${provider.label} usage unavailable`),
-        }),
-      }));
-    }
-  };
-
-  const refresh = () => {
-    for (const provider of USAGE_PROVIDERS) void refreshProvider(provider);
-  };
-
-  useEffect(() => {
-    refresh();
-    const timer = window.setInterval(refresh, settings.refreshMs);
-    return () => window.clearInterval(timer);
-  }, [settings.refreshMs]);
-
-  useEffect(() => {
-    if (settings.resetMode !== "relative") return undefined;
-    const timer = window.setInterval(() => setRelativeResetTick((tick) => tick + 1), 60_000);
-    return () => window.clearInterval(timer);
-  }, [settings.resetMode]);
-
-  useEffect(() => {
-    if (Object.keys(snapshots).length === 0) return;
-    setUsages((current) => {
-      const next = { ...current };
-      for (const provider of USAGE_PROVIDERS) {
-        const snapshot = snapshots[provider.id];
-        if (!snapshot) continue;
-        next[provider.id] = parseAgentUsageSnapshot(provider.id, snapshot, settings);
-      }
-      return next;
-    });
-  }, [relativeResetTick, settings.resetMode, settings.timeFormat, settings.usageMode, snapshots]);
-
-  return { refresh, usages };
-};
-
-const UsageMeter = ({ metric }: { metric: IUsageMetric }) => (
-  <div className="usage-meter" data-empty={metric.value === null}>
-    <div className="usage-meter-head">
-      <span className="usage-meter-label">{metric.limitLabel ?? metric.label}</span>
-      <span className="usage-status-dot" data-level={metric.statusLevel} />
-    </div>
-    <span className="usage-meter-track" aria-hidden="true">
-      <span className="usage-meter-fill" style={{ width: `${metric.value ?? 0}%` }} />
-    </span>
-    <div className="usage-meter-foot">
-      <span>{metric.remainingLabel ?? "—"}</span>
-      {metric.resetLabel ? <span>{metric.resetLabel}</span> : null}
-    </div>
-  </div>
-);
-
-const getAntigravityMetricGroups = (metrics: IUsageMetric[]): IUsageMetricGroup[] => {
-  const grouped = ANTIGRAVITY_USAGE_GROUPS.map((group) => ({ ...group, metrics: [] as IUsageMetric[] }));
-  for (const metric of metrics) {
-    const group = grouped.find((item) => item.label === metric.groupLabel);
-    if (group) group.metrics.push(metric);
-  }
-  return grouped;
-};
-
-const UsageMetricGroupCard = ({ group }: { group: IUsageMetricGroup }) => (
-  <section className="usage-metric-group">
-    <div className="usage-group-title">{group.label}</div>
-    <div className="usage-group-models">Models within this group: {group.models.join(", ")}</div>
-    {group.metrics.length > 0 ? (
-      <div className="usage-group-meters">
-        {group.metrics.map((metric) => <UsageMeter metric={metric} key={`${group.label}-${metric.limitLabel ?? metric.label}`} />)}
-      </div>
-    ) : (
-      <div className="usage-group-empty">No quota data from current source</div>
-    )}
-  </section>
-);
-
-const AntigravityUsageGroups = ({ metrics }: { metrics: IUsageMetric[] }) => (
-  <div className="usage-group-list">
-    {getAntigravityMetricGroups(metrics).map((group) => <UsageMetricGroupCard group={group} key={group.label} />)}
-  </div>
-);
-
-const UsageProviderLinks = ({ links }: { links: IUsageProviderConfig["links"] }) => {
-  if (!links || links.length === 0) return null;
-  const openLink = (url: string) => {
-    if (typeof window.__TAURI_INTERNALS__ === "undefined") {
-      window.open(url, "_blank", "noopener,noreferrer");
-      return;
-    }
-    void invoke("open_external_url", { url }).catch(() => {
-      window.open(url, "_blank", "noopener,noreferrer");
-    });
-  };
-  return (
-    <div className="usage-provider-links">
-      {links.map((link) => (
-        <button className="usage-provider-link" type="button" onClick={(event) => { event.stopPropagation(); openLink(link.url); }} data-tauri-drag-region="false" key={link.url}>
-          <span>{link.label}</span>
-          <ExternalLink size={10} strokeWidth={2.4} />
-        </button>
-      ))}
-    </div>
-  );
-};
-
-const UsageTextRows = ({ rows }: { rows: Array<{ label: string; value: string | null }> }) => {
-  const visibleRows = rows.filter((row) => row.value);
-  if (visibleRows.length === 0) return null;
-  return (
-    <div className="usage-text-rows">
-      {visibleRows.map((row) => (
-        <div className="usage-text-row" key={row.label}>
-          <span>{row.label}</span>
-          <strong>{row.value}</strong>
-        </div>
-      ))}
-    </div>
-  );
-};
-
-const UsageTrendChart = ({ line }: { line: IUsageMetricLine | null }) => {
-  const points = line?.points?.filter((point) => Number.isFinite(point.value) && point.value >= 0) ?? [];
-  if (points.length === 0) return null;
-  const max = Math.max(...points.map((point) => point.value), 1);
-  return (
-    <div className="usage-trend-card">
-      <div className="usage-trend-head">
-        <span>{line?.label ?? "Usage Trend"}</span>
-        {line?.note ? <small title={line.note}>ⓘ</small> : null}
-      </div>
-      <div className="usage-trend-bars" aria-label="Codex usage trend">
-        {points.map((point, index) => (
-          <span
-            className="usage-trend-bar"
-            style={{ height: `${Math.max(8, (point.value / max) * 100)}%`, backgroundColor: line?.color ?? undefined }}
-            title={`${point.label}: ${point.valueLabel ?? point.value}`}
-            key={`${point.label}-${index}`}
-          />
-        ))}
-      </div>
-    </div>
-  );
-};
-
-const ModelShareRows = ({ rows }: { rows: Array<{ label: string; value: string }> }) => {
-  if (rows.length === 0) return null;
-  return (
-    <div className="usage-model-shares">
-      {rows.map((row) => (
-        <div className="usage-model-share" key={row.label}>
-          <span>{row.label}</span>
-          <strong>{row.value}</strong>
-        </div>
-      ))}
-    </div>
-  );
-};
-
-const DailyTokenRows = ({ rows }: { rows: Array<{ label: string; value: string }> }) => {
-  if (rows.length === 0) return null;
-  return (
-    <div className="usage-daily-tokens">
-      <div className="usage-daily-title">Daily Tokens</div>
-      {rows.map((row) => (
-        <div className="usage-daily-token" key={row.label}>
-          <span>{row.label}</span>
-          <strong>{row.value}</strong>
-        </div>
-      ))}
-    </div>
-  );
-};
-
-const CodexUsageDetails = ({ usage }: { usage: IAgentUsageState }) => (
-  <>
-    <UsageTextRows
-      rows={[
-        { label: "Credits", value: usage.credits },
-        { label: "Rate Limit Resets", value: usage.rateLimitResets },
-        { label: "Today", value: usage.today },
-        { label: "Yesterday", value: usage.yesterday },
-        { label: "Latest Token Log", value: usage.latestTokenLog },
-        { label: "Last 30 Days", value: usage.last30Days },
-      ]}
-    />
-    <UsageTrendChart line={usage.usageTrend} />
-    <DailyTokenRows rows={usage.dailyTokenRows} />
-    <ModelShareRows rows={usage.modelShares} />
-  </>
-);
-
-const UsageProviderIcon = ({ provider, size = 14 }: { provider: IUsageProviderConfig; size?: number }) => (
-  <span
-    className="usage-provider-icon"
-    aria-hidden="true"
-    style={{
-      "--provider-icon": `url(${provider.iconPath})`,
-      "--provider-color": provider.color,
-      width: size,
-      height: size,
-    } as CSSProperties & Record<"--provider-icon" | "--provider-color", string>}
-  />
-);
-
-const UsageProviderDetail = ({ provider, usage }: { provider: IUsageProviderConfig; usage: IAgentUsageState }) => {
-  const statusText = usage.status === "loading" ? `Checking ${provider.label}` : usage.message ?? `${provider.label} usage unavailable`;
-  const StatusIcon = usage.status === "loading" ? RefreshCw : TriangleAlert;
-
-  return (
-    <section className="usage-provider-card" data-status={usage.status}>
-      <div className="usage-provider-head">
-        <span className="usage-provider-title"><UsageProviderIcon provider={provider} />{provider.label}</span>
-        {usage.plan ? <span className="usage-plan">{usage.plan}</span> : null}
-      </div>
-      <UsageProviderLinks links={provider.links} />
-      {usage.status === "online" && usage.metrics.length > 0 ? (
-        <>
-          {usage.message ? (
-            <div className="usage-provider-message usage-provider-note">
-              <TriangleAlert size={13} strokeWidth={2.2} />
-              <span>{usage.message}</span>
-            </div>
-          ) : null}
-          <div className="usage-provider-metrics">
-            {provider.id === "agy" ? <AntigravityUsageGroups metrics={usage.metrics} /> : usage.metrics.map((metric) => <UsageMeter metric={metric} key={metric.label} />)}
-          </div>
-        </>
-      ) : (
-        <div className="usage-provider-message">
-          <StatusIcon size={13} strokeWidth={2.2} />
-          <span>{statusText}</span>
-        </div>
-      )}
-      {provider.id === "codex" && usage.status === "online" ? <CodexUsageDetails usage={usage} /> : null}
-      {(usage.credits || usage.rateLimitResets) ? (
-        <div className="usage-provider-chips" data-hidden={provider.id === "codex"}>
-          {usage.credits ? <span className="usage-chip" title="Credits">{usage.credits}</span> : null}
-          {usage.rateLimitResets ? <span className="usage-chip" title="Rate limit resets">{usage.rateLimitResets}</span> : null}
-        </div>
-      ) : null}
-    </section>
-  );
-};
-
-const SettingSegment = <T extends string>({
-  options,
-  value,
-  onChange,
-}: {
-  options: Array<{ label: string; value: T; sublabel?: string }>;
-  value: T;
-  onChange: (value: T) => void;
-}) => (
-  <div className="usage-setting-segment">
-    {options.map((option) => (
-      <button
-        className="usage-setting-option"
-        data-active={option.value === value}
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation();
-          onChange(option.value);
-        }}
-        data-tauri-drag-region="false"
-        key={option.value}
-      >
-        <span>{option.label}</span>
-        {option.sublabel ? <small>{option.sublabel}</small> : null}
-      </button>
-    ))}
-  </div>
-);
-
-const UsageSettingsPanel = ({ settings, onChange }: { settings: IUsageSettings; onChange: (settings: IUsageSettings) => void }) => {
-  const sampleReset = new Date(Date.now() + 5 * 60 * 60 * 1000 + 12 * 60_000).toISOString();
-  const set = (partial: Partial<IUsageSettings>) => onChange({ ...settings, ...partial });
-
-  return (
-    <section className="usage-settings-panel">
-      <div className="usage-provider-head">
-        <span className="usage-provider-title"><Settings size={14} strokeWidth={2.2} />Usage settings</span>
-      </div>
-      <div className="usage-setting-group">
-        <span className="usage-setting-title">Auto refresh</span>
-        <span className="usage-setting-desc">How often provider usage is refreshed</span>
-        <SettingSegment
-          value={`${settings.refreshMs}`}
-          onChange={(value) => set({ refreshMs: Number(value) })}
-          options={[
-            { label: "5 min", value: `${5 * 60_000}` },
-            { label: "15 min", value: `${15 * 60_000}` },
-            { label: "30 min", value: `${30 * 60_000}` },
-            { label: "1 hour", value: `${60 * 60_000}` },
-          ]}
-        />
-      </div>
-      <div className="usage-setting-group">
-        <span className="usage-setting-title">Usage mode</span>
-        <span className="usage-setting-desc">Whether bars show remaining or consumed quota</span>
-        <SettingSegment
-          value={settings.usageMode}
-          onChange={(value) => set({ usageMode: value })}
-          options={[{ label: "Left", value: "left" }, { label: "Used", value: "used" }]}
-        />
-      </div>
-      <div className="usage-setting-group">
-        <span className="usage-setting-title">Reset timers</span>
-        <span className="usage-setting-desc">Countdown or clock time</span>
-        <SettingSegment
-          value={settings.resetMode}
-          onChange={(value) => set({ resetMode: value })}
-          options={[
-            { label: "Relative", value: "relative", sublabel: formatResetLabel(sampleReset, { ...settings, resetMode: "relative" })?.replace("Resets in ", "") },
-            { label: "Absolute", value: "absolute", sublabel: formatResetLabel(sampleReset, { ...settings, resetMode: "absolute" })?.replace("Reset at ", "") },
-          ]}
-        />
-      </div>
-      <div className="usage-setting-group">
-        <span className="usage-setting-title">Time format</span>
-        <span className="usage-setting-desc">Used by absolute reset times</span>
-        <SettingSegment
-          value={settings.timeFormat}
-          onChange={(value) => set({ timeFormat: value })}
-          options={[
-            { label: "Auto", value: "auto", sublabel: formatAbsoluteTime(sampleReset, "auto") ?? undefined },
-            { label: "12-hour", value: "12h", sublabel: formatAbsoluteTime(sampleReset, "12h") ?? undefined },
-            { label: "24-hour", value: "24h", sublabel: formatAbsoluteTime(sampleReset, "24h") ?? undefined },
-          ]}
-        />
-      </div>
-    </section>
-  );
-};
-
-const AgentUsageList = ({ onRefresh, onSettingsChange, settings, usages }: {
-  onRefresh: () => void;
-  onSettingsChange: (settings: IUsageSettings) => void;
-  settings: IUsageSettings;
-  usages: Record<UsageProviderId, IAgentUsageState>;
-}) => {
-  const [selectedProviderId, setSelectedProviderId] = useState<UsageSidebarSelection | null>(null);
-  const visibleProviders = useMemo(() => USAGE_PROVIDERS, []);
-  const selectedProvider = selectedProviderId === "settings" ? null : visibleProviders.find((provider) => provider.id === selectedProviderId) ?? visibleProviders[0] ?? null;
-  const activeSidebarId: UsageSidebarSelection = selectedProviderId === "settings" ? "settings" : selectedProvider?.id ?? "settings";
-
-  useEffect(() => {
-    if (visibleProviders.length === 0) {
-      setSelectedProviderId("settings");
-      return;
-    }
-    if (selectedProviderId === "settings") return;
-    if (!selectedProviderId || !visibleProviders.some((provider) => provider.id === selectedProviderId)) {
-      setSelectedProviderId(visibleProviders[0].id);
-    }
-  }, [selectedProviderId, visibleProviders]);
-
-  return (
-    <div className="usage-list" aria-label="Usage providers">
-      <div className="usage-list-topline">
-        <span>Usage</span>
-        <button className="usage-refresh" type="button" onClick={(event) => { event.stopPropagation(); onRefresh(); }} data-tauri-drag-region="false" title="Refresh usage">
-          <RefreshCw size={12} strokeWidth={2.2} />
-        </button>
-      </div>
-      <div className="usage-layout">
-          <div className="usage-sidebar" role="tablist" aria-label="Usage providers">
-            {visibleProviders.map((provider) => {
-              const usage = usages[provider.id] ?? createAgentUsageState(provider.id);
-              return (
-                <button
-                  className="usage-side-tab"
-                  data-active={activeSidebarId === provider.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={activeSidebarId === provider.id}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setSelectedProviderId(provider.id);
-                  }}
-                  data-tauri-drag-region="false"
-                  key={provider.id}
-                  title={provider.label}
-                >
-                  <UsageProviderIcon provider={provider} size={13} />
-                  <span>{provider.label}</span>
-                  {usage.status === "online" ? <span className="usage-side-dot" /> : null}
-                </button>
-              );
-            })}
-            <button
-              className="usage-side-tab usage-side-settings"
-              data-active={activeSidebarId === "settings"}
-              type="button"
-              role="tab"
-              aria-selected={activeSidebarId === "settings"}
-              onClick={(event) => {
-                event.stopPropagation();
-                setSelectedProviderId("settings");
-              }}
-              data-tauri-drag-region="false"
-              title="Usage settings"
-            >
-              <Settings size={13} strokeWidth={2.2} />
-              <span>Settings</span>
-            </button>
-          </div>
-          <div className="usage-detail-panel">
-            {activeSidebarId === "settings" ? (
-              <UsageSettingsPanel settings={settings} onChange={onSettingsChange} />
-            ) : selectedProvider ? (
-              <UsageProviderDetail provider={selectedProvider} usage={usages[selectedProvider.id] ?? createAgentUsageState(selectedProvider.id)} />
-            ) : <div className="usage-empty">No local usage providers found</div>}
-          </div>
-        </div>
-    </div>
-  );
-};
-
-const useAgentHaloPresence = () => {
-  const [presence, setPresence] = useState<IAgentHaloPresence>(() => createInitialPresence());
-  const [recentEvents, setRecentEvents] = useState<AgentHaloEvent[]>([]);
-  const [lastLiveEvent, setLastLiveEvent] = useState<AgentHaloEvent | null>(null);
-  const [sessionEventRegistry, setSessionEventRegistry] = useState<SessionEventRegistry>(readSessionEventRegistry);
-  const [capabilities, setCapabilities] = useState<IAgentHaloBridgeCapabilities>(() => createDefaultBridgeCapabilities());
-  const [connection, setConnection] = useState<IConnectionState>({ status: "connecting", message: null });
-  const [now, setNow] = useState(() => new Date());
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(new Date()), 1_000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    let disposed = false;
-    let source: EventSource | null = null;
-
-    if (DEMO_MODE) {
-      setConnection({ status: "connected", message: "Demo mode" });
-      setCapabilities({
-        ...createDefaultBridgeCapabilities(),
-        events: { lifecycle: true, turns: true, tools: true, compact: true, llm: true },
-      });
-      if (DEMO_SCENARIO) {
-        const events = createDemoScenarioEvents(DEMO_SCENARIO);
-        const nextPresence = events.reduce(applyEvent, createInitialPresence());
-        setLastLiveEvent(events.at(-1) ?? null);
-        setPresence(nextPresence);
-        setRecentEvents([...events].reverse());
-        setSessionEventRegistry(() => {
-          const next = mergeSessionEvents({}, events);
-          writeSessionEventRegistry(next);
-          return next;
-        });
-        return undefined;
-      }
-
-      let index = 0;
-      const pushDemoEvent = () => {
-        const event = createDemoEvent(index);
-        index += 1;
-        setLastLiveEvent(event);
-        setPresence((current) => reducePresence(current, event));
-        setRecentEvents((current) => appendRecentEvent(current, event));
-        setSessionEventRegistry((current) => {
-          const next = mergeSessionEvents(current, [event]);
-          writeSessionEventRegistry(next);
-          return next;
-        });
-      };
-      pushDemoEvent();
-      const timer = window.setInterval(pushDemoEvent, 800);
-      return () => window.clearInterval(timer);
-    }
-
-    const hydrate = async () => {
-      try {
-        const response = await fetch(`${BRIDGE_URL}/snapshot`);
-        if (!response.ok) throw new Error(`Snapshot HTTP ${response.status}`);
-        const payload = (await response.json()) as { recent?: AgentHaloEvent[]; capabilities?: unknown };
-        if (!disposed) {
-          if (payload.capabilities) setCapabilities(normalizeBridgeCapabilities(payload.capabilities));
-          if (Array.isArray(payload.recent)) {
-            const recent = payload.recent.map(normalizeSessionEventIdentity);
-            setPresence(recent.reduce(applyEvent, createInitialPresence()));
-            setRecentEvents(recent.slice(-MAX_RECENT_EVENTS).reverse());
-            setSessionEventRegistry((current) => {
-              const next = mergeSessionEvents(current, recent);
-              writeSessionEventRegistry(next);
-              return next;
-            });
-          }
-        }
-      } catch {
-        // Live SSE is the source of truth; snapshot only improves first paint.
-      }
-    };
-
-    const hydrateHealth = async () => {
-      try {
-        const response = await fetch(`${BRIDGE_URL}/health`);
-        if (!response.ok) throw new Error(`Health HTTP ${response.status}`);
-        const payload = (await response.json()) as { capabilities?: unknown };
-        if (!disposed && payload.capabilities) setCapabilities(normalizeBridgeCapabilities(payload.capabilities));
-      } catch {
-        // SSE connection state covers bridge availability.
-      }
-    };
-
-    void hydrate();
-    void hydrateHealth();
-
-    source = new EventSource(`${BRIDGE_URL}/events`);
-    source.onopen = () => {
-      if (!disposed) setConnection({ status: "connected", message: null });
-    };
-    source.onerror = () => {
-      if (!disposed) {
-        setConnection({
-          status: source?.readyState === EventSource.CLOSED ? "disconnected" : "error",
-          message: "Waiting for Agent Halo bridge",
-        });
-      }
-    };
-
-    const handleEvent = (message: MessageEvent<string>) => {
-      try {
-        const event = normalizeSessionEventIdentity(JSON.parse(message.data) as AgentHaloEvent);
-        setLastLiveEvent(event);
-        setPresence((current) => reducePresence(current, event));
-        setRecentEvents((current) => appendRecentEvent(current, event));
-        setSessionEventRegistry((current) => {
-          const next = mergeSessionEvents(current, [event]);
-          writeSessionEventRegistry(next);
-          return next;
-        });
-      } catch {
-        setConnection({ status: "error", message: "Received malformed bridge event" });
-      }
-    };
-
-    for (const type of ["bridge_ready", "conversation_open", "conversation_close", "turn_start", "turn_stop", "turn_complete", "attention_requested", "tool_start", "tool_end", "compact_start", "compact_end", "llm_start", "llm_end", "bridge_error"]) {
-      source.addEventListener(type, handleEvent as EventListener);
-    }
-
-    return () => {
-      disposed = true;
-      source?.close();
-    };
-  }, []);
-
-  const refreshCapabilities = async (): Promise<boolean> => {
-    try {
-      const response = await fetch(`${BRIDGE_URL}/health`);
-      if (!response.ok) throw new Error(`Health HTTP ${response.status}`);
-      const payload = (await response.json()) as { capabilities?: unknown };
-      if (payload.capabilities) setCapabilities(normalizeBridgeCapabilities(payload.capabilities));
-      return true;
-    } catch {
-      return false;
-    }
-  };
-
-  const view = useMemo(() => getPresenceView(presence, { now, staleAfterMs: STALE_AFTER_MS }), [now, presence]);
-  const sessionEvents = useMemo(() => flattenSessionEvents(sessionEventRegistry), [sessionEventRegistry]);
-  return { capabilities, connection, lastLiveEvent, now, presence, recentEvents, refreshCapabilities, sessionEvents, setSessionEventRegistry, view };
+const writeKeepAwakeEnabled = (enabled: boolean) => {
+  try { window.localStorage.setItem(KEEP_AWAKE_STORAGE_KEY, `${enabled}`); } catch { /* current runtime still owns state */ }
 };
 
 const App = () => {
-  const { capabilities, connection, lastLiveEvent, now, presence, recentEvents, refreshCapabilities, sessionEvents, setSessionEventRegistry, view } = useAgentHaloPresence();
+  const { capabilities, connection, lastLiveEvent, now, presence, recentEvents, refreshCapabilities, sessionEventRegistry, setSessionEventRegistry, view } = useAgentHaloPresence({ demoMode: DEMO_MODE, demoScenario: DEMO_SCENARIO });
   const [usageSettings, setUsageSettings] = useState<IUsageSettings>(readUsageSettings);
-  const { refresh: refreshAgentUsage, usages: agentUsages } = useAgentUsageList(usageSettings);
+  const { refresh: refreshAgentUsage, usages: agentUsages } = useAgentUsageList(usageSettings, DEMO_MODE);
   const [acknowledgedConversationId, setAcknowledgedConversationId] = useState<string | null>(null);
   const [nativeAction, setNativeAction] = useState<INativeActionState>({ bridgeOnline: null, message: null });
   const [sessionAction, setSessionAction] = useState<ISessionActionState>({ ok: null, message: null });
@@ -2234,6 +156,10 @@ const App = () => {
   const [pendingRemoveHistoryId, setPendingRemoveHistoryId] = useState<string | null>(null);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const sheetInnerRef = useRef<HTMLDivElement | null>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
+  const returnSessionIdRef = useRef<string | null>(null);
+  const shouldFocusPanelRef = useRef(false);
+  const keyboardNavigationRef = useRef(false);
   const hoverOpenTimerRef = useRef<number | null>(null);
   const hoverCloseTimerRef = useRef<number | null>(null);
   const keepAwakeRequestRef = useRef<Promise<unknown>>(Promise.resolve());
@@ -2250,17 +176,17 @@ const App = () => {
   const model = presence.model?.split("/").slice(-1)[0] ?? "Letta Code";
   const sessions = useMemo(
     () =>
-      buildSessionSummaries(sessionEvents, presence, now).filter(
+      buildSessionSummaries(sessionEventRegistry, presence, now).filter(
         (session) =>
           !isDeletedAfter(deletedSessionIds, session.conversationId, session.lastActivityAt) &&
           (!isDismissedAfter(dismissedSessionIds, session.conversationId, session.lastActivityAt) ||
             (session.conversationId === presence.conversationId && !["idle", "closed"].includes(displayView.status))),
       ),
-    [deletedSessionIds, dismissedSessionIds, displayView.status, now, presence, sessionEvents],
+    [deletedSessionIds, dismissedSessionIds, displayView.status, now, presence, sessionEventRegistry],
   );
   const selectedSession = useMemo(
-    () => buildSessionDetail(selectedSessionId, sessions, sessionEvents, presence),
-    [presence, selectedSessionId, sessionEvents, sessions],
+    () => buildSessionDetail(selectedSessionId, sessions, sessionEventRegistry, presence),
+    [presence, selectedSessionId, sessionEventRegistry, sessions],
   );
   const selectedSessionActivityEvents = useMemo(() => {
     if (!selectedSession) return [];
@@ -2565,6 +491,32 @@ const App = () => {
     [],
   );
 
+  useEffect(() => {
+    const enterKeyboardMode = (event: KeyboardEvent) => {
+      if (["Tab", "Enter", " ", "Escape", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) {
+        keyboardNavigationRef.current = true;
+      }
+    };
+    const leaveKeyboardMode = () => {
+      keyboardNavigationRef.current = false;
+    };
+    window.addEventListener("keydown", enterKeyboardMode, true);
+    window.addEventListener("pointerdown", leaveKeyboardMode, true);
+    return () => {
+      window.removeEventListener("keydown", enterKeyboardMode, true);
+      window.removeEventListener("pointerdown", leaveKeyboardMode, true);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!renderPanel || !panelOpen || !shouldFocusPanelRef.current) return;
+    shouldFocusPanelRef.current = false;
+    window.requestAnimationFrame(() => {
+      const target = sheetInnerRef.current?.querySelector<HTMLElement>("[data-panel-focus-target]");
+      target?.focus({ preventScroll: true });
+    });
+  }, [panelOpen, renderPanel, selectedSessionId, setupOpen]);
+
   const clearHoverOpenTimer = () => {
     if (hoverOpenTimerRef.current === null) return;
     window.clearTimeout(hoverOpenTimerRef.current);
@@ -2575,6 +527,25 @@ const App = () => {
     if (hoverCloseTimerRef.current === null) return;
     window.clearTimeout(hoverCloseTimerRef.current);
     hoverCloseTimerRef.current = null;
+  };
+
+  const rememberFocusOrigin = () => {
+    if (document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
+      returnFocusRef.current = document.activeElement;
+    }
+  };
+
+  const restoreFocusOrigin = () => {
+    window.requestAnimationFrame(() => {
+      const target = returnFocusRef.current?.isConnected
+        ? returnFocusRef.current
+        : returnSessionIdRef.current
+          ? surfaceRef.current?.querySelector<HTMLElement>(`[data-session-id="${CSS.escape(returnSessionIdRef.current)}"]`)
+          : surfaceRef.current?.querySelector<HTMLElement>('.session-row-main, .header-tab[data-active="true"], .header-tab');
+      target?.focus({ preventScroll: true });
+      returnFocusRef.current = null;
+      returnSessionIdRef.current = null;
+    });
   };
 
   const closePanel = ({ suppressHover }: { suppressHover: boolean }) => {
@@ -2601,9 +572,11 @@ const App = () => {
     clearHoverOpenTimer();
     setHoverExpandSuppressed(false);
     if (shouldAutoOpen || setupOpen || selectedSessionId || !panelOpen) return;
+    if (keyboardNavigationRef.current && surfaceRef.current?.contains(document.activeElement)) return;
     if (hoverCloseTimerRef.current !== null) return;
     hoverCloseTimerRef.current = window.setTimeout(() => {
       hoverCloseTimerRef.current = null;
+      if (keyboardNavigationRef.current && surfaceRef.current?.contains(document.activeElement)) return;
       closePanel({ suppressHover: false });
     }, HOVER_CLOSE_DELAY_MS);
   };
@@ -2635,6 +608,9 @@ const App = () => {
   }, [panelOpen, selectedSessionId, setupOpen, shouldAutoOpen]);
 
   const openSession = (conversationId: string) => {
+    rememberFocusOrigin();
+    returnSessionIdRef.current = conversationId;
+    shouldFocusPanelRef.current = true;
     clearHoverOpenTimer();
     clearHoverCloseTimer();
     setSetupOpen(false);
@@ -2645,10 +621,54 @@ const App = () => {
   };
 
   const openSetup = () => {
+    rememberFocusOrigin();
+    returnSessionIdRef.current = null;
+    shouldFocusPanelRef.current = true;
     clearHoverOpenTimer();
     clearHoverCloseTimer();
     setSelectedSessionId(null);
     setSetupOpen(true);
+    setPanelOpen(true);
+  };
+
+  const activateMainTab = (tab: MainPanelTab) => {
+    setSetupOpen(false);
+    setSelectedSessionId(null);
+    setActiveMainTab(tab);
+    setPanelOpen(true);
+  };
+
+  const handleMainTabKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, currentTab: MainPanelTab) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const tabs: MainPanelTab[] = ["sessions", "usage"];
+    const currentIndex = tabs.indexOf(currentTab);
+    const nextTab = event.key === "Home"
+      ? tabs[0]
+      : event.key === "End"
+        ? tabs.at(-1) ?? tabs[0]
+        : tabs[(currentIndex + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length];
+    activateMainTab(nextTab);
+    window.requestAnimationFrame(() => document.getElementById(`main-tab-${nextTab}`)?.focus());
+  };
+
+  const handleSurfaceKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Escape") {
+      if (!panelOpen) return;
+      event.preventDefault();
+      if (selectedSessionId || setupOpen) {
+        backToSessions();
+        return;
+      }
+      closePanel({ suppressHover: true });
+      window.requestAnimationFrame(() => surfaceRef.current?.focus({ preventScroll: true }));
+      return;
+    }
+
+    if (event.target !== event.currentTarget || panelOpen || !["Enter", " "].includes(event.key)) return;
+    event.preventDefault();
+    shouldFocusPanelRef.current = true;
+    setHoverExpandSuppressed(false);
     setPanelOpen(true);
   };
 
@@ -2666,6 +686,7 @@ const App = () => {
     setSelectedSessionId(null);
     setSetupOpen(false);
     setActiveMainTab("sessions");
+    restoreFocusOrigin();
   };
 
   const dismissSession = (conversationId: string) => {
@@ -2836,6 +857,16 @@ const App = () => {
           onMouseEnter={expandPanelOnHover}
           onMouseLeave={scheduleHoverClose}
           onPointerLeave={scheduleHoverClose}
+          onPointerMove={() => { keyboardNavigationRef.current = false; }}
+          onClick={(event) => {
+            if (event.target !== event.currentTarget || panelOpen) return;
+            setPanelOpen(true);
+          }}
+          onKeyDown={handleSurfaceKeyDown}
+          role={renderPanel ? "region" : "button"}
+          aria-label={renderPanel ? "Agent Halo panel" : "Open Agent Halo"}
+          aria-expanded={panelOpen}
+          tabIndex={renderPanel ? -1 : 0}
           data-tauri-drag-region="false"
         >
           <svg className="halo-shape" viewBox={`0 0 ${shapeMetrics.width} ${shapeMetrics.height}`} preserveAspectRatio="none" aria-hidden="true" focusable="false">
@@ -2859,7 +890,7 @@ const App = () => {
           {renderPanel ? <div className="sheet-inner" ref={sheetInnerRef}>
             {setupOpen ? (
               <div className="sheet-header detail-header" data-tauri-drag-region="false">
-                <button className="gear-btn" type="button" onClick={backToSessions} data-tauri-drag-region="false" title="Back to sessions">
+                <button className="gear-btn" type="button" onClick={backToSessions} data-panel-focus-target data-tauri-drag-region="false" title="Back to sessions">
                   <ChevronLeft size={14} strokeWidth={2.3} />
                 </button>
                 <span className="status-slot"><Settings className="setup-icon" size={14} strokeWidth={2.3} /></span>
@@ -2880,14 +911,16 @@ const App = () => {
                 {DEMO_MODE ? <span className="agent-badge">DEMO</span> : null}
                 <span className="spacer" />
                 <span className="bridge-dot" data-connected={isConnected} title={connectionTitle} />
-                <div className="header-tabs" role="tablist" aria-label="Agent Halo sections">
-                  <button className="header-tab" data-active={activeMainTab === "sessions"} type="button" role="tab" aria-selected={activeMainTab === "sessions"} onClick={(event) => { event.stopPropagation(); setSetupOpen(false); setSelectedSessionId(null); setActiveMainTab("sessions"); }} data-tauri-drag-region="false" title="Sessions">
-                    <List size={13} strokeWidth={2.3} />
-                  </button>
-                  <button className="header-tab" data-active={activeMainTab === "usage"} type="button" role="tab" aria-selected={activeMainTab === "usage"} onClick={(event) => { event.stopPropagation(); setSetupOpen(false); setSelectedSessionId(null); setActiveMainTab("usage"); setPanelOpen(true); }} data-tauri-drag-region="false" title="Usage">
-                    <BarChart3 size={13} strokeWidth={2.3} />
-                  </button>
-                  <button className="header-tab" type="button" onClick={(event) => { event.stopPropagation(); openSetup(); }} data-tauri-drag-region="false" title="Setup">
+                <div className="header-tabs">
+                  <div className="header-tablist" role="tablist" aria-label="Agent Halo sections">
+                    <button id="main-tab-sessions" className="header-tab" data-active={activeMainTab === "sessions"} data-panel-focus-target={activeMainTab === "sessions" ? "true" : undefined} type="button" role="tab" aria-label="Sessions" aria-selected={activeMainTab === "sessions"} aria-controls="main-panel-sessions" tabIndex={activeMainTab === "sessions" ? 0 : -1} onKeyDown={(event) => handleMainTabKeyDown(event, "sessions")} onClick={(event) => { event.stopPropagation(); activateMainTab("sessions"); }} data-tauri-drag-region="false" title="Sessions">
+                      <List size={13} strokeWidth={2.3} />
+                    </button>
+                    <button id="main-tab-usage" className="header-tab" data-active={activeMainTab === "usage"} data-panel-focus-target={activeMainTab === "usage" ? "true" : undefined} type="button" role="tab" aria-label="Usage" aria-selected={activeMainTab === "usage"} aria-controls="main-panel-usage" tabIndex={activeMainTab === "usage" ? 0 : -1} onKeyDown={(event) => handleMainTabKeyDown(event, "usage")} onClick={(event) => { event.stopPropagation(); activateMainTab("usage"); }} data-tauri-drag-region="false" title="Usage">
+                      <BarChart3 size={13} strokeWidth={2.3} />
+                    </button>
+                  </div>
+                  <button className="header-tab" type="button" aria-label="Setup" onClick={(event) => { event.stopPropagation(); openSetup(); }} data-tauri-drag-region="false" title="Setup">
                     <Settings size={13} strokeWidth={2.3} />
                   </button>
                 </div>
@@ -2895,89 +928,29 @@ const App = () => {
             )}
             <div className="sheet-divider" />
 
-            <div className="sheet-body" data-view={activeMainTab === "usage" && !setupOpen && !selectedSession ? "usage" : "default"}>
+            <div
+              className="sheet-body"
+              data-view={activeMainTab === "usage" && !setupOpen && !selectedSession ? "usage" : "default"}
+              id={!setupOpen && !selectedSession ? `main-panel-${activeMainTab}` : undefined}
+              role={!setupOpen && !selectedSession ? "tabpanel" : undefined}
+              aria-labelledby={!setupOpen && !selectedSession ? `main-tab-${activeMainTab}` : undefined}
+            >
               {setupOpen ? (
-                <div className="setup-body">
-                  <div className="setup-row">
-                    <span className="bridge-dot" data-connected={isConnected} title={connectionTitle} />
-                    <span className="setup-copy">
-                      <span className="setup-title">Bridge</span>
-                      <span className="setup-detail">{connectionTitle}</span>
-                    </span>
-                    <button className="pill-btn" type="button" onClick={() => void checkBridge()} data-tauri-drag-region="false">
-                      <Check size={12} strokeWidth={2.3} />
-                      Check
-                    </button>
-                  </div>
-                  <div className="setup-row">
-                    <span className="status-slot"><Download className="setup-icon" size={14} strokeWidth={2.3} /></span>
-                    <span className="setup-copy">
-                      <span className="setup-title">Letta mod</span>
-                      <span className="setup-detail">
-                        {modStatus.installed === true
-                          ? `Installed · ${shortenPath(modStatus.path)}`
-                          : modStatus.installed === false
-                            ? `Not installed · ${shortenPath(modStatus.path)}`
-                            : canUseNativeControls
-                              ? "Checking install state"
-                              : "Tauri runtime needed"}
-                      </span>
-                    </span>
-                    <button className="pill-btn accent" type="button" onClick={() => void installMod()} data-tauri-drag-region="false">
-                      <Download size={12} strokeWidth={2.3} />
-                      {modStatus.installed ? "Reinstall" : "Install"}
-                    </button>
-                  </div>
-                  <div className="setup-row passive">
-                    <span className="status-slot"><ArrowRight className="setup-icon" size={14} strokeWidth={2.3} /></span>
-                    <span className="setup-copy">
-                      <span className="setup-title">{setupGuidance.title}</span>
-                      <span className="setup-detail">{setupGuidance.detail}</span>
-                    </span>
-                  </div>
-                  <div className="setup-row passive">
-                    <span className="status-slot"><Focus className="setup-icon" size={14} strokeWidth={2.3} /></span>
-                    <span className="setup-copy">
-                      <span className="setup-title">Session controls</span>
-                      <span className="setup-detail">
-                        {canUseNativeControls
-                          ? "Ghostty focus available · end unavailable"
-                          : capabilities.sessionActions.focusTerminal || capabilities.sessionActions.endSession
-                            ? "Focus/end available from bridge"
-                            : "Focus/end unavailable in current bridge"}
-                      </span>
-                    </span>
-                  </div>
-                  <div className="setup-row">
-                    <span className="status-slot"><Coffee className="setup-icon" size={14} strokeWidth={2.3} /></span>
-                    <span className="setup-copy">
-                      <span className="setup-title">Keep display awake</span>
-                      <span className="setup-detail">
-                        {!keepAwakeEnabled
-                          ? "Off · display follows macOS idle settings"
-                          : !canUseNativeControls
-                            ? "Desktop runtime required"
-                            : keepAwakeError
-                              ? `Unavailable · ${keepAwakeError}`
-                              : keepAwakeActive
-                                ? "Active · Letta is working"
-                                : "On · waiting for active work"}
-                      </span>
-                    </span>
-                    <button
-                      className={`pill-btn ${keepAwakeEnabled ? "accent" : ""}`}
-                      type="button"
-                      onClick={() => updateKeepAwakeEnabled(!keepAwakeEnabled)}
-                      data-tauri-drag-region="false"
-                      aria-label={`${keepAwakeEnabled ? "Disable" : "Enable"} keep display awake`}
-                    >
-                      {keepAwakeEnabled ? "On" : "Off"}
-                    </button>
-                  </div>
-                  {nativeAction.message ? (
-                    <div className="notice-row" data-online={nativeAction.bridgeOnline === true}>{nativeAction.message}</div>
-                  ) : null}
-                </div>
+                <SetupPanel
+                  capabilities={capabilities}
+                  canUseNativeControls={canUseNativeControls}
+                  connectionTitle={connectionTitle}
+                  guidance={setupGuidance}
+                  isConnected={isConnected}
+                  keepAwakeActive={keepAwakeActive}
+                  keepAwakeEnabled={keepAwakeEnabled}
+                  keepAwakeError={keepAwakeError}
+                  modStatus={modStatus}
+                  nativeAction={nativeAction}
+                  onCheckBridge={() => void checkBridge()}
+                  onInstallMod={() => void installMod()}
+                  onKeepAwakeChange={updateKeepAwakeEnabled}
+                />
               ) : selectedSession ? (
                 <div className="detail-body session-context-view" data-status={selectedSession.status}>
                   <SessionContextSummary session={selectedSession} />
@@ -2988,7 +961,7 @@ const App = () => {
                     <div className="capability-note">Focus needs the desktop runtime</div>
                   )}
                   {sessionAction.message ? (
-                    <div className="notice-row compact" data-online={sessionAction.ok === true}>{sessionAction.message}</div>
+                    <div className="notice-row compact" data-online={sessionAction.ok === true} role="status" aria-live="polite">{sessionAction.message}</div>
                   ) : null}
                   <div className="detail-section-label">Recent activity</div>
                   {selectedSessionActivityEvents.length === 0 ? (
@@ -3024,7 +997,7 @@ const App = () => {
               ) : (
                 <>
                   {sessionAction.message ? (
-                    <div className="notice-row compact session-focus-notice" data-online={sessionAction.ok === true}>{sessionAction.message}</div>
+                    <div className="notice-row compact session-focus-notice" data-online={sessionAction.ok === true} role="status" aria-live="polite">{sessionAction.message}</div>
                   ) : null}
                   <div className="session-sections">
                     {activeSessionGroups.length > 0 ? (

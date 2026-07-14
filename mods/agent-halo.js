@@ -230,7 +230,11 @@ function createBridge(letta, config) {
   const lastRelaySignalAtByType = new Map();
   const recentCompletionAtByCwd = new Map();
   const recentCompletedScopesByCwd = new Map();
+  const legacySignalRetentionMs = 5_000;
   const recentScopeRetentionMs = 15_000;
+  const hookIdRetentionMs = 60_000;
+  const cleanupIntervalMs = 1_000;
+  let nextRecentCleanupAt = 0;
 
   const cloneScope = (scope) => ({
     agentId: scope.agentId ?? null,
@@ -251,26 +255,43 @@ function createBridge(letta, config) {
     if (cwdScopes?.size === 0) activeScopesByCwd.delete(record.scope.cwd);
   };
 
+  const cleanupRecentState = (now) => {
+    if (now < nextRecentCleanupAt) return;
+    nextRecentCleanupAt = now + cleanupIntervalMs;
+
+    for (const [key, seenAt] of recentLegacySignals) {
+      if (now - seenAt > legacySignalRetentionMs) recentLegacySignals.delete(key);
+    }
+    for (const [cwd, completedAt] of recentCompletionAtByCwd) {
+      if (now - completedAt > recentScopeRetentionMs) recentCompletionAtByCwd.delete(cwd);
+    }
+    for (const [cwd, cwdScopes] of recentCompletedScopesByCwd) {
+      for (const [conversationId, record] of cwdScopes) {
+        if (now - record.completedAt > recentScopeRetentionMs) cwdScopes.delete(conversationId);
+      }
+      if (cwdScopes.size === 0) recentCompletedScopesByCwd.delete(cwd);
+    }
+    for (const [hookId, seenAt] of recentHookIds) {
+      if (now - seenAt > hookIdRetentionMs) recentHookIds.delete(hookId);
+    }
+  };
+
   const isTerminalLlmEvent = (payload) => {
     if (payload.type !== "llm_end") return false;
     const reason = String(payload.data?.stopReason ?? "").toLowerCase();
     return reason.includes("end") || reason.includes("stop") || reason.includes("done") || reason.includes("complete") || Boolean(payload.data?.error);
   };
 
-  const rememberCompletedScope = (payload) => {
+  const rememberCompletedScope = (payload, now) => {
     if (!payload.cwd || !payload.conversationId) return;
-    const now = Date.now();
     const cwdScopes = recentCompletedScopesByCwd.get(payload.cwd) ?? new Map();
     cwdScopes.set(payload.conversationId, { scope: cloneScope(payload), completedAt: now });
-    for (const [conversationId, record] of cwdScopes) {
-      if (now - record.completedAt > recentScopeRetentionMs) cwdScopes.delete(conversationId);
-    }
     recentCompletedScopesByCwd.set(payload.cwd, cwdScopes);
   };
 
-  const recentCompletedScopes = (cwd) => {
+  const recentCompletedScopes = (cwd, now) => {
     if (!cwd) return [];
-    const now = Date.now();
+    cleanupRecentState(now);
     const cwdScopes = recentCompletedScopesByCwd.get(cwd);
     if (!cwdScopes) return [];
     for (const [conversationId, record] of cwdScopes) {
@@ -281,6 +302,8 @@ function createBridge(letta, config) {
   };
 
   const rememberScope = (payload) => {
+    const now = Date.now();
+    cleanupRecentState(now);
     for (const key of Object.keys(lastScope)) {
       if (payload[key] != null) lastScope[key] = payload[key];
     }
@@ -289,7 +312,7 @@ function createBridge(letta, config) {
       if (payload.type === "turn_start" && scope.cwd) recentCompletionAtByCwd.delete(scope.cwd);
       if (scope.conversationId) {
         removeActiveScope(scope.conversationId);
-        const record = { scope, lastActiveAt: Date.now() };
+        const record = { scope, lastActiveAt: now };
         activeScopesByConversation.set(scope.conversationId, record);
         if (scope.cwd) {
           const cwdScopes = activeScopesByCwd.get(scope.cwd) ?? new Map();
@@ -299,13 +322,13 @@ function createBridge(letta, config) {
       }
     }
     if (payload.type === "turn_complete" || payload.type === "turn_stop" || payload.type === "conversation_close" || isTerminalLlmEvent(payload)) {
-      if (payload.cwd) recentCompletionAtByCwd.set(payload.cwd, Date.now());
-      rememberCompletedScope(payload);
+      if (payload.cwd) recentCompletionAtByCwd.set(payload.cwd, now);
+      rememberCompletedScope(payload, now);
       removeActiveScope(payload.conversationId);
     }
   };
 
-  const hookScope = (data) => {
+  const hookScope = (data, now) => {
     const requestedCwd = typeof data.cwd === "string" && data.cwd.length > 0
       ? data.cwd
       : typeof data.workingDirectory === "string" && data.workingDirectory.length > 0
@@ -320,7 +343,7 @@ function createBridge(letta, config) {
       if (exact) candidates = [exact];
     } else if (requestedCwd) {
       candidates = [...(activeScopesByCwd.get(requestedCwd)?.values() ?? [])];
-      if (candidates.length === 0) candidates = recentCompletedScopes(requestedCwd);
+      if (candidates.length === 0) candidates = recentCompletedScopes(requestedCwd, now);
     } else {
       candidates = [...activeScopesByConversation.values()];
     }
@@ -338,34 +361,32 @@ function createBridge(letta, config) {
     return scope;
   };
 
-  const shouldEmitHookSignal = (type, scope, data) => {
-    const now = Date.now();
+  const shouldEmitHookSignal = (type, scope, data, now) => {
+    cleanupRecentState(now);
     const hookId = typeof data.hookId === "string" && data.hookId.length > 0 ? data.hookId : null;
-    for (const [id, seenAt] of recentHookIds) {
-      if (now - seenAt > 60_000) recentHookIds.delete(id);
-    }
     if (hookId) {
-      if (recentHookIds.has(hookId)) return false;
+      const seenAt = recentHookIds.get(hookId);
+      if (seenAt != null && now - seenAt <= hookIdRetentionMs) return false;
       recentHookIds.set(hookId, now);
       lastRelaySignalAtByType.set(type, now);
       return true;
     }
-    if (now - (lastRelaySignalAtByType.get(type) ?? 0) <= 5_000) return false;
+    if (now - (lastRelaySignalAtByType.get(type) ?? 0) <= legacySignalRetentionMs) return false;
     const legacyKey = [type, scope.conversationId ?? "", scope.cwd ?? ""].join(":");
     const previous = recentLegacySignals.get(legacyKey) ?? 0;
     recentLegacySignals.set(legacyKey, now);
-    return now - previous > 5_000;
+    return now - previous > legacySignalRetentionMs;
   };
 
-  const emitLocal = (payload) => {
-    rememberScope(payload);
+  const emitLocal = (payload, shouldRememberScope = true) => {
+    if (shouldRememberScope) rememberScope(payload);
     recent.push(payload);
     if (recent.length > maxRecent) recent.shift();
 
-    const line = `${JSON.stringify(payload)}\n`;
-    appendFileSync(config.logFile, line);
+    const serialized = JSON.stringify(payload);
+    appendFileSync(config.logFile, `${serialized}\n`);
 
-    const frame = `event: ${payload.type}\ndata: ${JSON.stringify(payload)}\n\n`;
+    const frame = `event: ${payload.type}\ndata: ${serialized}\n\n`;
     for (const res of clients) {
       try {
         res.write(frame);
@@ -381,7 +402,7 @@ function createBridge(letta, config) {
       if (bridgeMode === "forward") {
         postBridgeEvent(config, "/ingest", event);
       } else {
-        emitLocal(event);
+        emitLocal(event, false);
       }
     }
   };
@@ -396,7 +417,7 @@ function createBridge(letta, config) {
       postBridgeEvent(config, "/ingest", payload);
       return;
     }
-    emitLocal(payload);
+    emitLocal(payload, false);
   };
 
   const corsHeaders = {
@@ -431,8 +452,9 @@ function createBridge(letta, config) {
     });
 
   const emitHookStop = (data = {}) => {
-    const scope = hookScope(data);
-    if (!shouldEmitHookSignal("turn_complete", scope, data)) return;
+    const now = Date.now();
+    const scope = hookScope(data, now);
+    if (!shouldEmitHookSignal("turn_complete", scope, data, now)) return;
     emit({
       version: PROTOCOL_VERSION,
       id: randomUUID(),
@@ -448,10 +470,11 @@ function createBridge(letta, config) {
   };
 
   const emitHookAttention = (data = {}) => {
-    const scope = hookScope(data);
+    const now = Date.now();
+    const scope = hookScope(data, now);
     const isNotificationHook = data.hookEventName === "Notification";
-    if (isNotificationHook && scope.cwd && Date.now() - (recentCompletionAtByCwd.get(scope.cwd) ?? 0) <= 15_000) return;
-    if (!shouldEmitHookSignal("attention_requested", scope, data)) return;
+    if (isNotificationHook && scope.cwd && now - (recentCompletionAtByCwd.get(scope.cwd) ?? 0) <= recentScopeRetentionMs) return;
+    if (!shouldEmitHookSignal("attention_requested", scope, data, now)) return;
     emit({
       version: PROTOCOL_VERSION,
       id: randomUUID(),

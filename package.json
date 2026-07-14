@@ -15,6 +15,9 @@
     "desktop:install": "node scripts/install-desktop.mjs",
     "desktop:web": "pnpm --filter @agent-halo/desktop dev",
     "desktop:web:build": "pnpm --filter @agent-halo/desktop build",
+    "benchmark:bridge": "node scripts/benchmark-bridge.mjs --events=20000",
+    "benchmark:sessions": "node scripts/benchmark-session-model.mjs",
+    "test:performance": "pnpm desktop:web:build && node scripts/check-performance-budget.mjs && node scripts/benchmark-session-model.mjs --assert && node scripts/benchmark-bridge.mjs --events=5000 --assert",
     "test:demo": "playwright test",
     "test:hooks": "node --test tests/hook-integration.test.mjs"
   },

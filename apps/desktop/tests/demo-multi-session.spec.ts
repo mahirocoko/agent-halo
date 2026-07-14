@@ -25,13 +25,14 @@ test("grouped completed workspace exposes every child session and guarded clear"
     const bodyRect = body?.getBoundingClientRect();
     return {
       contentInset: bodyRect && row ? bodyRect.right - row.right : -1,
-      edgeInset: sheet && bodyRect ? sheet.right - bodyRect.right : -1,
+      leftInset: sheet && row ? row.left - sheet.left : -1,
+      scrollbarInset: sheet && bodyRect ? sheet.right - bodyRect.right : -1,
       scrollable: body ? body.scrollHeight > body.clientHeight : false,
     };
   });
-  expect(geometry.edgeInset).toBeGreaterThanOrEqual(8);
-  expect(geometry.edgeInset).toBeLessThanOrEqual(16);
-  expect(geometry.contentInset).toBeGreaterThanOrEqual(20);
+  expect(Math.abs(geometry.leftInset - geometry.scrollbarInset)).toBeLessThanOrEqual(1);
+  expect(geometry.contentInset).toBeGreaterThanOrEqual(8);
+  expect(geometry.contentInset).toBeLessThanOrEqual(16);
   expect(geometry.scrollable).toBe(true);
 
   await completedSection.getByRole("button", { name: "Clear completed agent-halo session" }).first().click();

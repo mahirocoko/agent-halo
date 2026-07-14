@@ -1,0 +1,365 @@
+
+.overlay-root {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  background: transparent;
+}
+
+.notch-wrap {
+  position: relative;
+  width: var(--closed-width, 460px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  touch-action: none;
+  transition: width 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.notch-wrap.is-open,
+.notch-wrap.is-closing {
+  width: 560px;
+}
+
+.halo-surface {
+  position: relative;
+  width: var(--closed-width, 460px);
+  height: var(--closed-height, 36px);
+  display: flex;
+  overflow: hidden;
+  color: var(--text);
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  cursor: default;
+  transform-origin: top center;
+  transition:
+    width 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+    height 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: width, height;
+}
+
+.halo-shape {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.halo-shape path {
+  fill: #000;
+}
+
+.halo-surface[data-state="open"] {
+  width: 560px;
+  min-height: 218px;
+  max-height: 440px;
+  height: var(--panel-height, 218px);
+}
+
+.halo-surface[data-state="closing"] {
+  width: var(--closed-width, 460px);
+  height: var(--closed-height, 36px);
+}
+
+.halo-surface[role="button"]:focus-visible {
+  outline: 1px solid rgba(255, 157, 61, 0.78);
+  outline-offset: 2px;
+}
+
+.surface-pill {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--camera-width, 184px) minmax(0, 1fr);
+  align-items: center;
+  opacity: 1;
+  transition: opacity 0.1s ease;
+  pointer-events: none;
+}
+
+.halo-surface[data-state="open"] .surface-pill {
+  opacity: 0;
+  visibility: hidden;
+  transition-duration: 0ms;
+}
+
+.notch-wing {
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  color: #cfd0d4;
+  opacity: 0;
+  transform: scaleX(0.78);
+  transition:
+    opacity 0.16s ease,
+    transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.overlay-root[data-live="true"] .notch-wing {
+  opacity: 1;
+  transform: scaleX(1);
+}
+
+.notch-wing-left {
+  justify-content: flex-end;
+  gap: 6px;
+  padding-left: 14px;
+  padding-right: 12px;
+  transform-origin: right center;
+}
+
+.notch-wing-right {
+  justify-content: flex-end;
+  padding-left: 8px;
+  padding-right: 26px;
+  transform-origin: left center;
+}
+
+.overlay-root[data-running="true"] .notch-wing-right {
+  color: var(--accent);
+}
+
+.camera-spacer {
+  width: var(--camera-width, 184px);
+  height: 100%;
+  background: transparent;
+}
+
+.pill-detail {
+  max-width: var(--pill-text-width, 58px);
+  overflow: hidden;
+  color: #cfd0d4;
+  font-size: 10px;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-mascot {
+  width: 32px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transform-origin: 50% 80%;
+  color: var(--mascot-fur, rgba(246, 246, 238, 0.96));
+  flex: none;
+}
+
+.session-mascot {
+  position: relative;
+  width: 40px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--mascot-fur, rgba(246, 246, 238, 0.96));
+  flex: none;
+}
+
+/* Halo Soft Cube runtime candidate. */
+.halo-soft-cube {
+  --halo-pet-hue: 0deg;
+  --halo-pet-saturation: 1;
+  --halo-pet-brightness: 1;
+  position: relative;
+  width: 32px;
+  height: 24px;
+  display: inline-block;
+  flex: none;
+  filter:
+    drop-shadow(0 0 2px rgba(85, 199, 232, 0.32))
+    hue-rotate(var(--halo-pet-hue))
+    saturate(var(--halo-pet-saturation))
+    brightness(var(--halo-pet-brightness));
+  image-rendering: pixelated;
+}
+
+.session-mascot.halo-soft-cube {
+  width: 32px;
+  height: 24px;
+}
+
+.halo-soft-cube-body,
+.halo-soft-cube-mote {
+  position: absolute;
+  display: block;
+  background-repeat: no-repeat;
+  background-position: 0 0;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+.halo-soft-cube-body {
+  inset: 0;
+  background-image: var(--halo-pet-body);
+  background-size: 64px 24px;
+}
+
+.halo-soft-cube-mote {
+  top: 8px;
+  left: 24px;
+  width: 8px;
+  height: 8px;
+  background-image: var(--halo-pet-mote);
+}
+
+.halo-soft-cube[data-palette="1"] {
+  --halo-pet-hue: 48deg;
+}
+
+.halo-soft-cube[data-palette="2"] {
+  --halo-pet-hue: 105deg;
+}
+
+.halo-soft-cube[data-palette="3"] {
+  --halo-pet-hue: 165deg;
+}
+
+.halo-soft-cube[data-palette="4"] {
+  --halo-pet-hue: 225deg;
+}
+
+.halo-soft-cube[data-palette="5"] {
+  --halo-pet-hue: 285deg;
+}
+
+.halo-soft-cube[data-status="idle"] {
+  --halo-pet-saturation: 0.58;
+  --halo-pet-brightness: 0.92;
+}
+
+.halo-soft-cube[data-status="inactive"] {
+  --halo-pet-saturation: 0;
+  --halo-pet-brightness: 0.7;
+  filter: saturate(0) brightness(0.7);
+}
+
+.halo-soft-cube[data-status="attention"] {
+  --halo-pet-hue: 198deg;
+  --halo-pet-saturation: 1.18;
+  --halo-pet-brightness: 1.04;
+}
+
+.halo-soft-cube[data-status="done"] {
+  --halo-pet-hue: 300deg;
+  --halo-pet-saturation: 0.95;
+  --halo-pet-brightness: 0.95;
+}
+
+.halo-soft-cube[data-status="error"] {
+  --halo-pet-hue: 165deg;
+  --halo-pet-saturation: 1.18;
+  --halo-pet-brightness: 1;
+}
+
+.halo-soft-cube[data-state="idle"] .halo-soft-cube-body {
+  animation: halo-soft-cube-body-loop 1s steps(2) infinite;
+}
+
+.halo-soft-cube[data-state="working"] .halo-soft-cube-body {
+  animation: halo-soft-cube-body-loop 0.64s steps(2) infinite;
+}
+
+.halo-soft-cube[data-state="attention"] .halo-soft-cube-body {
+  animation: halo-soft-cube-body-loop 0.76s steps(2) infinite;
+}
+
+.halo-soft-cube[data-state="done"] .halo-soft-cube-body {
+  animation: halo-soft-cube-body-settle 0.5s steps(1, end) 1 forwards;
+}
+
+.halo-soft-cube[data-state="error"] .halo-soft-cube-body {
+  animation: halo-soft-cube-body-loop 0.6s steps(2) infinite;
+}
+
+.halo-soft-cube[data-state="idle"] .halo-soft-cube-mote {
+  background-size: 24px 8px;
+  animation: halo-soft-cube-mote-3 1.35s steps(3) infinite;
+}
+
+.halo-soft-cube[data-state="working"] .halo-soft-cube-mote {
+  background-size: 32px 8px;
+  animation: halo-soft-cube-mote-4 0.72s steps(4) infinite;
+}
+
+.halo-soft-cube[data-state="attention"] .halo-soft-cube-mote {
+  background-size: 32px 8px;
+  animation: halo-soft-cube-mote-4 0.88s steps(4) infinite;
+}
+
+.halo-soft-cube[data-state="done"] .halo-soft-cube-mote {
+  background-size: 16px 8px;
+  animation: halo-soft-cube-mote-settle 0.3s steps(1, end) 1 forwards;
+}
+
+.halo-soft-cube[data-state="error"] .halo-soft-cube-mote {
+  background-size: 24px 8px;
+  animation: halo-soft-cube-mote-3 0.48s steps(3) infinite;
+}
+
+.halo-soft-cube[data-status="inactive"] .halo-soft-cube-body,
+.halo-soft-cube[data-status="inactive"] .halo-soft-cube-mote {
+  animation: none;
+}
+
+@keyframes halo-soft-cube-body-loop {
+  to {
+    background-position-x: -64px;
+  }
+}
+
+@keyframes halo-soft-cube-body-settle {
+  to {
+    background-position-x: -32px;
+  }
+}
+
+@keyframes halo-soft-cube-mote-3 {
+  to {
+    background-position-x: -24px;
+  }
+}
+
+@keyframes halo-soft-cube-mote-4 {
+  to {
+    background-position-x: -32px;
+  }
+}
+
+@keyframes halo-soft-cube-mote-settle {
+  to {
+    background-position-x: -8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activity-mascot,
+  .glyph-attention,
+  .glyph-check,
+  .glyph-pulse,
+  .halo-soft-cube-body,
+  .halo-soft-cube-mote,
+  .halo-surface,
+  .notch-wing,
+  .notch-wrap,
+  .sheet-inner,
+  .session-context-view,
+  .session-sections,
+  .session-row-actions .row-focus,
+  .surface-pill,
+  .usage-provider-card[data-status="loading"] .usage-provider-message svg {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}

@@ -161,6 +161,144 @@ test("bridge leaves same-cwd hook signals unscoped and keeps unique rapid hook i
   }
 });
 
+test("bridge remembers each event once and amortizes recent correlation cleanup", async () => {
+  const home = await mkdtemp(join(tmpdir(), "agent-halo-hot-path-"));
+  await mkdir(join(home, ".letta", "mods"), { recursive: true });
+  const probe = createServer();
+  await new Promise((resolve) => probe.listen(0, "127.0.0.1", resolve));
+  const address = probe.address();
+  assert(address && typeof address === "object");
+  const port = address.port;
+  await new Promise((resolve) => probe.close(resolve));
+  await writeFile(join(home, ".letta", "mods", "agent-halo.config.json"), JSON.stringify({ host: "127.0.0.1", port }));
+
+  const modUrl = new URL("../mods/agent-halo.js", import.meta.url).href;
+  const script = `
+    const NativeMap = globalThis.Map;
+    const trackedMaps = [];
+    globalThis.Map = class TrackedMap extends NativeMap {
+      constructor(entries) {
+        super(entries);
+        trackedMaps.push(this);
+      }
+    };
+    const handlers = new NativeMap();
+    const letta = {
+      capabilities: { events: { lifecycle: true, turns: true, tools: true, compact: true, llm: true } },
+      events: { on(type, handler) { handlers.set(type, handler); return () => handlers.delete(type); } },
+      diagnostics: { report() {} },
+    };
+    const { default: activate } = await import(${JSON.stringify(modUrl)});
+    const dispose = activate(letta);
+    const waitForBridge = async () => {
+      for (let index = 0; index < 50; index += 1) {
+        try { if ((await fetch('http://127.0.0.1:${port}/health')).ok) return; } catch {}
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      throw new Error('bridge did not start');
+    };
+    await waitForBridge();
+
+    const realNow = Date.now;
+    let now = realNow();
+    let dateNowCalls = 0;
+    Date.now = () => { dateNowCalls += 1; return now; };
+    const ctx = (id, cwd) => ({ cwd, agent: { id: 'agent-test', name: 'Test' }, conversation: { id }, model: 'gpt-test', permissionMode: 'ask' });
+    const post = (path, payload) => fetch('http://127.0.0.1:${port}' + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
+
+    let before = dateNowCalls;
+    handlers.get('turn_start')({ agentId: 'agent-test', conversationId: 'conv-once', input: [] }, ctx('conv-once', '/tmp/once'));
+    const turnStartDateNowCalls = dateNowCalls - before;
+    before = dateNowCalls;
+    handlers.get('llm_end')({ agentId: 'agent-test', conversationId: 'conv-once', model: 'gpt-test', stopReason: 'stop', usage: null, durationMs: 10 }, ctx('conv-once', '/tmp/once'));
+    const llmEndDateNowCalls = dateNowCalls - before;
+
+    await post('/hook/attention', { workingDirectory: '/tmp/once', conversationId: 'conv-once', hookEventName: 'PermissionRequest', message: 'cleanup-legacy' });
+    await post('/hook/stop', { hookId: 'cleanup-hook', workingDirectory: '/tmp/once', conversationId: 'conv-once', hookEventName: 'Stop' });
+    const cleanupMaps = {
+      hookIds: trackedMaps.find((map) => map.has('cleanup-hook')),
+      legacy: trackedMaps.find((map) => map.has('attention_requested:conv-once:/tmp/once')),
+      completion: trackedMaps.find((map) => typeof map.get('/tmp/once') === 'number'),
+      completedScopes: trackedMaps.find((map) => map.get('/tmp/once') instanceof NativeMap),
+    };
+    const cleanupPopulated = Object.values(cleanupMaps).every(Boolean);
+
+    handlers.get('turn_start')({ agentId: 'agent-test', conversationId: 'conv-notify', input: [] }, ctx('conv-notify', '/tmp/notify'));
+    handlers.get('llm_end')({ agentId: 'agent-test', conversationId: 'conv-notify', model: 'gpt-test', stopReason: 'stop', usage: null, durationMs: 10 }, ctx('conv-notify', '/tmp/notify'));
+    handlers.get('turn_start')({ agentId: 'agent-test', conversationId: 'conv-delayed', input: [] }, ctx('conv-delayed', '/tmp/delayed'));
+    handlers.get('llm_end')({ agentId: 'agent-test', conversationId: 'conv-delayed', model: 'gpt-test', stopReason: 'stop', usage: null, durationMs: 10 }, ctx('conv-delayed', '/tmp/delayed'));
+    now += 15_000;
+    await post('/hook/attention', { hookId: 'notify-at-boundary', workingDirectory: '/tmp/notify', hookEventName: 'Notification', message: 'boundary-suppressed' });
+    await post('/hook/stop', { hookId: 'delayed-at-boundary', workingDirectory: '/tmp/delayed', hookEventName: 'Stop', message: 'delayed-boundary' });
+    now += 1;
+    await post('/hook/attention', { hookId: 'notify-after-boundary', workingDirectory: '/tmp/notify', hookEventName: 'Notification', message: 'after-boundary' });
+
+    now += 6_000;
+    await post('/hook/attention', { workingDirectory: '/tmp/legacy', conversationId: 'conv-legacy', hookEventName: 'PermissionRequest', message: 'legacy-first' });
+    now += 5_000;
+    await post('/hook/attention', { workingDirectory: '/tmp/legacy', conversationId: 'conv-legacy', hookEventName: 'PermissionRequest', message: 'legacy-at-boundary' });
+    now += 5_001;
+    await post('/hook/attention', { workingDirectory: '/tmp/legacy', conversationId: 'conv-legacy', hookEventName: 'PermissionRequest', message: 'legacy-after-boundary' });
+
+    handlers.get('turn_start')({ agentId: 'agent-test', conversationId: 'conv-long', input: [] }, ctx('conv-long', '/tmp/long-running'));
+    now += 60_001;
+    handlers.get('tool_end')({ agentId: 'agent-test', conversationId: 'conv-other', toolCallId: 'cleanup-trigger', toolName: 'Read', status: 'success', output: '' }, ctx('conv-other', '/tmp/other'));
+    await post('/hook/stop', { hookId: 'long-running-active', workingDirectory: '/tmp/long-running', hookEventName: 'Stop', message: 'long-running-active' });
+    const cleanupCleared = {
+      hookIds: !cleanupMaps.hookIds.has('cleanup-hook'),
+      legacy: !cleanupMaps.legacy.has('attention_requested:conv-once:/tmp/once'),
+      completion: !cleanupMaps.completion.has('/tmp/once'),
+      completedScopes: !cleanupMaps.completedScopes.has('/tmp/once'),
+    };
+
+    const snapshot = await (await fetch('http://127.0.0.1:${port}/snapshot')).json();
+    const delayed = snapshot.recent.find((event) => event.data?.message === 'delayed-boundary');
+    const suppressed = snapshot.recent.some((event) => event.data?.message === 'boundary-suppressed');
+    const afterBoundary = snapshot.recent.find((event) => event.data?.message === 'after-boundary');
+    const longRunning = snapshot.recent.find((event) => event.data?.message === 'long-running-active');
+    const legacyMessages = snapshot.recent.filter((event) => String(event.data?.message ?? '').startsWith('legacy-')).map((event) => event.data.message);
+    console.log(JSON.stringify({
+      turnStartDateNowCalls,
+      llmEndDateNowCalls,
+      cleanupPopulated,
+      cleanupCleared,
+      delayedConversationId: delayed?.conversationId,
+      suppressed,
+      afterBoundaryConversationId: afterBoundary?.conversationId,
+      longRunningConversationId: longRunning?.conversationId,
+      legacyMessages,
+    }));
+    Date.now = realNow;
+    dispose();
+  `;
+
+  try {
+    const child = spawn(process.execPath, ["--input-type=module", "--eval", script], {
+      cwd: repoRoot,
+      env: { ...process.env, HOME: home },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => { stdout += chunk; });
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    const exitCode = await new Promise((resolve) => child.on("close", resolve));
+    assert.equal(exitCode, 0, stderr);
+    const result = JSON.parse(stdout.trim());
+    assert.equal(result.turnStartDateNowCalls, 1);
+    assert.equal(result.llmEndDateNowCalls, 1);
+    assert.equal(result.cleanupPopulated, true);
+    assert.deepEqual(result.cleanupCleared, { hookIds: true, legacy: true, completion: true, completedScopes: true });
+    assert.equal(result.delayedConversationId, "conv-delayed");
+    assert.equal(result.suppressed, false);
+    assert.equal(result.afterBoundaryConversationId, null);
+    assert.equal(result.longRunningConversationId, "conv-long");
+    assert.deepEqual(result.legacyMessages, ["legacy-first", "legacy-after-boundary"]);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
 test("bridge normalizes default lanes and safely correlates delayed completion hooks", async () => {
   const home = await mkdtemp(join(tmpdir(), "agent-halo-detection-"));
   await mkdir(join(home, ".letta", "mods"), { recursive: true });

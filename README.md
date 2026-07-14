@@ -92,7 +92,7 @@ Lower-level Letta Code app-server/device protocol events such as queue, approval
 
 ## Usage providers
 
-The Usage tab appears only for providers Agent Halo can read locally. Missing providers stay hidden rather than showing noisy error cards.
+The Usage tab keeps every known provider discoverable. Providers Agent Halo can read locally show current metrics; unavailable/offline providers remain visible with the concrete local cause instead of disappearing.
 
 Currently supported local providers:
 
@@ -198,8 +198,6 @@ Selected source masters, palette provenance, and QA evidence live in:
 ```text
 apps/desktop/assets/mascots/halo-soft-cube/
 ```
-
-The previous detailed session cat remains under `session-cat/` as rollback/history material while the rounded-square Soft Cube runtime candidate completes native acceptance.
 
 ## Privacy and local data
 

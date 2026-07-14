@@ -1,6 +1,6 @@
 # Halo Soft Cube mascot
 
-Halo Soft Cube is the active Agent Halo runtime-candidate mascot: an original rounded four-sided pixel pet with discrete pseudo-3D highlight, front-plane, and bottom/right shadow tones. It is 2D native-grid pixel art, not a 3D/voxel render.
+Halo Soft Cube is the production-approved Agent Halo mascot: an original rounded four-sided pixel pet with discrete pseudo-3D highlight, front-plane, and bottom/right shadow tones. It is 2D native-grid pixel art, not a 3D/voxel render.
 
 ## Selected identity
 
@@ -26,8 +26,7 @@ Canonical runtime strips use one five-tone cyan palette. CSS hue/saturation filt
 - `source/` retains the selected master frames, exact palette-index map, selection receipt, and procedural native-grid authoring script.
 - `qa/` retains the all-state board, state recolor proof, restrained-glow simulation, and honest candidate report.
 - Canonical rasters use binary alpha and contain no baked blur/glow.
-- The prior flat Cloud Bean candidate and detailed session cat are rejected/legacy evidence, not source identities for this family.
 
-## Promotion gate
+## Promotion evidence
 
-This set remains `runtime-candidate`, not `production-approved`, until the installed app passes native checks for compact and row readability, body/mote cadence, state colors, reduced motion, overflow, and deterministic form stability.
+Mahiro selected Candidate A, approved deleting the legacy session cat, and accepted the installed refactor for commit after compact/row rendering, body/mote cadence, state colors, reduced motion, deterministic forms, overflow, equal padding, native release install/restart, and live bridge checks passed. The candidate-generation report remains historical evidence of the earlier pre-promotion state.
