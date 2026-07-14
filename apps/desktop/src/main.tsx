@@ -162,6 +162,7 @@ interface IWorkspaceSessionGroupItemProps {
   group: IWorkspaceSessionGroup;
   groupKey: string;
   onClear: (conversationId: string) => void;
+  onClearGroup: (group: IWorkspaceSessionGroup) => void;
   onFocus: (session: ISessionSummary) => void;
   onOpen: (conversationId: string) => void;
   onToggle: (groupKey: string) => void;
@@ -1235,7 +1236,7 @@ const SessionListRow = ({ child = false, onClear, onFocus, onOpen, session }: IS
   </li>
 );
 
-const WorkspaceSessionGroupItem = ({ expanded, group, groupKey, onClear, onFocus, onOpen, onToggle }: IWorkspaceSessionGroupItemProps) => {
+const WorkspaceSessionGroupItem = ({ expanded, group, groupKey, onClear, onClearGroup, onFocus, onOpen, onToggle }: IWorkspaceSessionGroupItemProps) => {
   if (group.sessions.length === 1) {
     return <SessionListRow session={group.sessions[0]} onClear={onClear} onFocus={onFocus} onOpen={onOpen} />;
   }
@@ -1265,6 +1266,20 @@ const WorkspaceSessionGroupItem = ({ expanded, group, groupKey, onClear, onFocus
           </span>
           <span className="session-time">{formatTime(group.lastActivityAt)}</span>
         </button>
+        {group.sessions.every((session) => session.status === "done") ? (
+          <div className="session-row-actions">
+            <button
+              className="row-btn row-clear"
+              type="button"
+              onClick={() => onClearGroup(group)}
+              data-tauri-drag-region="false"
+              aria-label={`Clear completed ${group.project} group`}
+              title="Hide every completed session in this group until it has fresh activity"
+            >
+              <X size={12} strokeWidth={2.5} />
+            </button>
+          </div>
+        ) : null}
       </div>
       {expanded ? (
         <ul className="session-child-list" aria-label={`${group.project} sessions`}>
@@ -2595,6 +2610,19 @@ const App = () => {
     if (selectedSessionId === conversationId) setSelectedSessionId(null);
   };
 
+  const clearCompletedSessionGroup = (group: IWorkspaceSessionGroup) => {
+    const completed = group.sessions.filter((session) => session.status === "done");
+    if (completed.length === 0) return;
+    const clearedAt = Date.now();
+    setDismissedSessionIds((current) => {
+      const next = { ...current };
+      for (const session of completed) next[session.conversationId] = clearedAt;
+      writeDismissedSessionIds(next);
+      return next;
+    });
+    if (selectedSessionId && completed.some((session) => session.conversationId === selectedSessionId)) setSelectedSessionId(null);
+  };
+
   const clearCompletedSessions = () => {
     if (!clearCompletedArmed) {
       setClearCompletedArmed(true);
@@ -2953,6 +2981,7 @@ const App = () => {
                                 group={group}
                                 groupKey={groupKey}
                                 onClear={dismissSession}
+                                onClearGroup={clearCompletedSessionGroup}
                                 onFocus={(session) => void focusSelectedSession(session)}
                                 onOpen={openSession}
                                 onToggle={toggleSessionGroup}
@@ -2988,6 +3017,7 @@ const App = () => {
                                 group={group}
                                 groupKey={groupKey}
                                 onClear={dismissSession}
+                                onClearGroup={clearCompletedSessionGroup}
                                 onFocus={(session) => void focusSelectedSession(session)}
                                 onOpen={openSession}
                                 onToggle={toggleSessionGroup}

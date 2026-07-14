@@ -705,6 +705,8 @@ button {
 
 /* Panel content lives inside the same black halo-surface background. */
 .sheet-inner {
+  --sheet-inline-padding: clamp(40px, 4.4vw, 50px);
+  --sheet-scrollbar-inset: 12px;
   position: relative;
   z-index: 1;
   flex: 1;
@@ -715,7 +717,7 @@ button {
   flex-direction: column;
   max-height: 440px;
   overflow: hidden;
-  padding-inline: clamp(40px, 4.4vw, 50px);
+  padding-inline: var(--sheet-inline-padding);
   opacity: 1;
   transform: translateY(0);
   transition: opacity 0.12s ease, transform 0.16s ease;
@@ -1373,13 +1375,16 @@ button {
 .sheet-body {
   flex: 1;
   min-height: 0;
+  margin-right: calc(var(--sheet-scrollbar-inset) - var(--sheet-inline-padding));
   overflow-y: auto;
-  padding: 0 0 18px;
+  padding: 0 calc(var(--sheet-inline-padding) - var(--sheet-scrollbar-inset)) 18px 0;
+  scrollbar-gutter: stable;
 }
 
 .sheet-body[data-view="usage"] {
+  margin-right: 0;
   overflow: hidden;
-  padding-bottom: 0;
+  padding: 0;
 }
 
 .footer-actions {
