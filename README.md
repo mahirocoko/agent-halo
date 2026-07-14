@@ -190,14 +190,16 @@ Design references and parity notes live in [`docs/notchcode-parity.md`](docs/not
 Runtime mascot strips live in:
 
 ```text
-apps/desktop/public/mascots/session-cat/
+apps/desktop/public/mascots/halo-soft-cube/
 ```
 
-QA previews and asset notes live in:
+Selected source masters, palette provenance, and QA evidence live in:
 
 ```text
-apps/desktop/assets/mascots/
+apps/desktop/assets/mascots/halo-soft-cube/
 ```
+
+The previous detailed session cat remains under `session-cat/` as rollback/history material while the rounded-square Soft Cube runtime candidate completes native acceptance.
 
 ## Privacy and local data
 

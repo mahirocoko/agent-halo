@@ -1,4 +1,6 @@
-# Agent Halo session mascot assets
+# Legacy Agent Halo session cat assets
+
+The detailed session cat is superseded in the active renderer by the selected rounded-square Halo Soft Cube runtime candidate under `halo-soft-cube/`. Keep these files as rollback/history evidence until the replacement finishes native acceptance; do not treat this cat as the current visual target.
 
 Runtime mascot assets are action-separated sprite sheets derived from Codex imagegen-generated original sprite concepts, then chroma-keyed, component-detected, normalized, and saved into the app runtime contract. Reference packs under `docs/sprites/reference/` are used only for animation grammar and QA vocabulary, not as pixel sources.
 

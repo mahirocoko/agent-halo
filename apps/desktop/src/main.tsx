@@ -98,6 +98,7 @@ interface ISessionSummary {
   workspacePath: string | null;
   detail: string;
   activityKind: ActivityKind;
+  model: string;
   status: "idle" | "working" | "attention" | "inactive" | "done" | "error";
   lastActivityAt: string;
 }
@@ -623,6 +624,19 @@ const formatTime = (timestamp: string | null): string => {
   }).format(new Date(timestamp));
 };
 
+const formatRelativeAge = (timestamp: string): string => {
+  const elapsedSeconds = Math.max(0, Math.floor((Date.now() - Date.parse(timestamp)) / 1_000));
+  if (elapsedSeconds < 60) return "<1m";
+  if (elapsedSeconds < 60 * 60) return `${Math.floor(elapsedSeconds / 60)}m`;
+  if (elapsedSeconds < 24 * 60 * 60) return `${Math.floor(elapsedSeconds / (60 * 60))}h`;
+  return `${Math.floor(elapsedSeconds / (24 * 60 * 60))}d`;
+};
+
+const shortModelName = (model: string): string => {
+  const segment = model.split("/").filter(Boolean).at(-1) ?? model;
+  return segment.replace(/^chatgpt-plus-pro\//, "") || "Letta";
+};
+
 const getToolActivityKind = (toolName: string): ActivityKind => {
   if (toolName === "UpdatePlan") return "planning";
   if (toolName === "exec_command" || toolName === "write_stdin" || toolName === "TaskOutput" || toolName === "TaskStop") return "shell";
@@ -1088,14 +1102,11 @@ const buildWorkspaceSessionGroups = (sessions: ISessionSummary[]): IWorkspaceSes
     });
 };
 
-const MASCOT_THEMES = [
-  { fur: "rgba(246, 246, 238, 0.96)", haloLeft: "#ff9d3d", haloRight: "#4ade80", line: "rgba(12, 12, 14, 0.75)" },
-  { fur: "rgba(238, 244, 255, 0.96)", haloLeft: "#ffb23d", haloRight: "#7dd3fc", line: "rgba(13, 18, 28, 0.72)" },
-  { fur: "rgba(255, 240, 222, 0.96)", haloLeft: "#fb7185", haloRight: "#4ade80", line: "rgba(30, 16, 10, 0.72)" },
-  { fur: "rgba(234, 235, 239, 0.96)", haloLeft: "#ff9d3d", haloRight: "#a78bfa", line: "rgba(16, 16, 20, 0.74)" },
-  { fur: "rgba(251, 251, 246, 0.96)", haloLeft: "#facc15", haloRight: "#22c55e", line: "rgba(20, 20, 14, 0.72)" },
-  { fur: "rgba(242, 232, 255, 0.96)", haloLeft: "#f97316", haloRight: "#34d399", line: "rgba(23, 14, 30, 0.72)" },
-] as const;
+const HALO_PET_FORMS = ["core", "cat-corner", "sprout"] as const;
+const HALO_PET_PALETTE_COUNT = 6;
+
+type HaloPetForm = (typeof HALO_PET_FORMS)[number];
+type HaloPetState = "idle" | "working" | "attention" | "done" | "error";
 
 const hashSessionId = (value: string): number => {
   let hash = 0;
@@ -1103,16 +1114,21 @@ const hashSessionId = (value: string): number => {
   return hash;
 };
 
-const getMascotVariant = (sessionId: string | null | undefined) => hashSessionId(sessionId || "agent-halo") % MASCOT_THEMES.length;
+const getMascotVariant = (sessionId: string | null | undefined) => hashSessionId(sessionId || "agent-halo") % HALO_PET_PALETTE_COUNT;
 
-const getMascotStyle = (variant: number) => {
-  const theme = MASCOT_THEMES[variant] ?? MASCOT_THEMES[0];
+const getHaloPetState = (status?: ISessionSummary["status"], activityKind?: ActivityKind): HaloPetState => {
+  if (status === "error" || activityKind === "error") return "error";
+  if (status === "attention" || activityKind === "attention" || activityKind === "asking") return "attention";
+  if (status === "done" || activityKind === "done") return "done";
+  if (status === "working") return "working";
+  return "idle";
+};
+
+const getHaloPetStyle = (form: HaloPetForm, state: HaloPetState) => {
   return {
-    "--mascot-fur": theme.fur,
-    "--mascot-halo-left": theme.haloLeft,
-    "--mascot-halo-right": theme.haloRight,
-    "--mascot-line": theme.line,
-  } as CSSProperties & Record<"--mascot-fur" | "--mascot-halo-left" | "--mascot-halo-right" | "--mascot-line", string>;
+    "--halo-pet-body": `url("/mascots/halo-soft-cube/body/${form}/${state}.png")`,
+    "--halo-pet-mote": `url("/mascots/halo-soft-cube/motes/${state}.png")`,
+  } as CSSProperties & Record<"--halo-pet-body" | "--halo-pet-mote", string>;
 };
 
 const StatusGlyph = ({ status }: { status: ISessionSummary["status"] }) => {
@@ -1122,57 +1138,34 @@ const StatusGlyph = ({ status }: { status: ISessionSummary["status"] }) => {
   return <span className="status-slot"><span className={`status-dot status-${status}`} /></span>;
 };
 
-type SessionMascotAction = "idle" | "walk" | "plan" | "work" | "coffee" | "hurt" | "dust";
+const HaloPet = ({ activityKind, className, sessionId, status }: { activityKind?: ActivityKind; className: string; sessionId?: string | null; status?: ISessionSummary["status"] }) => {
+  const variant = getMascotVariant(sessionId);
+  const form = HALO_PET_FORMS[variant % HALO_PET_FORMS.length] ?? "core";
+  const state = getHaloPetState(status, activityKind);
 
-const getSessionMascotAction = (status?: ISessionSummary["status"], activityKind?: ActivityKind): SessionMascotAction => {
-  if (activityKind === "error" || status === "error") {
-    return "hurt";
-  }
-
-  if (activityKind === "attention" || activityKind === "planning" || activityKind === "memory" || activityKind === "goal" || activityKind === "asking") {
-    if (activityKind === "planning") return "plan";
-    return "coffee";
-  }
-
-  if (activityKind === "compact") {
-    return "dust";
-  }
-
-  if (activityKind === "thinking" || activityKind === "visual") {
-    return "idle";
-  }
-
-  if (status === "working") {
-    return "work";
-  }
-
-  if (status === "attention") {
-    return "coffee";
-  }
-
-  return "idle";
+  return (
+    <span
+      className={`${className} halo-soft-cube`}
+      data-status={status ?? "idle"}
+      data-kind={activityKind}
+      data-state={state}
+      data-form={form}
+      data-palette={variant}
+      style={getHaloPetStyle(form, state)}
+      aria-hidden="true"
+    >
+      <span className="halo-soft-cube-body" />
+      <span className="halo-soft-cube-mote" />
+    </span>
+  );
 };
 
 const ActivityMascot = ({ activityKind, sessionId, status }: { activityKind?: ActivityKind; sessionId?: string | null; status?: ISessionSummary["status"] }) => {
-  const variant = getMascotVariant(sessionId);
-  const action = getSessionMascotAction(status, activityKind);
-
-  return (
-    <span className="activity-mascot activity-mascot-sprite" data-status={status} data-kind={activityKind} data-action={action} data-variant={variant} style={getMascotStyle(variant)} aria-hidden="true">
-      <span className="activity-mascot-stage" />
-    </span>
-  );
+  return <HaloPet className="activity-mascot" activityKind={activityKind} sessionId={sessionId} status={status} />;
 };
 
 const SessionMascot = ({ activityKind, sessionId, status }: { activityKind?: ActivityKind; sessionId?: string | null; status?: ISessionSummary["status"] }) => {
-  const variant = getMascotVariant(sessionId);
-  const action = getSessionMascotAction(status, activityKind);
-
-  return (
-    <span className="session-mascot session-mascot-sprite" data-status={status} data-kind={activityKind} data-action={action} data-variant={variant} style={getMascotStyle(variant)} aria-hidden="true">
-      <span className="session-mascot-stage" />
-    </span>
-  );
+  return <HaloPet className="session-mascot" activityKind={activityKind} sessionId={sessionId} status={status} />;
 };
 
 const shortSessionId = (conversationId: string): string => conversationId.replace(/^local-conv-/, "").slice(-8);
@@ -1189,6 +1182,53 @@ const sessionStatusLabel = (status: ISessionSummary["status"]): string => {
   return labels[status];
 };
 
+const getSessionContextCopy = (session: ISessionDetail): { eyebrow: string; title: string; detail: string } => {
+  const latestEvent = session.events[0];
+  switch (session.status) {
+    case "working":
+      return {
+        eyebrow: "Current activity",
+        title: session.activityKind === "thinking" || session.activityKind === "model" ? "Model is working" : "Working",
+        detail: session.detail,
+      };
+    case "attention": {
+      const kind = latestEvent?.type === "attention_requested" ? latestEvent.data.kind : null;
+      return {
+        eyebrow: "Needs input",
+        title: kind === "question" || session.activityKind === "asking" ? "Question requested" : "Approval requested",
+        detail: session.detail,
+      };
+    }
+    case "done":
+      return { eyebrow: "Completed", title: "Turn completed", detail: session.detail };
+    case "error":
+      return { eyebrow: "Error", title: "Activity failed", detail: session.detail };
+    case "inactive":
+      return { eyebrow: "Inactive", title: "Activity paused", detail: "No recent terminal event" };
+    case "idle":
+      return { eyebrow: "Idle", title: "Ready", detail: session.detail };
+  }
+};
+
+const SessionContextSummary = ({ session }: { session: ISessionDetail }) => {
+  const copy = getSessionContextCopy(session);
+
+  return (
+    <section className="session-context-summary" data-status={session.status} aria-labelledby="session-context-title">
+      <SessionMascot activityKind={session.activityKind} sessionId={session.conversationId} status={session.status} />
+      <span className="session-context-copy">
+        <span className="session-context-eyebrow">{copy.eyebrow}</span>
+        <span className="session-context-title" id="session-context-title">{copy.title}</span>
+        <span className="session-context-detail">{copy.detail}</span>
+      </span>
+      <span className="session-context-meta">
+        <span className="session-model">{shortModelName(session.model)}</span>
+        <span className="session-age" title={formatTime(session.lastActivityAt)}>{formatRelativeAge(session.lastActivityAt)}</span>
+      </span>
+    </section>
+  );
+};
+
 const SessionListRow = ({ child = false, onClear, onFocus, onOpen, session }: ISessionListRowProps) => (
   <li className={`session-row ${child ? "session-child-row" : ""} ${session.status === "done" ? "ended" : ""}`} data-status={session.status}>
     <button
@@ -1200,14 +1240,17 @@ const SessionListRow = ({ child = false, onClear, onFocus, onOpen, session }: IS
     >
       {child ? <StatusGlyph status={session.status} /> : <SessionMascot activityKind={session.activityKind} sessionId={session.conversationId} status={session.status} />}
       <span className="session-label">
-        <span className="session-main-line">
-          <span className="agent-badge">{child ? shortSessionId(session.conversationId) : "LC"}</span>
-          <span className="session-project">{child ? sessionStatusLabel(session.status) : session.project}</span>
-          <span className="session-meta">{session.detail}</span>
+        <span className="session-title-line">
+          <span className="session-project">{child ? shortSessionId(session.conversationId) : session.project}</span>
+          <span className={`session-inline-status status-text-${session.status}`}>{sessionStatusLabel(session.status)}</span>
         </span>
+        <span className="session-activity">{session.detail}</span>
         <span className="session-folder">{child ? session.project : session.workspace}</span>
       </span>
-      <span className="session-time">{formatTime(session.lastActivityAt)}</span>
+      <span className="session-row-metadata" title={formatTime(session.lastActivityAt)}>
+        <span className="session-model">{shortModelName(session.model)}</span>
+        <span className="session-age">{formatRelativeAge(session.lastActivityAt)}</span>
+      </span>
     </button>
     <div className="session-row-actions">
       <button
@@ -1218,7 +1261,6 @@ const SessionListRow = ({ child = false, onClear, onFocus, onOpen, session }: IS
         aria-label={`Focus ${session.project} session in Ghostty`}
       >
         <Focus size={11} strokeWidth={2.4} />
-        Focus
       </button>
       {session.status === "done" ? (
         <button
@@ -1257,14 +1299,18 @@ const WorkspaceSessionGroupItem = ({ expanded, group, groupKey, onClear, onClear
           </span>
           <SessionMascot activityKind={group.activityKind} sessionId={group.primarySession.conversationId} status={group.status} />
           <span className="session-label">
-            <span className="session-main-line">
-              <span className="agent-badge">×{group.sessions.length}</span>
+            <span className="session-title-line">
               <span className="session-project">{group.project}</span>
-              <span className="session-meta">{group.detail}</span>
+              <span className="session-group-count">×{group.sessions.length}</span>
+              <span className={`session-inline-status status-text-${group.status}`}>{sessionStatusLabel(group.status)}</span>
             </span>
+            <span className="session-activity">{group.detail}</span>
             <span className="session-folder">{group.workspace}</span>
           </span>
-          <span className="session-time">{formatTime(group.lastActivityAt)}</span>
+          <span className="session-row-metadata" title={formatTime(group.lastActivityAt)}>
+            <span className="session-model">{shortModelName(group.primarySession.model)}</span>
+            <span className="session-age">{formatRelativeAge(group.lastActivityAt)}</span>
+          </span>
         </button>
         {group.sessions.every((session) => session.status === "done") ? (
           <div className="session-row-actions">
@@ -1363,6 +1409,25 @@ const createDemoScenarioEvents = (scenario: string): AgentHaloEvent[] => {
     ];
   }
 
+  if (scenario === "error") {
+    return [
+      { ...base, id: `${base.id}-open`, type: "conversation_open", data: { reason: "startup", previousConversationId: null } },
+      {
+        ...base,
+        id: `${base.id}-error`,
+        timestamp: timestampAt(1),
+        type: "llm_end",
+        data: {
+          model: "gpt-5.6-sol",
+          stopReason: "llm_api_error",
+          durationMs: 12_000,
+          usage: null,
+          error: { message: "Provider request failed", errorType: "provider_error", retryable: true },
+        },
+      },
+    ];
+  }
+
   if (scenario === "multi") {
     const workspace = "/Users/mahiro/ghq/github.com/mahirocoko/agent-halo";
     const otherWorkspace = "/Users/mahiro/ghq/github.com/mahirocoko/paoplew";
@@ -1421,6 +1486,7 @@ const buildSessionSummaries = (events: AgentHaloEvent[], presence: IAgentHaloPre
     if (!latestEvent) continue;
     const activity = getEventActivity(latestEvent);
     const workspacePath = getSessionWorkspacePath(sessionEvents, latestEvent.cwd);
+    const sessionModel = sessionEvents.find((event) => event.model)?.model ?? "Letta";
     sessions.set(conversationId, {
       conversationId,
       project: projectName(workspacePath ?? latestEvent.cwd),
@@ -1428,6 +1494,7 @@ const buildSessionSummaries = (events: AgentHaloEvent[], presence: IAgentHaloPre
       workspacePath,
       detail: activity.detail,
       activityKind: activity.kind,
+      model: sessionModel,
       status: getEventSessionStatus(latestEvent, now),
       lastActivityAt: latestEvent.timestamp,
     });
@@ -1446,6 +1513,7 @@ const buildSessionSummaries = (events: AgentHaloEvent[], presence: IAgentHaloPre
       workspacePath,
       detail: "idle",
       activityKind: "session",
+      model: presence.model ?? "Letta",
       status: "idle",
       lastActivityAt: presence.lastEventAt ?? new Date(0).toISOString(),
     });
@@ -2801,13 +2869,9 @@ const App = () => {
               </div>
             ) : selectedSession ? (
               <div className="sheet-header detail-header" data-tauri-drag-region="false">
-                <button className="gear-btn" type="button" onClick={backToSessions} data-tauri-drag-region="false" title="Back to sessions">
-                  <ChevronLeft size={14} strokeWidth={2.3} />
-                </button>
                 <StatusGlyph status={selectedSession.status} />
                 <span className="header-title">{headerLabel}</span>
                 <span className="spacer" />
-                <span className="agent-badge">LC</span>
               </div>
             ) : (
               <div className="sheet-header" data-tauri-drag-region="false">
@@ -2915,12 +2979,8 @@ const App = () => {
                   ) : null}
                 </div>
               ) : selectedSession ? (
-                <div className="detail-body">
-                  <div className="detail-stats">
-                    <span className={`status-text status-text-${selectedSession.status}`}>{selectedSession.status}</span>
-                    <span>{formatTime(selectedSession.lastActivityAt)}</span>
-                    <span>{selectedSession.permissionMode}</span>
-                  </div>
+                <div className="detail-body session-context-view" data-status={selectedSession.status}>
+                  <SessionContextSummary session={selectedSession} />
                   <div className="detail-path" title={selectedSession.cwd}>{shortenPath(selectedSession.cwd)}</div>
                   {canUseNativeControls ? (
                     <div className="capability-note">Focus matches Ghostty terminal cwd/title and selects its tab</div>
@@ -2940,6 +3000,7 @@ const App = () => {
 
                         return (
                           <div className="action-row" data-kind={activity.kind} key={event.id}>
+                            <span className="action-mark" aria-hidden="true" />
                             <span className="action-tool">{activity.label}</span>
                             <span className="action-detail">{activity.detail}</span>
                             <span className="session-time">{formatTime(event.timestamp)}</span>
@@ -3046,18 +3107,10 @@ const App = () => {
             </div>
 
             {(setupOpen || selectedSession || activitySession?.status === "done") ? (
-              <div className="sheet-footer">
-                <span className="footer-meta">{workspace} · {model}</span>
-                <span className="spacer" />
-                {setupOpen ? (
-                  <div className="footer-actions">
-                    <button className="pill-btn" type="button" onClick={backToSessions} data-tauri-drag-region="false">
-                      <List size={12} strokeWidth={2.3} />
-                      Sessions
-                    </button>
-                  </div>
-                ) : selectedSession ? (
-                  <div className="footer-actions">
+              <div className={`sheet-footer ${selectedSession ? "session-context-footer" : ""}`}>
+                {selectedSession ? (
+                  <>
+                    <div className="session-context-actions">
                     <button className="pill-btn accent" type="button" onClick={() => void focusSelectedSession(selectedSession)} data-tauri-drag-region="false">
                       <Focus size={12} strokeWidth={2.3} />
                       Focus
@@ -3069,27 +3122,49 @@ const App = () => {
                       </button>
                     ) : null}
                     <button
-                      className="pill-btn danger"
+                      className={`pill-btn danger session-history-action ${pendingRemoveHistoryId === selectedSession.conversationId ? "is-armed" : ""}`}
                       type="button"
                       onClick={() => requestRemoveSessionHistory(selectedSession.conversationId)}
                       data-tauri-drag-region="false"
                       title="Remove this session's locally stored activity"
+                      aria-label={pendingRemoveHistoryId === selectedSession.conversationId ? "Confirm remove" : "Remove history"}
                     >
                       <Trash2 size={12} strokeWidth={2.3} />
-                      {pendingRemoveHistoryId === selectedSession.conversationId ? "Confirm remove" : "Remove history"}
+                      {pendingRemoveHistoryId === selectedSession.conversationId ? "Confirm remove" : null}
                     </button>
-                    <button className="pill-btn" type="button" onClick={backToSessions} data-tauri-drag-region="false">
-                      <List size={12} strokeWidth={2.3} />
-                      Sessions
+                    </div>
+                    <button
+                      className="session-context-return"
+                      type="button"
+                      onClick={backToSessions}
+                      data-tauri-drag-region="false"
+                      aria-label={`Back to all ${sessions.length} ${sessions.length === 1 ? "session" : "sessions"}`}
+                    >
+                      <ChevronLeft size={12} strokeWidth={2.3} />
+                      <span>Back to sessions</span>
+                      <span className="session-context-return-count">{sessions.length}</span>
                     </button>
-                  </div>
-                ) : null}
-                {!setupOpen && !selectedSession && activitySession?.status === "done" ? (
-                  <button className="pill-btn accent" type="button" onClick={(event) => { event.stopPropagation(); acknowledgeDone(); }} data-tauri-drag-region="false">
-                    <Check size={12} strokeWidth={2.4} />
-                    Close
-                  </button>
-                ) : null}
+                  </>
+                ) : (
+                  <>
+                    <span className="footer-meta">{workspace} · {model}</span>
+                    <span className="spacer" />
+                    {setupOpen ? (
+                      <div className="footer-actions">
+                        <button className="pill-btn" type="button" onClick={backToSessions} data-tauri-drag-region="false">
+                          <List size={12} strokeWidth={2.3} />
+                          Sessions
+                        </button>
+                      </div>
+                    ) : null}
+                    {!setupOpen && activitySession?.status === "done" ? (
+                      <button className="pill-btn accent" type="button" onClick={(event) => { event.stopPropagation(); acknowledgeDone(); }} data-tauri-drag-region="false">
+                        <Check size={12} strokeWidth={2.4} />
+                        Close
+                      </button>
+                    ) : null}
+                  </>
+                )}
               </div>
             ) : null}
           </div> : null}

@@ -12,14 +12,15 @@ Mahiro accepted Notchcode v1 as a read-only + dismiss + setup/control-plane surf
 | --- | --- | --- |
 | Hardware notch at rest | `apps/desktop/src/main.tsx` renders `NotchShape` and collapsed pill; `apps/desktop/src/styles.css` owns the black notch/pill treatment. | Done |
 | Click-to-expand dropped sheet | Desktop state toggles between pill and `.sheet.view-panel.docked`; Tauri `set_panel_open` resizes the native transparent window. | Done |
-| Compact session rows | `buildSessionSummaries()` feeds `.session-list` / `.session-row` with project, status, and last activity. | Done |
-| Session drill-down | Row click sets `selectedSessionId`; detail view shows path, status, permission mode, and recent activity. | Done |
+| Compact session rows | `buildSessionSummaries()` feeds dense `.session-list` / `.session-row` anatomy with project, truthful activity/status, model, relative age, and workspace path; row Focus is contextual rather than a persistent pill. | Done |
+| State-directed session context | Row click replaces the overview with a Working, Needs input, Done, Error, Inactive, or Idle context using trusted event descriptors, recent activity, Focus/Clear/history actions, and a clear Back to sessions control. It never invents prompt text, answer choices, permission diffs, or approval controls. | Done |
 | Sticky done state | `turn_complete` / `conversation_close` maps to `done`; completed sessions remain visible across quiet reloads until explicit Clear. Closing the ambient Done signal does not clear the row. | Done |
 | Ambient attention/done wing | PermissionRequest or filtered question/decision activity expands a persistent orange Needs input wing; turn completion shows a timed green Done wing without OS notifications. | Covered |
 | Stale-state truth | Quiet unfinished events become low-priority inactive history rather than a fake waiting-for-user state. | Covered |
 | Clear completed sessions | Per-session Clear hides completed rows and persists IDs in `localStorage` under `agent-halo.dismissed-sessions`; guarded Clear completed handles the current completed section. | Done |
 | Completion persistence regressions | `apps/desktop/tests/demo-dismiss.spec.ts` separately verifies quiet-reload persistence and fresh-activity resurrection after Clear. | Covered |
 | Expandable workspace groups | Active and Completed sections keep one compact scroll surface; grouped workspaces expose child detail, Focus, and per-session Clear actions. | Covered |
+| Quiet completion ledger | Completed sessions retain sticky workspace/child access and scoped Clear controls while using lower visual emphasis than Active work. | Covered |
 | Setup/control plane | Setup view shows bridge, mod install status, next step, and session-control capability boundary. | Done |
 | Setup boundary regression | `apps/desktop/tests/demo-setup.spec.ts` verifies browser demo does not fake native install/check behavior or focus/end controls. | Covered |
 | Capability-aware bridge | `packages/protocol/src/index.ts` defines bridge capabilities; `/health` and `/snapshot` include them from `mods/agent-halo.js`. | Done |

@@ -1,0 +1,128 @@
+{
+  "name": "Agent Halo Soft Cube",
+  "version": 1,
+  "status": "runtime-candidate",
+  "selectedFamily": "balanced-rounded-soft-cube",
+  "forms": [
+    "core",
+    "cat-corner",
+    "sprout"
+  ],
+  "frame": {
+    "source": [
+      16,
+      12
+    ],
+    "display": [
+      32,
+      24
+    ],
+    "anchor": [
+      8,
+      10
+    ],
+    "baselineY": 10,
+    "background": "transparent"
+  },
+  "body": {
+    "framesPerState": 2,
+    "stripSize": [
+      32,
+      12
+    ],
+    "states": {
+      "idle": {
+        "durationMs": 500,
+        "playback": "loop"
+      },
+      "working": {
+        "durationMs": 320,
+        "playback": "loop"
+      },
+      "attention": {
+        "durationMs": 380,
+        "playback": "loop"
+      },
+      "done": {
+        "durationMs": 500,
+        "playback": "play-once-hold-final"
+      },
+      "error": {
+        "durationMs": 300,
+        "playback": "loop"
+      }
+    }
+  },
+  "mote": {
+    "frameSize": [
+      4,
+      4
+    ],
+    "states": {
+      "idle": {
+        "frames": 3,
+        "durationMs": 450,
+        "playback": "loop"
+      },
+      "working": {
+        "frames": 4,
+        "durationMs": 180,
+        "playback": "loop"
+      },
+      "attention": {
+        "frames": 4,
+        "durationMs": 220,
+        "playback": "loop"
+      },
+      "done": {
+        "frames": 2,
+        "durationMs": 300,
+        "playback": "play-once-hold-final"
+      },
+      "error": {
+        "frames": 3,
+        "durationMs": 160,
+        "playback": "loop"
+      }
+    }
+  },
+  "basePalette": [
+    "#E5FAFF",
+    "#AEEBFA",
+    "#55C7E8",
+    "#2684AA",
+    "#123F5A"
+  ],
+  "colorStrategy": "Base cyan five-tone indexed assets; CSS filter variants preserve luminance planes while visible status text remains semantic truth.",
+  "provenance": {
+    "sourceLane": "manual-procedural-native-grid",
+    "usage": "runtime-candidate",
+    "selectedBy": "Mahiro",
+    "selectedCandidate": "A",
+    "generatedAt": "2026-07-14T07:43:00.429862+00:00",
+    "referencePolicy": "Vibe Island used only for scale and low-frame motion grammar; no pixels, silhouettes, or exact timing copied."
+  },
+  "files": {
+    "body/cat-corner/attention.png": "637cf729ce902bc6ad4b7b91720d31b4d711ae32c0b33e40c7bfb1f1b9376bf7",
+    "body/cat-corner/done.png": "392a6126e8b7520a2f3dfe25871188ee7d598b139717d68bc54e5881d333fb94",
+    "body/cat-corner/error.png": "9e771c5ba2aa28d5038c4f3614e2f35bb8b6fd882313f4d691c0a0a1fe63d431",
+    "body/cat-corner/idle.png": "c074b53823f42fd055a692375a84e46c17e146b512c0a8a73a53b9760f8166f9",
+    "body/cat-corner/working.png": "c6c79f8d5d45feb1dbf97bf3661310a6d89099f2af4560543bb6c37335ca6459",
+    "body/core/attention.png": "0a185357a8d49101f1fab604e6656cfee7b9dd45014e05d28cbe94bf9ad9f5ca",
+    "body/core/done.png": "bcd167be31276295081651a64115a081c708f1f6ad3d4d233924fa9bb8e59c56",
+    "body/core/error.png": "2186eda1827d44d45dc021188a391c9cabedd06df213ef1620798ac390067a32",
+    "body/core/idle.png": "7c8649e6420f150f729ee71f22ac7b75e4d8334cc47b048ea7fa0d7f0c0ac9f9",
+    "body/core/working.png": "43b924172147a3920ad1f96d1ac2faa7cc8b0cbd4eb4ac8241855318bd0a64ce",
+    "body/sprout/attention.png": "747cf812942c8492f701636e5b4bc8800ced9bc635205e04332e59f7d3f68de7",
+    "body/sprout/done.png": "b8b70aef572038a7c253fd341d0d64b9333a4726ba12091f55d13e03270ca67d",
+    "body/sprout/error.png": "61c708cab8833da704e8a758344342d22e8506e298e211c823c9aad426cfba80",
+    "body/sprout/idle.png": "448a57bae28cbf7aca744c4f674d592778dd2b9d9c2d667e59f023d79aafb45c",
+    "body/sprout/working.png": "e224295a209ae58c93aa2ff1db6d3398e0926e79c469f47444bd4e2ca5c797e3",
+    "motes/attention.png": "d4dc8b473f10178ce7f18d1fbc6644ff6cfb6cfa549830a17110a8b82ee4aaeb",
+    "motes/done.png": "177eeac907978e8b8cccb4429259ee23573ca81b77674a269b2a82548d22701c",
+    "motes/error.png": "3f16dcf1f7ed87ba4b0a344e701b81ae3d7dff7fd0001b1849f003c8e736b9e4",
+    "motes/idle.png": "11637a135af3f6a369b4ff8967c9eae27eebd626fbe9edc7f9fad6913d3bee31",
+    "motes/working.png": "23da674f138a6e10cf12422c2b480ce5cc0d53f05a543beeef2e364bcdc7fd65"
+  },
+  "productionApproved": false
+}

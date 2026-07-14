@@ -1,0 +1,17 @@
+{
+  "selectedCandidate": "candidate-a",
+  "family": "balanced-rounded-soft-cube",
+  "humanApproved": true,
+  "correctsPreviousChoice": "candidate-c",
+  "approvedFor": "animation-lineage-master",
+  "productionRuntimeApproved": false,
+  "selectedAt": "2026-07-14T07:27:55.434373+00:00",
+  "assets": {
+    "frames/cat-corner-soft-cube.png": "ebedc5be17c159daae7aa8e0b5c3abeddaf0cc93b14554a6110c59d07fa9f6ca",
+    "frames/core-soft-cube.png": "62717fd659ca03b40e55372208c8c2db12f740eeb93cf63894d50ff39abdd4e2",
+    "frames/sprout-soft-cube.png": "d1af71fcf8212d6ae558cbf5adc653d4044fbb6875fa8533e171b13bc163bd43",
+    "manifest.json": "ee53d3c3d9387102d647361ae408673de143b09621185e221f78ae8b93a6f4e5",
+    "palette-index.json": "39b03e1b886e032f3df6c456ee6fd7cdcbfa2597b4650fcebe83abd2c8225b2f"
+  },
+  "notes": "Mahiro corrected the v2 choice to A. Use only Candidate A for animation/runtime lineage. Preserve rounded four-sided silhouette and restrained pseudo-3D planes."
+}
