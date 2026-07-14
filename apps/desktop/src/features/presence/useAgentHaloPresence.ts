@@ -115,6 +115,17 @@ const createScenario = (scenario: string): AgentHaloEvent[] => {
   const at = (offset: number) => new Date(now + offset).toISOString();
   const common = base(scenario, timestamp);
 
+  if (scenario === "idle") {
+    return [
+      {
+        ...common,
+        id: `${common.id}-open`,
+        type: "conversation_open",
+        data: { reason: "startup", previousConversationId: null },
+      },
+    ];
+  }
+
   if (scenario === "attention") {
     return [
       {

@@ -80,5 +80,5 @@ test("reduced motion disables panel, status, loading, and mascot animation", asy
   await expect(page.locator(".sheet-inner")).toHaveCSS("transition-duration", "0s");
   await expect(page.locator(".glyph-pulse").first()).toHaveCSS("animation-name", "none");
   await expect(page.locator(".halo-soft-cube-body").first()).toHaveCSS("animation-name", "none");
-  await expect(page.locator(".halo-soft-cube-mote").first()).toHaveCSS("animation-name", "none");
+  await expect(page.locator(".halo-soft-cube-signal").first()).toHaveCSS("animation-name", "none");
 });

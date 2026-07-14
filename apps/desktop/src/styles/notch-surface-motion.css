@@ -190,7 +190,7 @@
 }
 
 .halo-soft-cube-body,
-.halo-soft-cube-mote {
+.halo-soft-cube-signal {
   position: absolute;
   display: block;
   background-repeat: no-repeat;
@@ -205,12 +205,13 @@
   background-size: 64px 24px;
 }
 
-.halo-soft-cube-mote {
-  top: 8px;
-  left: 24px;
-  width: 8px;
-  height: 8px;
-  background-image: var(--halo-pet-mote);
+.halo-soft-cube-signal {
+  top: 6px;
+  left: 26px;
+  width: 12px;
+  height: 12px;
+  background-image: var(--halo-pet-signal);
+  background-size: 24px 12px;
 }
 
 .halo-soft-cube[data-palette="1"] {
@@ -282,33 +283,31 @@
   animation: halo-soft-cube-body-loop 0.6s steps(2) infinite;
 }
 
-.halo-soft-cube[data-state="idle"] .halo-soft-cube-mote {
-  background-size: 24px 8px;
-  animation: halo-soft-cube-mote-3 1.35s steps(3) infinite;
+.halo-soft-cube[data-signal]:not([data-signal="none"]):not([data-signal="done"]) .halo-soft-cube-signal {
+  animation: halo-soft-cube-signal-loop var(--halo-signal-duration, 0.72s) steps(2) infinite;
 }
 
-.halo-soft-cube[data-state="working"] .halo-soft-cube-mote {
-  background-size: 32px 8px;
-  animation: halo-soft-cube-mote-4 0.72s steps(4) infinite;
+.halo-soft-cube[data-signal="thinking-model"],
+.halo-soft-cube[data-signal="memory"],
+.halo-soft-cube[data-signal="visual"] {
+  --halo-signal-duration: 0.9s;
 }
 
-.halo-soft-cube[data-state="attention"] .halo-soft-cube-mote {
-  background-size: 32px 8px;
-  animation: halo-soft-cube-mote-4 0.88s steps(4) infinite;
+.halo-soft-cube[data-signal="planning-goal"],
+.halo-soft-cube[data-signal="delegating"] {
+  --halo-signal-duration: 0.8s;
 }
 
-.halo-soft-cube[data-state="done"] .halo-soft-cube-mote {
-  background-size: 16px 8px;
-  animation: halo-soft-cube-mote-settle 0.3s steps(1, end) 1 forwards;
+.halo-soft-cube[data-signal="error"] {
+  --halo-signal-duration: 0.52s;
 }
 
-.halo-soft-cube[data-state="error"] .halo-soft-cube-mote {
-  background-size: 24px 8px;
-  animation: halo-soft-cube-mote-3 0.48s steps(3) infinite;
+.halo-soft-cube[data-signal="done"] .halo-soft-cube-signal {
+  animation: halo-soft-cube-signal-settle 0.35s steps(1, end) 1 forwards;
 }
 
 .halo-soft-cube[data-status="inactive"] .halo-soft-cube-body,
-.halo-soft-cube[data-status="inactive"] .halo-soft-cube-mote {
+.halo-soft-cube[data-status="inactive"] .halo-soft-cube-signal {
   animation: none;
 }
 
@@ -324,21 +323,15 @@
   }
 }
 
-@keyframes halo-soft-cube-mote-3 {
+@keyframes halo-soft-cube-signal-loop {
   to {
     background-position-x: -24px;
   }
 }
 
-@keyframes halo-soft-cube-mote-4 {
+@keyframes halo-soft-cube-signal-settle {
   to {
-    background-position-x: -32px;
-  }
-}
-
-@keyframes halo-soft-cube-mote-settle {
-  to {
-    background-position-x: -8px;
+    background-position-x: -12px;
   }
 }
 
@@ -348,7 +341,7 @@
   .glyph-check,
   .glyph-pulse,
   .halo-soft-cube-body,
-  .halo-soft-cube-mote,
+  .halo-soft-cube-signal,
   .halo-surface,
   .notch-wing,
   .notch-wrap,

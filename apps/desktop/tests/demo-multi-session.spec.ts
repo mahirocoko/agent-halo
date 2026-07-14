@@ -31,7 +31,10 @@ test("grouped completed workspace exposes every child session and guarded clear"
     };
   });
   expect(Math.abs(geometry.leftInset - geometry.scrollbarInset)).toBeLessThanOrEqual(1);
-  expect(geometry.contentInset).toBeGreaterThanOrEqual(8);
+  expect(geometry.leftInset).toBeGreaterThanOrEqual(40);
+  expect(geometry.leftInset).toBeLessThanOrEqual(50);
+  // Overlay scrollbars reserve no layout gutter; native/classic scrollbars reserve up to 16px.
+  expect(geometry.contentInset).toBeGreaterThanOrEqual(0);
   expect(geometry.contentInset).toBeLessThanOrEqual(16);
   expect(geometry.scrollable).toBe(true);
 

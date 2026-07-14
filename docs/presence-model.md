@@ -45,27 +45,25 @@ Legacy persisted or snapshot events whose conversation id is `default` are migra
 
 ## Derived activity semantics
 
-The desktop UI derives a smaller “activity kind” from raw bridge events for recent-activity rows. The Halo Soft Cube mascot then maps the truthful session status to five compact visual states (`idle`, `working`, `attention`, `done`, `error`); activity kind may help choose the state but does not invent task content. This is intentionally a UI derivation, not a new bridge protocol field.
+The desktop UI derives a smaller “activity kind” from raw bridge events for recent-activity rows. Halo Soft Cube keeps two independent layers: the body maps truthful session status to five broad affect states (`idle`, `working`, `attention`, `done`, `error`), while a detached pixel signal maps grouped activity/status truth. Idle/inactive and bridge/session lifecycle show no signal. This is intentionally a UI derivation, not a new bridge protocol field, and it never invents task content.
 
 Current raw events:
 
-| Raw event | Activity kind | Soft Cube state | Meaning for UI/mascot direction |
-| --- | --- | --- | --- |
-| `turn_start` | `thinking` | `working` | Model turn started; restrained body rhythm plus active mote. |
-| `tool_start` + `UpdatePlan` | `planning` | `working` | Planning remains truthful working presence without a fake notebook/task scene. |
-| `tool_start` + shell/task tools | `shell` | `working` | Command/task activity; task content is not rendered into the pet. |
-| `tool_start` + `ApplyPatch` | `editing` | `working` | Code/file edit activity. |
-| `tool_start` + `Agent`/`Task` | `delegating` | `working` | Subagent activity without fabricating a durable hierarchy. |
-| `tool_start` + `ViewImage` | `visual` | `working` | Visual inspection remains active work. |
-| `tool_start` + `memory_apply_patch` | `memory` | `working` | Learning/memory activity without exposing memory content. |
-| `tool_start` + `Skill` | `skill` | `working` | Skill execution activity. |
-| `tool_start` + goal tools | `goal` | `working` | Goal-tool activity without adding unsupported goal detail. |
-| `tool_end` success | derived tool kind | derived status | Tool completion detail remains in activity history; the pet follows the resulting session state. |
-| `compact_start` / `compact_end` | `compact` | `working` | Context compaction activity; token/message shrink stats remain textual evidence. |
-| `llm_start` / `llm_end` | `model` | `working` / derived status | Provider request lifecycle; terminal state comes from the actual event result. |
-| `attention_requested` | `attention` | `attention` | User input is required; orange state and alert mote persist until later activity resolves it. |
-| `turn_complete` / legacy `turn_stop` / `conversation_close` | `done` | `done` | Green one-shot settle while the completed row remains sticky. |
-| `bridge_error` | `error` | `error` | Red worried face/mote while safe error detail stays textual. |
+| Raw event | Activity kind | Body state | Signal | Meaning for UI/mascot direction |
+| --- | --- | --- | --- | --- |
+| `turn_start` | `thinking` | `working` | thought | Model turn started; restrained body rhythm plus a semantic thinking signal. |
+| `tool_start` + `UpdatePlan` / goal tools | `planning` / `goal` | `working` | flag | Planning/goal work without fake task content. |
+| `tool_start` + shell/task/Skill tools | `shell` / `tool` / `skill` | `working` | terminal | Generic execution without exposing arguments/output. |
+| `tool_start` + `ApplyPatch` | `editing` | `working` | document/pencil | Code/file edit activity. |
+| `tool_start` + `Agent`/`Task` | `delegating` | `working` | branch | Subagent activity without fabricating a durable hierarchy. |
+| `tool_start` + `ViewImage` | `visual` | `working` | eye | Visual inspection remains active work. |
+| `tool_start` + `memory_apply_patch` / compaction | `memory` / `compact` | `working` | storage | Memory/context work without exposing content. |
+| `tool_end` success | derived tool kind | derived status | derived signal | History keeps the latest truthful activity; no fake running claim is added. |
+| `llm_start` / `llm_end` | `model` | `working` / derived status | thought | Provider lifecycle; terminal state comes from the actual event result. |
+| `attention_requested` / `AskUserQuestion` | `attention` / `asking` | `attention` | question | User input is required; orange state persists until later activity resolves it. |
+| `turn_complete` / legacy `turn_stop` / `conversation_close` | `done` | `done` | check | Green one-shot settle while the completed row remains sticky. |
+| `bridge_error` | `error` | `error` | X | Red error affect while safe detail stays textual. |
+| lifecycle / idle / inactive | `session` / `bridge` | `idle` | none | Identity remains visible without a decorative tail or false activity signal. |
 
 Important limitation: there is no native `plan_start`, `thinking_delta`, or assistant-text event in the current protocol. “Plan” is inferred from the `UpdatePlan` tool, “thinking” is inferred from `turn_start` / `llm_start`, and active work is inferred from tool/model/compaction lifecycle until `llm_end`, `turn_complete`, or inactivity. General approval queue/result state remains unavailable.
 

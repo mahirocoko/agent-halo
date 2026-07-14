@@ -1,6 +1,6 @@
 {
   "name": "Agent Halo Soft Cube",
-  "version": 1,
+  "version": 2,
   "status": "production-approved",
   "selectedFamily": "balanced-rounded-soft-cube",
   "forms": [
@@ -25,6 +25,7 @@
     "background": "transparent"
   },
   "body": {
+    "status": "production-approved",
     "framesPerState": 2,
     "stripSize": [
       32,
@@ -53,37 +54,32 @@
       }
     }
   },
-  "mote": {
-    "frameSize": [
-      4,
-      4
-    ],
-    "states": {
-      "idle": {
-        "frames": 3,
-        "durationMs": 450,
-        "playback": "loop"
-      },
-      "working": {
-        "frames": 4,
-        "durationMs": 180,
-        "playback": "loop"
-      },
-      "attention": {
-        "frames": 4,
-        "durationMs": 220,
-        "playback": "loop"
-      },
-      "done": {
-        "frames": 2,
-        "durationMs": 300,
-        "playback": "play-once-hold-final"
-      },
-      "error": {
-        "frames": 3,
-        "durationMs": 160,
-        "playback": "loop"
-      }
+  "signal": {
+    "status": "production-approved",
+    "semanticModel": "Independent grouped action/status signal; body affect remains independently selected.",
+    "sourceFrameSize": [6, 6],
+    "frameSize": [12, 12],
+    "stripSize": [24, 12],
+    "displayOrigin": [26, 6],
+    "displayScale": 2,
+    "rightOverflowPx": 6,
+    "bodyOverlapPx": 0,
+    "framesPerSignal": 2,
+    "staticReadabilityFrame": 0,
+    "idleIncluded": false,
+    "motionPolicy": "Primary glyph silhouette stays fixed; only a restrained accent, cursor, pupil, packet, or sparkle changes.",
+    "mapping": {
+      "thinking/model": "thinking-model",
+      "shell/tool/skill": "shell-tool-skill",
+      "editing": "editing",
+      "planning/goal": "planning-goal",
+      "delegating": "delegating",
+      "visual": "visual",
+      "memory/compact": "memory",
+      "attention/asking": "attention-asking",
+      "done": "done",
+      "error": "error",
+      "session/bridge/idle/inactive": null
     }
   },
   "basePalette": [
@@ -93,13 +89,16 @@
     "#2684AA",
     "#123F5A"
   ],
-  "colorStrategy": "Base cyan five-tone indexed assets; CSS filter variants preserve luminance planes while visible status text remains semantic truth.",
+  "colorStrategy": "Base cyan assets share the parent state/session filter; body affect and signal meaning remain separate while visible text stays semantic truth.",
   "provenance": {
     "sourceLane": "manual-procedural-native-grid",
     "usage": "production",
     "selectedBy": "Mahiro",
     "selectedCandidate": "A",
     "generatedAt": "2026-07-14T07:43:00.429862+00:00",
+    "selectedSignalCandidate": "c-6x6-native-2x",
+    "signalGeneratedAt": "2026-07-14",
+    "signalReferencePolicy": "User-supplied tiny status snippets informed broad sparkle/question/check readability only; signal grids remain original and no reference pixels were copied.",
     "referencePolicy": "Vibe Island used only for scale and low-frame motion grammar; no pixels, silhouettes, or exact timing copied."
   },
   "files": {
@@ -118,13 +117,22 @@
     "body/sprout/error.png": "61c708cab8833da704e8a758344342d22e8506e298e211c823c9aad426cfba80",
     "body/sprout/idle.png": "448a57bae28cbf7aca744c4f674d592778dd2b9d9c2d667e59f023d79aafb45c",
     "body/sprout/working.png": "e224295a209ae58c93aa2ff1db6d3398e0926e79c469f47444bd4e2ca5c797e3",
-    "motes/attention.png": "d4dc8b473f10178ce7f18d1fbc6644ff6cfb6cfa549830a17110a8b82ee4aaeb",
-    "motes/done.png": "177eeac907978e8b8cccb4429259ee23573ca81b77674a269b2a82548d22701c",
-    "motes/error.png": "3f16dcf1f7ed87ba4b0a344e701b81ae3d7dff7fd0001b1849f003c8e736b9e4",
-    "motes/idle.png": "11637a135af3f6a369b4ff8967c9eae27eebd626fbe9edc7f9fad6913d3bee31",
-    "motes/working.png": "23da674f138a6e10cf12422c2b480ce5cc0d53f05a543beeef2e364bcdc7fd65"
+    "signals/attention-asking.png": "f5ed429b2db8f32f0e3045727faf017b115d4e9d8c04e3696a7c1e8fb7f87e27",
+    "signals/delegating.png": "361f9ec6180101ac187022d7288b297c838f5f67070bb18d9c695e2ccbf615fa",
+    "signals/done.png": "b076d1f7ab2875e6ae2b1b4863337823c27705290154e73d1e7c12c28c1560bc",
+    "signals/editing.png": "b4512efb3054bc6e8449781a2fe2d412b1fcd70ecc6f7100b4d595cd247d2f9b",
+    "signals/error.png": "f6c46b287e21ef4181b8453ab63afed8047c63d05450a14b92f58c30e44ddf0f",
+    "signals/memory.png": "574ceeb4facf82d08f1b8ccac22af22896e05309eeee99f96ed813a3abf10001",
+    "signals/planning-goal.png": "6d8c11529e81cd0bc5f6ee9b1443ee6bbfc629b7982559e62beaff95ccbeffc0",
+    "signals/shell-tool-skill.png": "1d48db0e972d4604b015f7174b8181e871614147336aa51c2eab92cdc29113dc",
+    "signals/thinking-model.png": "60406ddb83c661c14aa0cc6d0d262d0997021499e713b917a27715314c81c562",
+    "signals/visual.png": "3d0ee756e426a2370406f3ea417ec986f2dee516fe8f42da04da52cb7f654769"
   },
   "productionApproved": true,
-  "approvedAt": "2026-07-14",
-  "approvalEvidence": "Mahiro selected Candidate A, approved removal of the legacy cat, and requested the verified native refactor for commit after browser/native/runtime acceptance."
+  "bodyProductionApproved": true,
+  "bodyApprovedAt": "2026-07-14",
+  "bodyApprovalEvidence": "Mahiro selected Candidate A and approved removal of the legacy cat after browser/native/runtime acceptance.",
+  "signalHumanApproved": true,
+  "signalApprovedAt": "2026-07-14",
+  "signalApprovalEvidence": "Mahiro accepted the installed 12×12 Candidate C semantic signals at origin [26,6] after size, spacing, working/question/check readability, and native visual corrections."
 }
