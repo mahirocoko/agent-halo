@@ -39,7 +39,9 @@ The current reducer lives in `packages/protocol/src/presence.ts`.
 
 Letta Code mods now expose `tool_end`, `compact_start` / `compact_end`, and local-backend `llm_start` / `llm_end`; Letta Code 0.27.20 also emits `llm_end` for provider errors with nullable usage and an error summary. Agent Halo still keeps Mahiro's local Letta `Stop` hook via `POST /hook/stop` as a reliable turn-finished fallback because not every backend/surface emits every event. Viewers should still treat long-running `thinking` / `tool-running` states as potentially stale after a local timeout when terminal events are unavailable.
 
-The terminal viewer defaults to `staleAfterMs = 30000`. The desktop maps a quiet active event to `inactive`, not `waiting`: only `attention_requested` means the agent actually needs user input. Inactive sessions remain in history but have lower priority than done/idle sessions and do not occupy the notch activity wing.
+The terminal viewer defaults to `staleAfterMs = 30000`. The desktop uses event-aware missing-terminal fallbacks instead of one universal 30-second timeout: in-flight model work may remain active for up to 10 minutes, tool work for up to 30 minutes, compaction for up to 10 minutes, and transitional events for up to 2 minutes. A paired terminal event still resolves immediately. Once a fallback expires, the desktop maps the quiet event to `inactive`, not `waiting`: only `attention_requested` means the agent actually needs user input. Inactive sessions remain in history but have lower priority than done/idle sessions and do not occupy the notch activity wing.
+
+Legacy persisted or snapshot events whose conversation id is `default` are migrated to the same per-agent fallback identity used by the mod. Scoped `local-conv-*` history is preserved. This prevents events from unrelated projects or stateless subagents from sharing one registry key.
 
 ## Derived activity semantics
 
@@ -66,6 +68,8 @@ Current raw events:
 | `bridge_error` | `error` | `hurt` | Bridge or stream issue; candidate for hurt/fluster animation. |
 
 Important limitation: there is no native `plan_start`, `thinking_delta`, or assistant-text event in the current protocol. “Plan” is inferred from the `UpdatePlan` tool, “thinking” is inferred from `turn_start` / `llm_start`, and active work is inferred from tool/model/compaction lifecycle until `llm_end`, `turn_complete`, or inactivity. General approval queue/result state remains unavailable.
+
+Stop/attention hook relays may arrive shortly after a terminal model event. The bridge retains completed scopes for 15 seconds and attaches an unscoped hook only when exactly one recent scope matches the requested cwd/agent constraints; ambiguous same-cwd completions remain unscoped rather than being guessed.
 
 ## Privacy stance
 

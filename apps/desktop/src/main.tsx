@@ -36,6 +36,10 @@ const DEFAULT_USAGE_REFRESH_MS = 15 * 60_000;
 const USAGE_SETTINGS_STORAGE_KEY = "agent-halo.usage-settings";
 const KEEP_AWAKE_STORAGE_KEY = "agent-halo.keep-awake-while-working";
 const STALE_AFTER_MS = 30_000;
+const TRANSITION_STALE_AFTER_MS = 2 * 60_000;
+const LLM_STALE_AFTER_MS = 10 * 60_000;
+const TOOL_STALE_AFTER_MS = 30 * 60_000;
+const COMPACT_STALE_AFTER_MS = 10 * 60_000;
 const DONE_SIGNAL_MS = 8_000;
 const MAX_RECENT_EVENTS = 80;
 const MAX_SESSION_EVENTS_PER_SESSION = 32;
@@ -399,12 +403,40 @@ const isSessionEventRegistry = (value: unknown): value is SessionEventRegistry =
       ),
   );
 
+const normalizeSessionEventIdentity = (event: AgentHaloEvent): AgentHaloEvent => {
+  if (event.conversationId !== "default") return event;
+  const fallbackConversationId = event.agentId
+    ? `agent:${event.agentId}`
+    : event.cwd
+      ? `workspace:${event.cwd}`
+      : "default";
+  return { ...event, conversationId: fallbackConversationId };
+};
+
+const normalizeSessionEventRegistry = (registry: SessionEventRegistry): SessionEventRegistry => {
+  const normalized: SessionEventRegistry = {};
+  for (const event of Object.values(registry).flat()) {
+    const nextEvent = normalizeSessionEventIdentity(event);
+    if (!nextEvent.conversationId) continue;
+    const existing = normalized[nextEvent.conversationId] ?? [];
+    const byId = new Map(existing.map((item) => [item.id, item]));
+    byId.set(nextEvent.id, nextEvent);
+    normalized[nextEvent.conversationId] = [...byId.values()]
+      .sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp))
+      .slice(0, MAX_SESSION_EVENTS_PER_SESSION);
+  }
+  return normalized;
+};
+
 const readSessionEventRegistry = (): SessionEventRegistry => {
   try {
     const raw = window.localStorage.getItem(SESSION_EVENTS_STORAGE_KEY);
     if (!raw) return {};
     const parsed = JSON.parse(raw);
-    return isSessionEventRegistry(parsed) ? parsed : {};
+    if (!isSessionEventRegistry(parsed)) return {};
+    const normalized = normalizeSessionEventRegistry(parsed);
+    window.localStorage.setItem(SESSION_EVENTS_STORAGE_KEY, JSON.stringify(normalized));
+    return normalized;
   } catch {
     return {};
   }
@@ -564,7 +596,8 @@ const mergeSessionEvents = (current: SessionEventRegistry, incoming: AgentHaloEv
 
   const next: SessionEventRegistry = { ...current };
 
-  for (const event of incoming) {
+  for (const rawEvent of incoming) {
+    const event = normalizeSessionEventIdentity(rawEvent);
     if (!event.conversationId) continue;
     const existing = next[event.conversationId] ?? [];
     const byId = new Map<string, AgentHaloEvent>();
@@ -952,8 +985,27 @@ const getGlyphStatus = (status: IStatusView["status"]): ISessionSummary["status"
   }
 };
 
+const staleAfterMsForEvent = (event: AgentHaloEvent): number => {
+  switch (event.type) {
+    case "llm_start":
+      return LLM_STALE_AFTER_MS;
+    case "tool_start":
+      return TOOL_STALE_AFTER_MS;
+    case "compact_start":
+      return COMPACT_STALE_AFTER_MS;
+    case "turn_start":
+    case "tool_end":
+    case "compact_end":
+    case "llm_end":
+    case "bridge_error":
+      return TRANSITION_STALE_AFTER_MS;
+    default:
+      return STALE_AFTER_MS;
+  }
+};
+
 const getEventSessionStatus = (event: AgentHaloEvent, now: Date = new Date()): ISessionSummary["status"] => {
-  const isInactive = now.getTime() - Date.parse(event.timestamp) > STALE_AFTER_MS;
+  const isInactive = now.getTime() - Date.parse(event.timestamp) > staleAfterMsForEvent(event);
   switch (event.type) {
     case "conversation_close":
     case "turn_stop":
@@ -1312,7 +1364,23 @@ const createDemoScenarioEvents = (scenario: string): AgentHaloEvent[] => {
     ];
   }
 
-  const inactiveTime = Date.now() - STALE_AFTER_MS - 60_000;
+  if (scenario === "long-llm") {
+    const longLlmTimestamp = new Date(Date.now() - 90_000).toISOString();
+    return [
+      { ...base, id: `${base.id}-open`, timestamp: longLlmTimestamp, type: "conversation_open", data: { reason: "startup", previousConversationId: null } },
+      { ...base, id: `${base.id}-llm`, timestamp: new Date(Date.parse(longLlmTimestamp) + 1).toISOString(), type: "llm_start", data: { model: "gpt-5.6-sol", messageCount: 20, contextWindow: 372_000 } },
+    ];
+  }
+
+  if (scenario === "long-tool") {
+    const longToolTimestamp = new Date(Date.now() - 5 * 60_000).toISOString();
+    return [
+      { ...base, id: `${base.id}-open`, timestamp: longToolTimestamp, type: "conversation_open", data: { reason: "startup", previousConversationId: null } },
+      { ...base, id: `${base.id}-tool`, timestamp: new Date(Date.parse(longToolTimestamp) + 1).toISOString(), type: "tool_start", data: { toolCallId: "long-tool", toolName: "TaskOutput", argKeys: ["task_id", "timeout"] } },
+    ];
+  }
+
+  const inactiveTime = Date.now() - LLM_STALE_AFTER_MS - 60_000;
   const inactiveTimestamp = new Date(inactiveTime).toISOString();
   return [
     { ...base, id: `${base.id}-open`, timestamp: inactiveTimestamp, type: "conversation_open", data: { reason: "startup", previousConversationId: null } },
@@ -1971,10 +2039,11 @@ const useAgentHaloPresence = () => {
         if (!disposed) {
           if (payload.capabilities) setCapabilities(normalizeBridgeCapabilities(payload.capabilities));
           if (Array.isArray(payload.recent)) {
-            setPresence(payload.recent.reduce(applyEvent, createInitialPresence()));
-            setRecentEvents(payload.recent.slice(-MAX_RECENT_EVENTS).reverse());
+            const recent = payload.recent.map(normalizeSessionEventIdentity);
+            setPresence(recent.reduce(applyEvent, createInitialPresence()));
+            setRecentEvents(recent.slice(-MAX_RECENT_EVENTS).reverse());
             setSessionEventRegistry((current) => {
-              const next = mergeSessionEvents(current, payload.recent ?? []);
+              const next = mergeSessionEvents(current, recent);
               writeSessionEventRegistry(next);
               return next;
             });
@@ -2014,7 +2083,7 @@ const useAgentHaloPresence = () => {
 
     const handleEvent = (message: MessageEvent<string>) => {
       try {
-        const event = JSON.parse(message.data) as AgentHaloEvent;
+        const event = normalizeSessionEventIdentity(JSON.parse(message.data) as AgentHaloEvent);
         setLastLiveEvent(event);
         setPresence((current) => reducePresence(current, event));
         setRecentEvents((current) => appendRecentEvent(current, event));

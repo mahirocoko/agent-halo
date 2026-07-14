@@ -160,3 +160,76 @@ test("bridge leaves same-cwd hook signals unscoped and keeps unique rapid hook i
     await rm(home, { recursive: true, force: true });
   }
 });
+
+test("bridge normalizes default lanes and safely correlates delayed completion hooks", async () => {
+  const home = await mkdtemp(join(tmpdir(), "agent-halo-detection-"));
+  await mkdir(join(home, ".letta", "mods"), { recursive: true });
+  const probe = createServer();
+  await new Promise((resolve) => probe.listen(0, "127.0.0.1", resolve));
+  const address = probe.address();
+  assert(address && typeof address === "object");
+  const port = address.port;
+  await new Promise((resolve) => probe.close(resolve));
+  await writeFile(join(home, ".letta", "mods", "agent-halo.config.json"), JSON.stringify({ host: "127.0.0.1", port }));
+
+  const modUrl = new URL("../mods/agent-halo.js", import.meta.url).href;
+  const script = `
+    const handlers = new Map();
+    const letta = {
+      capabilities: { events: { lifecycle: true, turns: true, tools: true, compact: true, llm: true } },
+      events: { on(type, handler) { handlers.set(type, handler); return () => handlers.delete(type); } },
+      diagnostics: { report() {} },
+    };
+    const { default: activate } = await import(${JSON.stringify(modUrl)});
+    const dispose = activate(letta);
+    const waitForBridge = async () => {
+      for (let index = 0; index < 50; index += 1) {
+        try { if ((await fetch('http://127.0.0.1:${port}/health')).ok) return; } catch {}
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      throw new Error('bridge did not start');
+    };
+    await waitForBridge();
+    const ctx = (id, cwd = '/tmp/recent', agentId = 'agent-main') => ({ cwd, agent: { id: agentId, name: 'Test' }, conversation: { id }, model: 'gpt-test', permissionMode: 'ask' });
+
+    handlers.get('tool_start')(
+      { agentId: 'agent-fallback', conversationId: 'default', toolCallId: 'fallback-tool', toolName: 'Read', args: {} },
+      ctx('default', '/tmp/fallback', 'agent-fallback'),
+    );
+
+    handlers.get('turn_start')({ agentId: 'agent-main', conversationId: 'conv-a', input: [] }, ctx('conv-a'));
+    handlers.get('llm_end')({ agentId: 'agent-main', conversationId: 'conv-a', model: 'gpt-test', stopReason: 'stop', usage: null, durationMs: 10 }, ctx('conv-a'));
+    await fetch('http://127.0.0.1:${port}/hook/stop', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ hookId: 'recent-complete', workingDirectory: '/tmp/recent', hookEventName: 'Stop' }) });
+
+    for (const id of ['conv-b', 'conv-c']) {
+      handlers.get('turn_start')({ agentId: 'agent-main', conversationId: id, input: [] }, ctx(id, '/tmp/ambiguous'));
+      handlers.get('llm_end')({ agentId: 'agent-main', conversationId: id, model: 'gpt-test', stopReason: 'stop', usage: null, durationMs: 10 }, ctx(id, '/tmp/ambiguous'));
+    }
+    await fetch('http://127.0.0.1:${port}/hook/stop', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ hookId: 'ambiguous-complete', workingDirectory: '/tmp/ambiguous', hookEventName: 'Stop' }) });
+
+    const snapshot = await (await fetch('http://127.0.0.1:${port}/snapshot')).json();
+    const fallback = snapshot.recent.find((event) => event.data?.toolCallId === 'fallback-tool');
+    const completions = snapshot.recent.filter((event) => event.type === 'turn_complete');
+    console.log(JSON.stringify({ fallbackConversationId: fallback?.conversationId, completionIds: completions.map((event) => event.conversationId) }));
+    dispose();
+  `;
+
+  try {
+    const child = spawn(process.execPath, ["--input-type=module", "--eval", script], {
+      cwd: repoRoot,
+      env: { ...process.env, HOME: home },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => { stdout += chunk; });
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    const exitCode = await new Promise((resolve) => child.on("close", resolve));
+    assert.equal(exitCode, 0, stderr);
+    const result = JSON.parse(stdout.trim());
+    assert.equal(result.fallbackConversationId, "agent:agent-fallback");
+    assert.deepEqual(result.completionIds, ["conv-a", null]);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});

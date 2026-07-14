@@ -36,7 +36,7 @@ Letta Code has richer runtime state than Claude/Codex hook-only flows: persisten
 
 ## Planned phases
 
-1. **Bridge** — mod emits normalized local events over SSE and NDJSON.
+1. **Bridge** — mod emits normalized local events over SSE and NDJSON, including stable per-agent identities for Letta's `default` fallback lanes and short-lived completed-scope correlation for delayed hooks.
 2. **Desktop shell** — Tauri or native macOS renderer subscribes to the bridge.
 3. **Presence model** — derive stable per-conversation statuses such as idle, thinking, tool-running, attention, inactive, done, and error.
 4. **Letta-specific surfaces** — memory dirty/synced, subagent/task activity, skill invocation, permission waits when public mod APIs expose them.

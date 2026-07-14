@@ -22,6 +22,7 @@ Events are newline-delimited JSON in `~/.letta/mods/agent-halo.events.ndjson` an
 }
 ```
 
+`conversationId` is normalized before emission. A real scoped conversation id wins. When Letta reports the literal fallback id `default`, Agent Halo uses `agent:<agentId>` (or a workspace fallback only when no agent id exists) so stateless/subagent lanes from different agents and projects never collapse into one global `default` session.
 
 ## Bridge endpoints
 

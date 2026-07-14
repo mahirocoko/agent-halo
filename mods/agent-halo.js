@@ -51,16 +51,28 @@ function modelToString(model) {
   return String(model);
 }
 
+function normalizedConversationId(event, ctx, agentId, cwd) {
+  const eventConversationId = typeof event.conversationId === "string" && event.conversationId.length > 0 ? event.conversationId : null;
+  const contextConversationId = typeof ctx?.conversation?.id === "string" && ctx.conversation.id.length > 0 ? ctx.conversation.id : null;
+  if (eventConversationId && eventConversationId !== "default") return eventConversationId;
+  if (contextConversationId && contextConversationId !== "default") return contextConversationId;
+  if (agentId) return `agent:${agentId}`;
+  if ((eventConversationId === "default" || contextConversationId === "default") && cwd) return `workspace:${cwd}`;
+  return eventConversationId ?? contextConversationId;
+}
+
 function baseEvent(type, event, ctx, data = {}) {
+  const agentId = event.agentId ?? ctx?.agent?.id ?? null;
+  const cwd = ctx?.cwd ?? null;
   return {
     version: PROTOCOL_VERSION,
     id: randomUUID(),
     type,
     timestamp: new Date().toISOString(),
-    agentId: event.agentId ?? ctx?.agent?.id ?? null,
+    agentId,
     agentName: event.agentName ?? ctx?.agent?.name ?? null,
-    conversationId: event.conversationId ?? ctx?.conversation?.id ?? null,
-    cwd: ctx?.cwd ?? null,
+    conversationId: normalizedConversationId(event, ctx, agentId, cwd),
+    cwd,
     model: modelToString(ctx?.model),
     permissionMode: ctx?.permissionMode ?? null,
     data,
@@ -217,6 +229,8 @@ function createBridge(letta, config) {
   const recentLegacySignals = new Map();
   const lastRelaySignalAtByType = new Map();
   const recentCompletionAtByCwd = new Map();
+  const recentCompletedScopesByCwd = new Map();
+  const recentScopeRetentionMs = 15_000;
 
   const cloneScope = (scope) => ({
     agentId: scope.agentId ?? null,
@@ -243,6 +257,29 @@ function createBridge(letta, config) {
     return reason.includes("end") || reason.includes("stop") || reason.includes("done") || reason.includes("complete") || Boolean(payload.data?.error);
   };
 
+  const rememberCompletedScope = (payload) => {
+    if (!payload.cwd || !payload.conversationId) return;
+    const now = Date.now();
+    const cwdScopes = recentCompletedScopesByCwd.get(payload.cwd) ?? new Map();
+    cwdScopes.set(payload.conversationId, { scope: cloneScope(payload), completedAt: now });
+    for (const [conversationId, record] of cwdScopes) {
+      if (now - record.completedAt > recentScopeRetentionMs) cwdScopes.delete(conversationId);
+    }
+    recentCompletedScopesByCwd.set(payload.cwd, cwdScopes);
+  };
+
+  const recentCompletedScopes = (cwd) => {
+    if (!cwd) return [];
+    const now = Date.now();
+    const cwdScopes = recentCompletedScopesByCwd.get(cwd);
+    if (!cwdScopes) return [];
+    for (const [conversationId, record] of cwdScopes) {
+      if (now - record.completedAt > recentScopeRetentionMs) cwdScopes.delete(conversationId);
+    }
+    if (cwdScopes.size === 0) recentCompletedScopesByCwd.delete(cwd);
+    return [...cwdScopes.values()];
+  };
+
   const rememberScope = (payload) => {
     for (const key of Object.keys(lastScope)) {
       if (payload[key] != null) lastScope[key] = payload[key];
@@ -263,6 +300,7 @@ function createBridge(letta, config) {
     }
     if (payload.type === "turn_complete" || payload.type === "turn_stop" || payload.type === "conversation_close" || isTerminalLlmEvent(payload)) {
       if (payload.cwd) recentCompletionAtByCwd.set(payload.cwd, Date.now());
+      rememberCompletedScope(payload);
       removeActiveScope(payload.conversationId);
     }
   };
@@ -282,6 +320,7 @@ function createBridge(letta, config) {
       if (exact) candidates = [exact];
     } else if (requestedCwd) {
       candidates = [...(activeScopesByCwd.get(requestedCwd)?.values() ?? [])];
+      if (candidates.length === 0) candidates = recentCompletedScopes(requestedCwd);
     } else {
       candidates = [...activeScopesByConversation.values()];
     }
