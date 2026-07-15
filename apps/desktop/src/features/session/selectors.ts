@@ -24,6 +24,13 @@ const SESSION_STATUS_PRIORITY: Record<ISessionSummary["status"], number> = {
 const compareActivity = (a: ISessionSummary, b: ISessionSummary) =>
   Date.parse(b.lastActivityAt) - Date.parse(a.lastActivityAt);
 
+export const shouldKeepDisplayAwakeForActivity = (
+  sessions: Pick<ISessionSummary, "status">[],
+  fallbackStatus: ISessionSummary["status"],
+) =>
+  fallbackStatus === "working" ||
+  sessions.some((session) => session.status === "working");
+
 const isInternalWorkspacePath = (path: string | null | undefined) =>
   Boolean(
     path &&

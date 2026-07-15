@@ -27,6 +27,7 @@ import {
   buildSessionDetail,
   buildSessionSummaries,
   buildWorkspaceSessionGroups,
+  shouldKeepDisplayAwakeForActivity,
 } from "./features/session/selectors";
 import type { ActivityKind, DeletedSessionRegistry, DismissedSessionRegistry, ISessionDetail, ISessionSummary, IWorkspaceSessionGroup } from "./features/session/types";
 import { useAgentHaloPresence } from "./features/presence/useAgentHaloPresence";
@@ -52,6 +53,7 @@ const PANEL_MAX_HEIGHT = 440;
 const ACTIVITY_COLLAPSE_MS = 220;
 const HOVER_OPEN_DELAY_MS = 24;
 const HOVER_CLOSE_DELAY_MS = 170;
+const KEEP_AWAKE_RETRY_DELAYS_MS = [750, 2_500] as const;
 const CLOSED_TOP_SHOULDER_RADIUS = 11;
 const OPEN_TOP_SHOULDER_RADIUS = 19;
 const CLOSED_BOTTOM_RADIUS = 15;
@@ -278,6 +280,10 @@ const App = () => {
   })();
   const glyphStatus = getGlyphStatus(activityViewStatus);
   const isWorkingActivity = activityStatus === "working";
+  const hasWorkingActivity = shouldKeepDisplayAwakeForActivity(
+    sessions,
+    fallbackActivityStatus,
+  );
   const hasLiveActivity = isWorkingActivity || activityStatus === "attention" || activityStatus === "done" || activityStatus === "error";
 
   useEffect(() => {
@@ -288,27 +294,44 @@ const App = () => {
     }
 
     let cancelled = false;
-    const requestedActive = keepAwakeEnabled && isWorkingActivity;
-    const request = keepAwakeRequestRef.current
-      .catch(() => undefined)
-      .then(() => invoke<boolean>("set_keep_awake", { active: requestedActive }));
-    keepAwakeRequestRef.current = request;
-    void request
-      .then((active) => {
-        if (cancelled) return;
-        setKeepAwakeActive(active);
-        setKeepAwakeError(null);
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        setKeepAwakeActive(false);
-        setKeepAwakeError(error instanceof Error ? error.message : String(error || "Keep awake unavailable"));
-      });
+    let retryTimer: number | null = null;
+    const requestedActive = keepAwakeEnabled && hasWorkingActivity;
+    const syncNativeState = (attempt: number) => {
+      const request = keepAwakeRequestRef.current
+        .catch(() => undefined)
+        .then(() => invoke<boolean>("set_keep_awake", { active: requestedActive }))
+        .then((active) => {
+          if (active !== requestedActive) {
+            throw new Error("Native keep-awake state did not match the requested state");
+          }
+          return active;
+        });
+      keepAwakeRequestRef.current = request;
+      void request
+        .then((active) => {
+          if (cancelled) return;
+          setKeepAwakeActive(active);
+          setKeepAwakeError(null);
+        })
+        .catch((error) => {
+          if (cancelled) return;
+          const retryDelay = KEEP_AWAKE_RETRY_DELAYS_MS[attempt];
+          if (retryDelay !== undefined) {
+            retryTimer = window.setTimeout(() => syncNativeState(attempt + 1), retryDelay);
+            return;
+          }
+          setKeepAwakeActive(false);
+          setKeepAwakeError(error instanceof Error ? error.message : String(error || "Keep awake unavailable"));
+        });
+    };
+    setKeepAwakeError(null);
+    syncNativeState(0);
 
     return () => {
       cancelled = true;
+      if (retryTimer !== null) window.clearTimeout(retryTimer);
     };
-  }, [canUseNativeControls, isWorkingActivity, keepAwakeEnabled]);
+  }, [canUseNativeControls, hasWorkingActivity, keepAwakeEnabled]);
 
   const pillDetail = (() => {
     if (activitySession?.status === "working") return activitySession.detail === "thinking" ? "Thinking" : activitySession.detail;
