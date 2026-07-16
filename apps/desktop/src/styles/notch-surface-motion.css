@@ -145,8 +145,8 @@
 }
 
 .activity-mascot {
-  width: 32px;
-  height: 24px;
+  width: 52px;
+  height: 30px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -157,8 +157,8 @@
 
 .session-mascot {
   position: relative;
-  width: 40px;
-  height: 30px;
+  width: 60px;
+  height: 36px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -166,31 +166,54 @@
   flex: none;
 }
 
-/* Halo Soft Cube runtime candidate. */
-.halo-soft-cube {
-  --halo-pet-hue: 0deg;
-  --halo-pet-saturation: 1;
-  --halo-pet-brightness: 1;
+/* Human-approved Scorpion roster integration candidate. */
+.halo-mascot {
+  --halo-mascot-hue: 0deg;
+  --halo-mascot-saturation: 1;
+  --halo-mascot-brightness: 1;
+  --halo-mascot-frame-width: 48px;
+  --halo-mascot-frame-height: 36px;
+  --halo-mascot-three-frame-width: 144px;
+  --halo-mascot-done-width: 192px;
+  --halo-mascot-frame-1-x: -48px;
+  --halo-mascot-frame-2-x: -96px;
+  --halo-mascot-frame-3-x: -144px;
+  --halo-mascot-signal-left: 48px;
+  --halo-mascot-signal-top: 12px;
   position: relative;
-  width: 32px;
-  height: 24px;
+  width: 60px;
+  height: 36px;
   display: inline-block;
   flex: none;
   filter:
     drop-shadow(0 0 2px rgba(85, 199, 232, 0.32))
-    hue-rotate(var(--halo-pet-hue))
-    saturate(var(--halo-pet-saturation))
-    brightness(var(--halo-pet-brightness));
+    hue-rotate(var(--halo-mascot-hue))
+    saturate(var(--halo-mascot-saturation))
+    brightness(var(--halo-mascot-brightness));
   image-rendering: pixelated;
 }
 
-.session-mascot.halo-soft-cube {
-  width: 32px;
-  height: 24px;
+.activity-mascot.halo-mascot {
+  --halo-mascot-frame-width: 40px;
+  --halo-mascot-frame-height: 30px;
+  --halo-mascot-three-frame-width: 120px;
+  --halo-mascot-done-width: 160px;
+  --halo-mascot-frame-1-x: -40px;
+  --halo-mascot-frame-2-x: -80px;
+  --halo-mascot-frame-3-x: -120px;
+  --halo-mascot-signal-left: 40px;
+  --halo-mascot-signal-top: 9px;
+  width: 52px;
+  height: 30px;
 }
 
-.halo-soft-cube-body,
-.halo-soft-cube-signal {
+.session-mascot.halo-mascot {
+  width: 60px;
+  height: 36px;
+}
+
+.halo-mascot-body,
+.halo-mascot-signal {
   position: absolute;
   display: block;
   background-repeat: no-repeat;
@@ -199,137 +222,182 @@
   pointer-events: none;
 }
 
-.halo-soft-cube-body {
-  inset: 0;
-  background-image: var(--halo-pet-body);
-  background-size: 64px 24px;
+.halo-mascot-body {
+  top: 0;
+  left: 0;
+  width: var(--halo-mascot-frame-width);
+  height: var(--halo-mascot-frame-height);
+  background-image: var(--halo-mascot-body);
 }
 
-.halo-soft-cube-signal {
-  top: 6px;
-  left: 26px;
+.halo-mascot-signal {
+  top: var(--halo-mascot-signal-top);
+  left: var(--halo-mascot-signal-left);
   width: 12px;
   height: 12px;
-  background-image: var(--halo-pet-signal);
+  background-image: var(--halo-mascot-signal);
   background-size: 24px 12px;
 }
 
-.halo-soft-cube[data-palette="1"] {
-  --halo-pet-hue: 48deg;
+.halo-mascot[data-status="idle"] {
+  --halo-mascot-saturation: 0.58;
+  --halo-mascot-brightness: 0.92;
 }
 
-.halo-soft-cube[data-palette="2"] {
-  --halo-pet-hue: 105deg;
-}
-
-.halo-soft-cube[data-palette="3"] {
-  --halo-pet-hue: 165deg;
-}
-
-.halo-soft-cube[data-palette="4"] {
-  --halo-pet-hue: 225deg;
-}
-
-.halo-soft-cube[data-palette="5"] {
-  --halo-pet-hue: 285deg;
-}
-
-.halo-soft-cube[data-status="idle"] {
-  --halo-pet-saturation: 0.58;
-  --halo-pet-brightness: 0.92;
-}
-
-.halo-soft-cube[data-status="inactive"] {
-  --halo-pet-saturation: 0;
-  --halo-pet-brightness: 0.7;
+.halo-mascot[data-status="inactive"] {
+  --halo-mascot-saturation: 0;
+  --halo-mascot-brightness: 0.7;
   filter: saturate(0) brightness(0.7);
 }
 
-.halo-soft-cube[data-status="attention"] {
-  --halo-pet-hue: 198deg;
-  --halo-pet-saturation: 1.18;
-  --halo-pet-brightness: 1.04;
+.halo-mascot[data-status="attention"] {
+  --halo-mascot-hue: 198deg;
+  --halo-mascot-saturation: 1.18;
+  --halo-mascot-brightness: 1.04;
 }
 
-.halo-soft-cube[data-status="done"] {
-  --halo-pet-hue: 300deg;
-  --halo-pet-saturation: 0.95;
-  --halo-pet-brightness: 0.95;
+.halo-mascot[data-status="done"] {
+  --halo-mascot-hue: 300deg;
+  --halo-mascot-saturation: 0.95;
+  --halo-mascot-brightness: 0.95;
 }
 
-.halo-soft-cube[data-status="error"] {
-  --halo-pet-hue: 165deg;
-  --halo-pet-saturation: 1.18;
-  --halo-pet-brightness: 1;
+.halo-mascot[data-status="error"] {
+  --halo-mascot-hue: 165deg;
+  --halo-mascot-saturation: 1.18;
+  --halo-mascot-brightness: 1;
 }
 
-.halo-soft-cube[data-state="idle"] .halo-soft-cube-body {
-  animation: halo-soft-cube-body-loop 1s steps(2) infinite;
+.halo-mascot[data-state="idle"] .halo-mascot-body,
+.halo-mascot[data-state="working"] .halo-mascot-body {
+  background-size: var(--halo-mascot-three-frame-width) var(--halo-mascot-frame-height);
 }
 
-.halo-soft-cube[data-state="working"] .halo-soft-cube-body {
-  animation: halo-soft-cube-body-loop 0.64s steps(2) infinite;
+.halo-mascot[data-state="idle"] .halo-mascot-body {
+  animation: halo-mascot-three-frame-loop 0.9s step-end infinite;
 }
 
-.halo-soft-cube[data-state="attention"] .halo-soft-cube-body {
-  animation: halo-soft-cube-body-loop 0.76s steps(2) infinite;
+.halo-mascot[data-state="working"] .halo-mascot-body {
+  animation: halo-mascot-three-frame-loop 0.45s step-end infinite;
 }
 
-.halo-soft-cube[data-state="done"] .halo-soft-cube-body {
-  animation: halo-soft-cube-body-settle 0.5s steps(1, end) 1 forwards;
+.halo-mascot[data-state="attention"] .halo-mascot-body,
+.halo-mascot[data-state="error"] .halo-mascot-body {
+  background-size: var(--halo-mascot-three-frame-width) var(--halo-mascot-frame-height);
 }
 
-.halo-soft-cube[data-state="error"] .halo-soft-cube-body {
-  animation: halo-soft-cube-body-loop 0.6s steps(2) infinite;
+.halo-mascot[data-state="attention"] .halo-mascot-body {
+  animation: halo-mascot-attention 0.7s step-end infinite;
 }
 
-.halo-soft-cube[data-signal]:not([data-signal="none"]):not([data-signal="done"]) .halo-soft-cube-signal {
-  animation: halo-soft-cube-signal-loop var(--halo-signal-duration, 0.72s) steps(2) infinite;
+.halo-mascot[data-state="error"] .halo-mascot-body {
+  animation: halo-mascot-error 0.63s step-end infinite;
 }
 
-.halo-soft-cube[data-signal="thinking-model"],
-.halo-soft-cube[data-signal="memory"],
-.halo-soft-cube[data-signal="visual"] {
+.halo-mascot[data-state="done"] .halo-mascot-body {
+  background-size: var(--halo-mascot-done-width) var(--halo-mascot-frame-height);
+  animation: halo-mascot-done 1.7s step-end 1 forwards;
+}
+
+.halo-mascot[data-signal]:not([data-signal="none"]):not([data-signal="done"]) .halo-mascot-signal {
+  animation: halo-mascot-signal-loop var(--halo-signal-duration, 0.72s) steps(2) infinite;
+}
+
+.halo-mascot[data-signal="thinking-model"],
+.halo-mascot[data-signal="memory"],
+.halo-mascot[data-signal="visual"] {
   --halo-signal-duration: 0.9s;
 }
 
-.halo-soft-cube[data-signal="planning-goal"],
-.halo-soft-cube[data-signal="delegating"] {
+.halo-mascot[data-signal="planning-goal"],
+.halo-mascot[data-signal="delegating"] {
   --halo-signal-duration: 0.8s;
 }
 
-.halo-soft-cube[data-signal="error"] {
+.halo-mascot[data-signal="error"] {
   --halo-signal-duration: 0.52s;
 }
 
-.halo-soft-cube[data-signal="done"] .halo-soft-cube-signal {
-  animation: halo-soft-cube-signal-settle 0.35s steps(1, end) 1 forwards;
+.halo-mascot[data-signal="done"] .halo-mascot-signal {
+  animation: halo-mascot-signal-settle 0.35s steps(1, end) 1 forwards;
 }
 
-.halo-soft-cube[data-status="inactive"] .halo-soft-cube-body,
-.halo-soft-cube[data-status="inactive"] .halo-soft-cube-signal {
+.halo-mascot[data-status="inactive"] .halo-mascot-body,
+.halo-mascot[data-status="inactive"] .halo-mascot-signal {
   animation: none;
 }
 
-@keyframes halo-soft-cube-body-loop {
-  to {
-    background-position-x: -64px;
+@keyframes halo-mascot-three-frame-loop {
+  0%,
+  33.32% {
+    background-position-x: 0;
+  }
+  33.33%,
+  66.65% {
+    background-position-x: var(--halo-mascot-frame-1-x);
+  }
+  66.66%,
+  100% {
+    background-position-x: var(--halo-mascot-frame-2-x);
   }
 }
 
-@keyframes halo-soft-cube-body-settle {
-  to {
-    background-position-x: -32px;
+@keyframes halo-mascot-done {
+  0%,
+  11.76% {
+    background-position-x: 0;
+  }
+  11.77%,
+  29.41% {
+    background-position-x: var(--halo-mascot-frame-1-x);
+  }
+  29.42%,
+  41.17% {
+    background-position-x: var(--halo-mascot-frame-2-x);
+  }
+  41.18%,
+  100% {
+    background-position-x: var(--halo-mascot-frame-3-x);
   }
 }
 
-@keyframes halo-soft-cube-signal-loop {
+@keyframes halo-mascot-attention {
+  0%,
+  37.14% {
+    background-position-x: 0;
+  }
+  37.15%,
+  62.85% {
+    background-position-x: var(--halo-mascot-frame-1-x);
+  }
+  62.86%,
+  100% {
+    background-position-x: var(--halo-mascot-frame-2-x);
+  }
+}
+
+@keyframes halo-mascot-error {
+  0%,
+  34.92% {
+    background-position-x: 0;
+  }
+  34.93%,
+  58.73% {
+    background-position-x: var(--halo-mascot-frame-1-x);
+  }
+  58.74%,
+  100% {
+    background-position-x: var(--halo-mascot-frame-2-x);
+  }
+}
+
+@keyframes halo-mascot-signal-loop {
   to {
     background-position-x: -24px;
   }
 }
 
-@keyframes halo-soft-cube-signal-settle {
+@keyframes halo-mascot-signal-settle {
   to {
     background-position-x: -12px;
   }
@@ -340,8 +408,8 @@
   .glyph-attention,
   .glyph-check,
   .glyph-pulse,
-  .halo-soft-cube-body,
-  .halo-soft-cube-signal,
+  .halo-mascot-body,
+  .halo-mascot-signal,
   .halo-surface,
   .notch-wing,
   .notch-wrap,
@@ -354,5 +422,13 @@
     animation: none !important;
     transition: none !important;
     transform: none !important;
+  }
+
+  .halo-mascot[data-state="done"] .halo-mascot-body {
+    background-position-x: var(--halo-mascot-frame-3-x);
+  }
+
+  .halo-mascot[data-signal="done"] .halo-mascot-signal {
+    background-position-x: -12px;
   }
 }

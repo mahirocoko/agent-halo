@@ -1,0 +1,259 @@
+{
+  "name": "Agent Halo Project Mascot Roster",
+  "version": 2,
+  "status": "production-approved",
+  "humanApproved": true,
+  "productionApproved": true,
+  "mainMascot": "scorpion",
+  "roster": [
+    "pot",
+    "crawler",
+    "bat",
+    "jelly",
+    "cat",
+    "crt",
+    "cactus",
+    "nautilus",
+    "turtle",
+    "lantern",
+    "kettle",
+    "dragonfly",
+    "giraffe",
+    "scorpion",
+    "squid"
+  ],
+  "assignment": {
+    "status": "deterministic-active",
+    "strategy": "Unsigned JavaScript 31x string hash of workspace/project identity modulo roster length",
+    "key": "workspacePath, then project/session fallback",
+    "fallback": "scorpion",
+    "colorRandomization": false
+  },
+  "body": {
+    "frame": {
+      "source": [
+        24,
+        18
+      ],
+      "sessionDisplay": [
+        48,
+        36
+      ],
+      "ambientDisplay": [
+        40,
+        30
+      ],
+      "anchor": [
+        12,
+        16
+      ],
+      "baselineY": 16,
+      "background": "transparent"
+    },
+    "sharedStateContract": {
+      "idle": {
+        "frames": 3,
+        "stripSize": [
+          72,
+          18
+        ],
+        "durationMs": 900,
+        "playback": "loop"
+      },
+      "working": {
+        "frames": 3,
+        "stripSize": [
+          72,
+          18
+        ],
+        "durationMs": 450,
+        "playback": "loop"
+      },
+      "attention": {
+        "frames": 3,
+        "stripSize": [
+          72,
+          18
+        ],
+        "frameDurationMs": [
+          260,
+          180,
+          260
+        ],
+        "durationMs": 700,
+        "playback": "loop"
+      },
+      "done": {
+        "frames": 4,
+        "stripSize": [
+          96,
+          18
+        ],
+        "durationMs": 1700,
+        "playback": "play-once-hold-final"
+      },
+      "error": {
+        "frames": 3,
+        "stripSize": [
+          72,
+          18
+        ],
+        "frameDurationMs": [
+          220,
+          150,
+          260
+        ],
+        "durationMs": 630,
+        "playback": "loop"
+      }
+    }
+  },
+  "signal": {
+    "status": "production-approved-shared",
+    "source": "Human-approved Candidate C semantic signal grids",
+    "frameSize": [
+      12,
+      12
+    ],
+    "stripSize": [
+      24,
+      12
+    ],
+    "sessionDisplayOrigin": [
+      48,
+      12
+    ],
+    "ambientDisplayOrigin": [
+      40,
+      9
+    ],
+    "framesPerSignal": 2,
+    "idleIncluded": false,
+    "semanticModel": "Independent grouped action/status signal; mascot body affect remains separate."
+  },
+  "colorStrategy": "One shared cyan base palette. No project/mascot hue randomization; only truthful state filters may alter color.",
+  "palette": {
+    "base": [
+      "#E6FAFF",
+      "#AEEBFA",
+      "#55C7E8",
+      "#2684AA",
+      "#123F5A",
+      "#021220"
+    ]
+  },
+  "provenance": {
+    "selectedBy": "Mahiro",
+    "selectedMain": "scorpion",
+    "humanDecisionSha256": "bca53dae9936f40ce49b27f37f338312df16a7afa9a34b64143480d6fef386ce",
+    "acceptedVisualSource": "finalists-15-motion-audition-v1",
+    "acceptedStates": [
+      "idle",
+      "working",
+      "done"
+    ],
+    "attentionErrorSource": "finalists-15-state-proof-v1",
+    "selectionEvidence": "Mahiro reviewed repaired animated previews, retained all fifteen finalists, selected Scorpion as main, and later requested deterministic random project assignment without random colors.",
+    "redesignPolicy": "Freeze accepted audition appearances and motion. Gemini v1/v2 redraws and partial imagegen A/B are non-selected experiments.",
+    "signalEvidence": "Existing Candidate C semantic signal family was already human-approved and remains visually unchanged.",
+    "nativeApproval": {
+      "approvedBy": "Mahiro",
+      "approvedAt": "2026-07-16",
+      "evidence": "Foreground passed after ambient body delivery was corrected to 40x30 inside a 52x30 wrapper, all fifteen mascots were assigned deterministically by project, and random project colors were removed."
+    },
+    "attentionErrorMotion": {
+      "approvedBy": "Mahiro",
+      "approvedAt": "2026-07-16",
+      "source": "roster-attention-error-motion-v1",
+      "sourceProductionManifestSha256": "44e678f42170d9688af8848daa40b3823a3db82ff434f3007407c352a572a118",
+      "evidence": "Mahiro reviewed the 15-identity Attention/Error animation gallery and responded \u0e1c\u0e48\u0e32\u0e19\u0e19\u0e30."
+    }
+  },
+  "files": {
+    "body/bat/attention.png": "a0ad12799723f4893db93cda09ea359539d37cab8ebf54b5d60e32376b0f3f59",
+    "body/bat/done.png": "1bb9f8652c6b45e80b858cb656e0067b5ad0e2008e9793772c367526e7f65f5a",
+    "body/bat/error.png": "2ba65bb5cde2924dafadf659cbe8f40a76b72cd6f1d1de9a416bb015de4ec728",
+    "body/bat/idle.png": "591fb999924a355ec3f0c877d993c4d6c3311a134f5ca04fbc077c4de7d6b369",
+    "body/bat/working.png": "57ba9456663cf18d8b9fa1364629b69347b4327feb59e1c4f8dfcf7c75fc3739",
+    "body/cactus/attention.png": "9eb6224b16b36f462e1fac40e77bbe497551a97f1fecadb97ebf0ad98d6a108c",
+    "body/cactus/done.png": "35f079d78ab9049fb9cb76182be36470ff6d9669c1ac7ef05b0c188cb8846e02",
+    "body/cactus/error.png": "e40eec935d67ee5b798f0220a066b2e8f5551134fede7755f9ef35f24174c87c",
+    "body/cactus/idle.png": "4f62beb8564910eead1dccd52f34daadbd28539cec074250d6c59d592a2692d4",
+    "body/cactus/working.png": "0a5180d71a74d9771e14a8e3fe27b66849e36913760469c1343f8247bc839a83",
+    "body/cat/attention.png": "dba63936f9f12a6cbe2ff18a0244c433c99d65357475aaed6af61af606af960e",
+    "body/cat/done.png": "0dd045e76df185eb86930708a5381ccc6e3ac510b6def7d7eaa2f4f9ebe5139e",
+    "body/cat/error.png": "4aebfbfa1b224d236f398015efa588ab08bc9bd98ae6dd1906efe06277ce5717",
+    "body/cat/idle.png": "74c611101da492d5f887340c6d7fbe1e1df664197b0077c7088151c5b2495915",
+    "body/cat/working.png": "0c0600b98b734ca0ddd33e50a00bbd8367a700673e227aeb34c98bcb6bdc0394",
+    "body/crawler/attention.png": "ff908c73a01db5939456e0c9c36d94f2a25d611948cc3de820b70bb11b9ff654",
+    "body/crawler/done.png": "9767cfe3dffa8d8f7cb4982c79a134cd68877d0f790422adda15b2203a8dc1d6",
+    "body/crawler/error.png": "200d511cd77f527ae811131b41008ac8c8885ee7430c3d7a33601f88e0d0026d",
+    "body/crawler/idle.png": "7b54331ddee6a0848ecd49406b1a3c8415a4a11bb619a4aabd8b8b450c5e6d04",
+    "body/crawler/working.png": "a6ae4faa3a39b2088691e8ff9f2b410763bb88ab26df3de0533e6d4668f0db24",
+    "body/crt/attention.png": "3d8fc053df2fd86ad387ccef82e2b87b953d6ba7266c5dbd627d4dd1be9ccf93",
+    "body/crt/done.png": "0e6c0a59057d401a585fabb66e7bf679d8861c25266ff456a1a8e0132afa0d7f",
+    "body/crt/error.png": "df33ba770fc870ba7c587c7b1c57489688d6b00f89c1b2462caf8efb3a328bd9",
+    "body/crt/idle.png": "97a4c93f4568f9f31214036974f3458ff0ef4e240e54c85b3a38922d6a53c2fd",
+    "body/crt/working.png": "31046c11c0947840ad91d580771bcf3ad181d8208f4c59d41e1d7c57e7cf14f9",
+    "body/dragonfly/attention.png": "6ce43bca8e4fdc8436e5641d5d64c9285ed17775dad538672356091e4f2fd177",
+    "body/dragonfly/done.png": "b01194a2ca8130fa83b56e4937c1505737359e859555b03bee2ab1de7c7cceb1",
+    "body/dragonfly/error.png": "ec4c27ac3ba6e5a3b4c919cc1c2bb72c6b3f026459a9c3e92e47b2b2dc460a7e",
+    "body/dragonfly/idle.png": "5683d1484a4d13cc017069063ec6a387eb09c674f63d0614ea9d4caa8762bdda",
+    "body/dragonfly/working.png": "35399a77f141dd53b017bbe79d18a2d03f0d631f5315637153d57ec6272d6406",
+    "body/giraffe/attention.png": "b071c7a518fbfb6485c4c98462abb38f7ef5c9aa712f809a35f94668aa85c8f8",
+    "body/giraffe/done.png": "7712015691a9bce5cfb62cb597d1fc730e85ef4d1eca8b544957945d9a3616e2",
+    "body/giraffe/error.png": "9a339b297076c1019ee67763da480f4aa9ddde8314e725e0446250e96394538c",
+    "body/giraffe/idle.png": "3b83a0c8cad25b81f142071b4dad39c23097ccfce5d4cc4ddb0cef8629a69676",
+    "body/giraffe/working.png": "26a77caba4ad2a95704187698979021d31371e231b083cc0f5f3a51f2ad8c45d",
+    "body/jelly/attention.png": "64d467666dd1cc621a590310f673b42e60529b1daa2f8bc6389d72a12a58dc00",
+    "body/jelly/done.png": "eea3af18657288a8560df1ed64cb66f1f1b41d50b7bc6e23c7ac5b0cd46e91a1",
+    "body/jelly/error.png": "b60005bd580819b3eea8213f68fb2191f8582cd197f0c92ff272dd467d525d47",
+    "body/jelly/idle.png": "a7f048b34f8bcd722550db3c2429ac5ec4d04378a3f2710b13b0e15772225cc0",
+    "body/jelly/working.png": "9ed2c35a575bf43d4ef7452dd5c792d3c0b12992a3fb19c7276679db03edd83a",
+    "body/kettle/attention.png": "d9e7e5be9c17f3827f65394dafe85e6f1726e2b1d33d3bc91ba9301edfc8a421",
+    "body/kettle/done.png": "f6a0132a869a538c13522cab269d332ea0d0f2270934ee3a58deccb4ed359b19",
+    "body/kettle/error.png": "b3b5726de82f11a36e5a7b69381409b81f5abb8ab560549b88491a27e46a213b",
+    "body/kettle/idle.png": "74422e91c54684157277b9e44a8bc21fe7e445b400e6d1be5a45c448cf0062c3",
+    "body/kettle/working.png": "e5e595e18d46764f2bf3edf073d729f17a9fc7879e490b40bf7f7b50f98f0a41",
+    "body/lantern/attention.png": "1615cdaafc47f2d8ab63b3f4bce04bd82c3d2c1457ba6c960cbc83c322920533",
+    "body/lantern/done.png": "6aeddf5c9f5c78cca977cff85f4680480ff9dc633e241f0e68ee9bc1ae89827a",
+    "body/lantern/error.png": "157168feb2ee8e1cbb00de6d615ed94119b0a4a0ac0eef525f5d8ee0fa585f01",
+    "body/lantern/idle.png": "96f218c682a76df4cf3f26f1f724e3639e87f368bcd48ac86683de2fbf2c9a69",
+    "body/lantern/working.png": "ced216df210de9619526e8265cd481239eb04015aa7732d06e64442688276c76",
+    "body/nautilus/attention.png": "931ea879ff93407b9bff5773c4eb70a944978e0259e8996956c12c563d9cf1aa",
+    "body/nautilus/done.png": "6eada46ed417ca9617be1aa4c68184b619e7482cd2e58dfff8c75fad5a03953d",
+    "body/nautilus/error.png": "942b8754e9bd446256f7c1251fe7b70c04d0ef84d02458990256d5e8cd749c04",
+    "body/nautilus/idle.png": "74b30e4188e9ad93946029f0d0f5f5617a18cbd411cf24991c2ec5b5cd511cdd",
+    "body/nautilus/working.png": "1962c97066b9b31135cf63c4436560f517027f950266aa4c6b34635a437df072",
+    "body/pot/attention.png": "66da2406b700e52f8b735f97f394f0ccd94a3208dc8915a20945a200dc5dc41e",
+    "body/pot/done.png": "7ae09ea184bfe01d53b00faf3754b66ac99dffa538fa7e3f0466d64d167c5894",
+    "body/pot/error.png": "95d9f5a63fad844a9532f5b8ca273ff1078dd5c359f12c2c18ac8bc37dd94c48",
+    "body/pot/idle.png": "38f1cb4c85bd46467479866836279a43bec4adfe2b4df85f993558c41ae3371c",
+    "body/pot/working.png": "5180f2e1b008eeacb339d4f2dc69266dc2b5126975c7e7fe81d376de150c1447",
+    "body/scorpion/attention.png": "4c14608d87dcac08a1253ce779b0ce5855e8e227bbc86f2b18c50b9e6a0ad445",
+    "body/scorpion/done.png": "ceb83dc795eb127a23f6e2ed96d255d7c53f1cb5ed979ffbfb4d65219f153e95",
+    "body/scorpion/error.png": "32630707c363aafcec6955958eb08b53997e66777ab678ee28ccda069b533298",
+    "body/scorpion/idle.png": "d1555b931f927642c315de0b4638228c5166cc24fcb459b51e99fc6f6d691097",
+    "body/scorpion/working.png": "818809fd19a4056c3205bd3ba400a750285ea81afeb5be3f7119b0c407e6b9eb",
+    "body/squid/attention.png": "7ecf81044932edce15cddf3c666726d59ac61824e3926bdac29ac950a04f7ba8",
+    "body/squid/done.png": "8245995a7c84cac997b656936a74a02d721ffcfc3e27cf2b5ebc8f5773b13674",
+    "body/squid/error.png": "abe85a7e47cadf60717caf08e071313e70dd47cac0c27fff77551c43743d04c1",
+    "body/squid/idle.png": "208910abb58fb1eb3fce28a4b2f2191cb0c31aa62320806d37f76c39e676fb61",
+    "body/squid/working.png": "9094e91b6c6b5f62d30bf56b5bc140e548f7615bdd863ffad6063a384bfbdd63",
+    "body/turtle/attention.png": "c02b2451559063e436b67cad7bf92cd35ca0cbf0e2bd520b921844dc1f396dcd",
+    "body/turtle/done.png": "7a6b3626ffb900a05d1b1eb0047d5ef61b672c2733e8ccaf92be98be078d479a",
+    "body/turtle/error.png": "9e415254295b3c93d744c259a08ac6e8092618407c56c860dad1949ca9869f42",
+    "body/turtle/idle.png": "bb5da656d148e1ec17d26a3172786feaf33f944f777ec654bb760d742790ff20",
+    "body/turtle/working.png": "07da8c09ad5531fb3120499e2c3727b77ecf2737818009449a9a650780d90994",
+    "signals/attention-asking.png": "f5ed429b2db8f32f0e3045727faf017b115d4e9d8c04e3696a7c1e8fb7f87e27",
+    "signals/delegating.png": "361f9ec6180101ac187022d7288b297c838f5f67070bb18d9c695e2ccbf615fa",
+    "signals/done.png": "b076d1f7ab2875e6ae2b1b4863337823c27705290154e73d1e7c12c28c1560bc",
+    "signals/editing.png": "b4512efb3054bc6e8449781a2fe2d412b1fcd70ecc6f7100b4d595cd247d2f9b",
+    "signals/error.png": "f6c46b287e21ef4181b8453ab63afed8047c63d05450a14b92f58c30e44ddf0f",
+    "signals/memory.png": "574ceeb4facf82d08f1b8ccac22af22896e05309eeee99f96ed813a3abf10001",
+    "signals/planning-goal.png": "6d8c11529e81cd0bc5f6ee9b1443ee6bbfc629b7982559e62beaff95ccbeffc0",
+    "signals/shell-tool-skill.png": "1d48db0e972d4604b015f7174b8181e871614147336aa51c2eab92cdc29113dc",
+    "signals/thinking-model.png": "60406ddb83c661c14aa0cc6d0d262d0997021499e713b917a27715314c81c562",
+    "signals/visual.png": "3d0ee756e426a2370406f3ea417ec986f2dee516fe8f42da04da52cb7f654769"
+  }
+}

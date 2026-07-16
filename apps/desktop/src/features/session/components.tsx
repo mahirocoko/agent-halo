@@ -1,6 +1,6 @@
 import { ChevronDown, ChevronRight, Focus, X } from "lucide-react";
 import { formatRelativeAge, formatTime, shortModelName } from "./activity";
-import { SessionMascot } from "./HaloSoftCube";
+import { SessionMascot } from "./HaloMascot";
 import type { ISessionDetail, ISessionSummary, IWorkspaceSessionGroup } from "./types";
 
 export const StatusGlyph = ({ status }: { status: ISessionSummary["status"] }) => {
@@ -26,7 +26,7 @@ export const SessionContextSummary = ({ session }: { session: ISessionDetail }) 
   })();
   return (
     <section className="session-context-summary" data-status={session.status} aria-labelledby="session-context-title" data-panel-focus-target tabIndex={-1}>
-      <SessionMascot activityKind={session.activityKind} sessionId={session.conversationId} status={session.status} />
+      <SessionMascot activityKind={session.activityKind} identityKey={session.workspacePath ?? session.project} sessionId={session.conversationId} status={session.status} />
       <span className="session-context-copy"><span className="session-context-eyebrow">{copy.eyebrow}</span><span className="session-context-title" id="session-context-title">{copy.title}</span><span className="session-context-detail">{copy.detail}</span></span>
       <span className="session-context-meta"><span className="session-model">{shortModelName(session.model)}</span><span className="session-age" title={formatTime(session.lastActivityAt)}>{formatRelativeAge(session.lastActivityAt)}</span></span>
     </section>
@@ -37,7 +37,7 @@ export interface ISessionListRowProps { child?: boolean; onClear: (id: string) =
 export const SessionListRow = ({ child = false, onClear, onFocus, onOpen, session }: ISessionListRowProps) => (
   <li className={`session-row ${child ? "session-child-row" : ""} ${session.status === "done" ? "ended" : ""}`} data-status={session.status}>
     <button className="session-row-main" type="button" onClick={() => onOpen(session.conversationId)} data-session-id={session.conversationId} data-tauri-drag-region="false" aria-label={`Open ${session.project} session details`}>
-      {child ? <StatusGlyph status={session.status} /> : <SessionMascot activityKind={session.activityKind} sessionId={session.conversationId} status={session.status} />}
+      {child ? <StatusGlyph status={session.status} /> : <SessionMascot activityKind={session.activityKind} identityKey={session.workspacePath ?? session.project} sessionId={session.conversationId} status={session.status} />}
       <span className="session-label"><span className="session-title-line"><span className="session-project">{child ? shortSessionId(session.conversationId) : session.project}</span><span className={`session-inline-status status-text-${session.status}`}>{statusLabel(session.status)}</span></span><span className="session-activity">{session.detail}</span><span className="session-folder">{child ? session.project : session.workspace}</span></span>
       <span className="session-row-metadata" title={formatTime(session.lastActivityAt)}><span className="session-model">{shortModelName(session.model)}</span><span className="session-age">{formatRelativeAge(session.lastActivityAt)}</span></span>
     </button>
@@ -51,7 +51,7 @@ export const WorkspaceSessionGroupItem = ({ expanded, group, groupKey, onClear, 
   return (
     <li className="session-group-block" data-status={group.status}><div className="session-row session-group" data-status={group.status}>
       <button className="session-row-main session-group-main" type="button" onClick={() => onToggle(groupKey)} data-tauri-drag-region="false" aria-expanded={expanded} aria-label={`${expanded ? "Collapse" : "Expand"} ${group.project}, ${group.sessions.length} sessions`}>
-        <span className="session-disclosure" aria-hidden="true">{expanded ? <ChevronDown size={12} strokeWidth={2.4} /> : <ChevronRight size={12} strokeWidth={2.4} />}</span><SessionMascot activityKind={group.activityKind} sessionId={group.primarySession.conversationId} status={group.status} />
+        <span className="session-disclosure" aria-hidden="true">{expanded ? <ChevronDown size={12} strokeWidth={2.4} /> : <ChevronRight size={12} strokeWidth={2.4} />}</span><SessionMascot activityKind={group.activityKind} identityKey={group.workspacePath ?? group.key} sessionId={group.primarySession.conversationId} status={group.status} />
         <span className="session-label"><span className="session-title-line"><span className="session-project">{group.project}</span><span className="session-group-count">×{group.sessions.length}</span><span className={`session-inline-status status-text-${group.status}`}>{statusLabel(group.status)}</span></span><span className="session-activity">{group.detail}</span><span className="session-folder">{group.workspace}</span></span>
         <span className="session-row-metadata" title={formatTime(group.lastActivityAt)}><span className="session-model">{shortModelName(group.primarySession.model)}</span><span className="session-age">{formatRelativeAge(group.lastActivityAt)}</span></span>
       </button>

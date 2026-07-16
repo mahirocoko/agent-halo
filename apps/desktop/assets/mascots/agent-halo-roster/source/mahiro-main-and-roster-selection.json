@@ -1,0 +1,24 @@
+{
+  "status": "human-main-and-roster-selection",
+  "createdAt": "2026-07-16T03:45:10.820Z",
+  "main": "scorpion",
+  "roster": [
+    "pot",
+    "crawler",
+    "bat",
+    "jelly",
+    "cat",
+    "crt",
+    "cactus",
+    "nautilus",
+    "turtle",
+    "lantern",
+    "kettle",
+    "dragonfly",
+    "giraffe",
+    "scorpion",
+    "squid"
+  ],
+  "removed": [],
+  "source": "finalists-15-motion-audition-v1"
+}

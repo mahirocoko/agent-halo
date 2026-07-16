@@ -190,13 +190,13 @@ Design references and parity notes live in [`docs/notchcode-parity.md`](docs/not
 Runtime mascot strips live in:
 
 ```text
-apps/desktop/public/mascots/halo-soft-cube/
+apps/desktop/public/mascots/agent-halo-roster/
 ```
 
 Selected source masters, palette provenance, and QA evidence live in:
 
 ```text
-apps/desktop/assets/mascots/halo-soft-cube/
+apps/desktop/assets/mascots/agent-halo-roster/
 ```
 
 ## Privacy and local data

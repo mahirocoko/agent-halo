@@ -3,7 +3,7 @@ import { BarChart3, Check, ChevronLeft, Focus, List, Settings, Trash2, X } from 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createRoot } from "react-dom/client";
 import type { AgentHaloPresenceStatus } from "@agent-halo/protocol";
-import { ActivityMascot } from "./features/session/HaloSoftCube";
+import { ActivityMascot } from "./features/session/HaloMascot";
 import { SessionContextSummary, StatusGlyph, WorkspaceSessionGroupItem } from "./features/session/components";
 import {
   formatTime,
@@ -906,7 +906,7 @@ const App = () => {
             </div>
             <div className="camera-spacer" aria-hidden="true" />
             <div className="notch-wing notch-wing-right" aria-hidden="true">
-              {hasLiveActivity ? <ActivityMascot activityKind={activityKind} sessionId={activitySession?.conversationId ?? presence.conversationId} status={activityStatus} /> : null}
+              {hasLiveActivity ? <ActivityMascot activityKind={activityKind} identityKey={activitySession?.workspacePath ?? presence.cwd} sessionId={activitySession?.conversationId ?? presence.conversationId} status={activityStatus} /> : null}
             </div>
           </div>
 
