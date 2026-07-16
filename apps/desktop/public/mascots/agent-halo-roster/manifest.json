@@ -1,7 +1,7 @@
 {
   "name": "Agent Halo Project Mascot Roster",
   "version": 4,
-  "status": "integration-candidate",
+  "status": "integration-candidate-bold-signal-v4",
   "humanApproved": true,
   "productionApproved": false,
   "mainMascot": "scorpion",
@@ -111,23 +111,23 @@
     }
   },
   "signal": {
-    "status": "integration-candidate-gemini-v3",
-    "source": "Human-directed Gemini 3.5 Signal V3 direct-native grids",
+    "status": "integration-candidate-gemini-v4-bold",
+    "source": "Human-directed Gemini 3.5 Signal V4 bold direct-native grids",
     "frameSize": [
-      12,
-      12
+      20,
+      20
     ],
     "displaySize": [
-      16,
-      16
+      20,
+      20
     ],
     "sessionDisplayOrigin": [
-      48,
-      10
+      46,
+      8
     ],
     "ambientDisplayOrigin": [
-      40,
-      7
+      38,
+      5
     ],
     "frameCounts": {
       "thinking-model": 4,
@@ -145,7 +145,8 @@
     "doneFinalHoldMs": 600,
     "idleIncluded": false,
     "semanticModel": "Independent grouped action/status signal; mascot body affect and user selection remain separate.",
-    "productionApproved": false
+    "productionApproved": false,
+    "primaryStrokePx": 2
   },
   "colorStrategy": "One authored cyan robot palette. No project, mascot, or user-randomized hue; only truthful lifecycle state filters may alter the body.",
   "palette": {
@@ -264,16 +265,62 @@
     "body/turtle/error.png": "9e415254295b3c93d744c259a08ac6e8092618407c56c860dad1949ca9869f42",
     "body/turtle/idle.png": "bb5da656d148e1ec17d26a3172786feaf33f944f777ec654bb760d742790ff20",
     "body/turtle/working.png": "07da8c09ad5531fb3120499e2c3727b77ecf2737818009449a9a650780d90994",
-    "signals/attention-asking.png": "e2a79e744f6e1dd16f48932c8de402b536505b7ebcbdfb0b1e62e8b5bd0d6808",
-    "signals/delegating.png": "d38af101e623a4ac61dd8896c7d51fefee587b36daf48600fabe407661e4f97c",
-    "signals/done.png": "b97fb7866acbace34ff3ee4c5df869a133ebb73da390ab20d5bdd2cc973ab2ec",
-    "signals/editing.png": "3a03b764b7d3229814fdb6ce07d2878ad819ecf480ef34d591bee4a677d2d3b0",
-    "signals/error.png": "0b5d7056a59abf0202f063d1890f7bc4b9101d80ec68781270aaefe092b7e371",
-    "signals/memory.png": "64fe5f45daeac57821abc35eebc7bdec562a71667fb4eb8ddc20765495b44afc",
-    "signals/planning-goal.png": "86f211bee4067e04a58693e1f572af352d95fed3acc2b024172da5e24c2b0272",
-    "signals/shell-tool-skill.png": "cf05323737410d4de69aa2eb59ff9e4e1cca657b800f27c708eba02a4698bd86",
-    "signals/thinking-model.png": "70f3232e7bbc635584bce038680668233eadf63dfba3b96dec146fce2705f13e",
-    "signals/visual.png": "0c433322cb2f8486db4319213aa6d6d1794ead28eb673bf78199b727433a93f2"
+    "signals/attention-asking.png": "afaa0883d0c78347af8e5563b7c3b0cebdfd343c3e1b7fefdf15a7af57172fb4",
+    "signals/delegating.png": "a03a5d9f07a0dde71a341b74a6bed70c2bd8c83bb8133dc0b877dceb08b82244",
+    "signals/done.png": "241bba5f40874531273c9e8a641e3abf0dc4b13e96e77cc120508af589809882",
+    "signals/editing.png": "d536fa548228bfc9999a10591fafafb1a7d3eceb589b58331f707d6cc4570f57",
+    "signals/error.png": "d6f9e9c20f73a5f2b3b10ee5339704a0e2a73dee099aba36516b6469073657b0",
+    "signals/memory.png": "870a98aad0802ea0ac8e98fb61203a943132abf66745ed4f56821f5c9db487b0",
+    "signals/planning-goal.png": "7992c77633b12b1a9d2430209d7fc2da745e6c5dab55c032239a6bbb7c867b1d",
+    "signals/shell-tool-skill.png": "7ae5d4668b28d422a8df726800e3c6c5a3c6268f0f10f703bdb02dd00a504fd2",
+    "signals/thinking-model.png": "8402b4e8dd6ce6752908a2c45a6bc0bb4be7d110b6e7b2f4e204cfe290ae9079",
+    "signals/visual.png": "105e7cf6234c918006f3dfaef148e269d872967bf8124bdd30098092b55709e8"
   },
-  "defaultMascot": "scorpion"
+  "defaultMascot": "scorpion",
+  "delivery": {
+    "ambient": {
+      "wrapperSize": [
+        58,
+        30
+      ],
+      "bodySize": [
+        36,
+        27
+      ],
+      "bodyOrigin": [
+        0,
+        3
+      ],
+      "signalSize": [
+        20,
+        20
+      ],
+      "signalOrigin": [
+        38,
+        5
+      ]
+    },
+    "session": {
+      "wrapperSize": [
+        66,
+        36
+      ],
+      "bodySize": [
+        44,
+        33
+      ],
+      "bodyOrigin": [
+        0,
+        3
+      ],
+      "signalSize": [
+        20,
+        20
+      ],
+      "signalOrigin": [
+        46,
+        8
+      ]
+    }
+  }
 }

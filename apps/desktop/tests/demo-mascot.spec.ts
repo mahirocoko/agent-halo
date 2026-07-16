@@ -14,13 +14,13 @@ test("every surface uses the Scorpion default with no random palette", async ({ 
   expect(roster).toContain(initialMascot);
   expect(initialMascot).toBe("scorpion");
   expect(await pet.getAttribute("data-palette")).toBeNull();
-  await expect(pet.locator(".halo-mascot-body")).toHaveCSS("background-size", "144px 36px");
+  await expect(pet.locator(".halo-mascot-body")).toHaveCSS("background-size", "132px 33px");
   const signal = pet.locator(".halo-mascot-signal");
-  await expect(signal).toHaveCSS("background-size", "64px 16px");
-  await expect(signal).toHaveCSS("left", "48px");
-  await expect(signal).toHaveCSS("top", "10px");
-  await expect(signal).toHaveCSS("width", "16px");
-  await expect(signal).toHaveCSS("height", "16px");
+  await expect(signal).toHaveCSS("background-size", "80px 20px");
+  await expect(signal).toHaveCSS("left", "46px");
+  await expect(signal).toHaveCSS("top", "8px");
+  await expect(signal).toHaveCSS("width", "20px");
+  await expect(signal).toHaveCSS("height", "20px");
 
   const dimensions = await pet.evaluate(async (element) => {
     const body = getComputedStyle(element.querySelector(".halo-mascot-body")!).backgroundImage.match(/url\(["']?(.*?)["']?\)/)?.[1];
@@ -32,15 +32,16 @@ test("every surface uses the Scorpion default with no random palette", async ({ 
     };
     return { body: await read(body), signal: await read(signal) };
   });
-  expect(dimensions).toEqual({ body: [72, 18], signal: [48, 12] });
+  expect(dimensions).toEqual({ body: [72, 18], signal: [80, 20] });
 
   const ambientPet = page.locator(".activity-mascot.halo-mascot");
-  await expect(ambientPet).toHaveCSS("width", "56px");
+  await expect(ambientPet).toHaveCSS("width", "58px");
   await expect(ambientPet).toHaveCSS("height", "30px");
-  await expect(ambientPet.locator(".halo-mascot-body")).toHaveCSS("width", "40px");
-  await expect(ambientPet.locator(".halo-mascot-body")).toHaveCSS("height", "30px");
-  await expect(ambientPet.locator(".halo-mascot-signal")).toHaveCSS("left", "40px");
-  await expect(ambientPet.locator(".halo-mascot-signal")).toHaveCSS("top", "7px");
+  await expect(ambientPet.locator(".halo-mascot-body")).toHaveCSS("width", "36px");
+  await expect(ambientPet.locator(".halo-mascot-body")).toHaveCSS("height", "27px");
+  await expect(ambientPet.locator(".halo-mascot-body")).toHaveCSS("top", "3px");
+  await expect(ambientPet.locator(".halo-mascot-signal")).toHaveCSS("left", "38px");
+  await expect(ambientPet.locator(".halo-mascot-signal")).toHaveCSS("top", "5px");
 
   await page.reload();
   await expect(page.locator(".session-row .halo-mascot")).toHaveAttribute("data-mascot", initialMascot ?? "");
@@ -189,12 +190,12 @@ test("production roster manifest preserves every body and shared signal hash", a
   expect(result.mainMascot).toBe("scorpion");
   expect(result.defaultMascot).toBe("scorpion");
   expect(result.assignment).toMatchObject({ status: "user-selected-global", storageKey: "agent-halo.mascot", projectHashing: false, colorRandomization: false });
-  expect(result.signalStatus).toBe("integration-candidate-gemini-v3");
+  expect(result.signalStatus).toBe("integration-candidate-gemini-v4-bold");
   expect(result.idleIncluded).toBe(false);
   expect(result.files).toHaveLength(85);
   expect(result.files.every((file) => file.hashMatches)).toBe(true);
-  expect(result.files.filter((file) => file.path.startsWith("signals/") && ["thinking-model", "attention-asking", "done"].some((name) => file.path.endsWith(`${name}.png`))).every((file) => file.size[0] === 48 && file.size[1] === 12)).toBe(true);
-  expect(result.files.filter((file) => file.path.startsWith("signals/") && !["thinking-model", "attention-asking", "done"].some((name) => file.path.endsWith(`${name}.png`))).every((file) => file.size[0] === 36 && file.size[1] === 12)).toBe(true);
+  expect(result.files.filter((file) => file.path.startsWith("signals/") && ["thinking-model", "attention-asking", "done"].some((name) => file.path.endsWith(`${name}.png`))).every((file) => file.size[0] === 80 && file.size[1] === 20)).toBe(true);
+  expect(result.files.filter((file) => file.path.startsWith("signals/") && !["thinking-model", "attention-asking", "done"].some((name) => file.path.endsWith(`${name}.png`))).every((file) => file.size[0] === 60 && file.size[1] === 20)).toBe(true);
   expect(result.files.find((file) => file.path.endsWith("/idle.png"))?.size).toEqual([72, 18]);
   expect(result.files.find((file) => file.path.endsWith("/working.png"))?.size).toEqual([72, 18]);
   expect(result.files.find((file) => file.path.endsWith("/attention.png"))?.size).toEqual([72, 18]);
@@ -226,15 +227,15 @@ test("project mascot maps attention, done, and error to distinct truthful states
     const mascot = await pet.getAttribute("data-mascot");
     await expect(pet.locator(".halo-mascot-body")).toHaveCSS("background-image", new RegExp(`/agent-halo-roster/body/${mascot}/${scenario}\\.png`));
     if (scenario === "attention" || scenario === "error") {
-      await expect(pet.locator(".halo-mascot-body")).toHaveCSS("background-size", "144px 36px");
+      await expect(pet.locator(".halo-mascot-body")).toHaveCSS("background-size", "132px 33px");
       await expect(pet.locator(".halo-mascot-body")).toHaveCSS("animation-name", `halo-mascot-${scenario}`);
     }
     const signal = scenario === "attention" ? "attention-asking" : scenario;
     await expect(pet).toHaveAttribute("data-signal", signal);
     await expect(pet.locator(".halo-mascot-signal")).toHaveCSS("background-image", new RegExp(`/agent-halo-roster/signals/${signal}\\.png`));
-    await expect(pet.locator(".halo-mascot-signal")).toHaveCSS("width", "16px");
-    await expect(pet.locator(".halo-mascot-signal")).toHaveCSS("height", "16px");
-    await expect(pet.locator(".halo-mascot-signal")).toHaveCSS("background-size", scenario === "error" ? "48px 16px" : "64px 16px");
+    await expect(pet.locator(".halo-mascot-signal")).toHaveCSS("width", "20px");
+    await expect(pet.locator(".halo-mascot-signal")).toHaveCSS("height", "20px");
+    await expect(pet.locator(".halo-mascot-signal")).toHaveCSS("background-size", scenario === "error" ? "60px 20px" : "80px 20px");
   }
 });
 
@@ -242,17 +243,17 @@ test("done settles on the final frame while reduced motion stays static", async 
   await page.goto("/?demo=1&demoScenario=done");
   await page.locator(".session-row-main").click();
   const donePet = page.locator('.session-context-summary .halo-mascot[data-state="done"]');
-  await expect(donePet.locator(".halo-mascot-body")).toHaveCSS("background-position", "-144px 0px");
-  await expect(donePet.locator(".halo-mascot-signal")).toHaveCSS("background-position", "-48px 0px");
+  await expect(donePet.locator(".halo-mascot-body")).toHaveCSS("background-position", "-132px 0px");
+  await expect(donePet.locator(".halo-mascot-signal")).toHaveCSS("background-position", "-60px 0px");
 
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/?demo=1&demoScenario=done");
   await page.locator(".session-row-main").click();
   const reducedDonePet = page.locator('.session-context-summary .halo-mascot[data-state="done"]');
   await expect(reducedDonePet.locator(".halo-mascot-body")).toHaveCSS("animation-name", "none");
-  await expect(reducedDonePet.locator(".halo-mascot-body")).toHaveCSS("background-position", "-144px 0px");
+  await expect(reducedDonePet.locator(".halo-mascot-body")).toHaveCSS("background-position", "-132px 0px");
   await expect(reducedDonePet.locator(".halo-mascot-signal")).toHaveCSS("animation-name", "none");
-  await expect(reducedDonePet.locator(".halo-mascot-signal")).toHaveCSS("background-position", "-48px 0px");
+  await expect(reducedDonePet.locator(".halo-mascot-signal")).toHaveCSS("background-position", "-60px 0px");
 
   await page.goto("/?demo=1&demoScenario=long-llm");
   const reducedPet = page.locator(".session-row .halo-mascot");

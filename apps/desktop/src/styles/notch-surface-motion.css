@@ -145,7 +145,7 @@
 }
 
 .activity-mascot {
-  width: 52px;
+  width: 58px;
   height: 30px;
   display: inline-flex;
   align-items: center;
@@ -157,7 +157,7 @@
 
 .session-mascot {
   position: relative;
-  width: 60px;
+  width: 66px;
   height: 36px;
   display: inline-flex;
   align-items: center;
@@ -171,17 +171,17 @@
   --halo-mascot-hue: 0deg;
   --halo-mascot-saturation: 1;
   --halo-mascot-brightness: 1;
-  --halo-mascot-frame-width: 48px;
-  --halo-mascot-frame-height: 36px;
-  --halo-mascot-three-frame-width: 144px;
-  --halo-mascot-done-width: 192px;
-  --halo-mascot-frame-1-x: -48px;
-  --halo-mascot-frame-2-x: -96px;
-  --halo-mascot-frame-3-x: -144px;
-  --halo-mascot-signal-left: 48px;
-  --halo-mascot-signal-top: 10px;
+  --halo-mascot-frame-width: 44px;
+  --halo-mascot-frame-height: 33px;
+  --halo-mascot-three-frame-width: 132px;
+  --halo-mascot-done-width: 176px;
+  --halo-mascot-frame-1-x: -44px;
+  --halo-mascot-frame-2-x: -88px;
+  --halo-mascot-frame-3-x: -132px;
+  --halo-mascot-signal-left: 46px;
+  --halo-mascot-signal-top: 8px;
   position: relative;
-  width: 64px;
+  width: 66px;
   height: 36px;
   display: inline-block;
   flex: none;
@@ -189,21 +189,21 @@
 }
 
 .activity-mascot.halo-mascot {
-  --halo-mascot-frame-width: 40px;
-  --halo-mascot-frame-height: 30px;
-  --halo-mascot-three-frame-width: 120px;
-  --halo-mascot-done-width: 160px;
-  --halo-mascot-frame-1-x: -40px;
-  --halo-mascot-frame-2-x: -80px;
-  --halo-mascot-frame-3-x: -120px;
-  --halo-mascot-signal-left: 40px;
-  --halo-mascot-signal-top: 7px;
-  width: 56px;
+  --halo-mascot-frame-width: 36px;
+  --halo-mascot-frame-height: 27px;
+  --halo-mascot-three-frame-width: 108px;
+  --halo-mascot-done-width: 144px;
+  --halo-mascot-frame-1-x: -36px;
+  --halo-mascot-frame-2-x: -72px;
+  --halo-mascot-frame-3-x: -108px;
+  --halo-mascot-signal-left: 38px;
+  --halo-mascot-signal-top: 5px;
+  width: 58px;
   height: 30px;
 }
 
 .session-mascot.halo-mascot {
-  width: 64px;
+  width: 66px;
   height: 36px;
 }
 
@@ -218,7 +218,7 @@
 }
 
 .halo-mascot-body {
-  top: 0;
+  top: 3px;
   left: 0;
   width: var(--halo-mascot-frame-width);
   height: var(--halo-mascot-frame-height);
@@ -233,16 +233,16 @@
 .halo-mascot-signal {
   top: var(--halo-mascot-signal-top);
   left: var(--halo-mascot-signal-left);
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
   background-image: var(--halo-mascot-signal);
-  background-size: 48px 16px;
+  background-size: 60px 20px;
 }
 
 .halo-mascot[data-signal="thinking-model"] .halo-mascot-signal,
 .halo-mascot[data-signal="attention-asking"] .halo-mascot-signal,
 .halo-mascot[data-signal="done"] .halo-mascot-signal {
-  background-size: 64px 16px;
+  background-size: 80px 20px;
 }
 
 .halo-mascot[data-status="idle"] {
@@ -397,11 +397,11 @@
   }
   33.33%,
   66.65% {
-    background-position-x: -16px;
+    background-position-x: -20px;
   }
   66.66%,
   100% {
-    background-position-x: -32px;
+    background-position-x: -40px;
   }
 }
 
@@ -412,15 +412,15 @@
   }
   25%,
   49.99% {
-    background-position-x: -16px;
+    background-position-x: -20px;
   }
   50%,
   74.99% {
-    background-position-x: -32px;
+    background-position-x: -40px;
   }
   75%,
   100% {
-    background-position-x: -48px;
+    background-position-x: -60px;
   }
 }
 
@@ -431,15 +431,15 @@
   }
   16.67%,
   33.32% {
-    background-position-x: -16px;
+    background-position-x: -20px;
   }
   33.33%,
   49.99% {
-    background-position-x: -32px;
+    background-position-x: -40px;
   }
   50%,
   100% {
-    background-position-x: -48px;
+    background-position-x: -60px;
   }
 }
 
@@ -469,6 +469,6 @@
   }
 
   .halo-mascot[data-signal="done"] .halo-mascot-signal {
-    background-position-x: -48px;
+    background-position-x: -60px;
   }
 }

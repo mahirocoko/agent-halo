@@ -1,0 +1,185 @@
+{
+  "thinking-model": {
+    "alpha_ok": true,
+    "palette_ok": true,
+    "bounds_ok": true,
+    "stroke_2px_intent": true,
+    "adjacent_deltas": [
+      50,
+      50,
+      50,
+      50
+    ],
+    "duplicate_frames": [],
+    "overlap_pixels": {
+      "scorpion_ambient": 0,
+      "scorpion_session": 0,
+      "crt_ambient": 0,
+      "crt_session": 0
+    }
+  },
+  "shell-tool-skill": {
+    "alpha_ok": true,
+    "palette_ok": true,
+    "bounds_ok": true,
+    "stroke_2px_intent": true,
+    "adjacent_deltas": [
+      20,
+      20,
+      20
+    ],
+    "duplicate_frames": [],
+    "overlap_pixels": {
+      "scorpion_ambient": 0,
+      "scorpion_session": 0,
+      "crt_ambient": 0,
+      "crt_session": 0
+    }
+  },
+  "editing": {
+    "alpha_ok": true,
+    "palette_ok": true,
+    "bounds_ok": true,
+    "stroke_2px_intent": true,
+    "adjacent_deltas": [
+      95,
+      95,
+      137
+    ],
+    "duplicate_frames": [],
+    "overlap_pixels": {
+      "scorpion_ambient": 0,
+      "scorpion_session": 0,
+      "crt_ambient": 0,
+      "crt_session": 0
+    }
+  },
+  "planning-goal": {
+    "alpha_ok": true,
+    "palette_ok": true,
+    "bounds_ok": true,
+    "stroke_2px_intent": true,
+    "adjacent_deltas": [
+      4,
+      17,
+      16
+    ],
+    "duplicate_frames": [],
+    "overlap_pixels": {
+      "scorpion_ambient": 0,
+      "scorpion_session": 0,
+      "crt_ambient": 0,
+      "crt_session": 0
+    }
+  },
+  "delegating": {
+    "alpha_ok": true,
+    "palette_ok": true,
+    "bounds_ok": true,
+    "stroke_2px_intent": true,
+    "adjacent_deltas": [
+      32,
+      48,
+      48
+    ],
+    "duplicate_frames": [],
+    "overlap_pixels": {
+      "scorpion_ambient": 0,
+      "scorpion_session": 0,
+      "crt_ambient": 0,
+      "crt_session": 0
+    }
+  },
+  "visual": {
+    "alpha_ok": true,
+    "palette_ok": true,
+    "bounds_ok": true,
+    "stroke_2px_intent": true,
+    "adjacent_deltas": [
+      52,
+      64,
+      52
+    ],
+    "duplicate_frames": [],
+    "overlap_pixels": {
+      "scorpion_ambient": 0,
+      "scorpion_session": 0,
+      "crt_ambient": 0,
+      "crt_session": 0
+    }
+  },
+  "memory": {
+    "alpha_ok": true,
+    "palette_ok": true,
+    "bounds_ok": true,
+    "stroke_2px_intent": true,
+    "adjacent_deltas": [
+      16,
+      36,
+      36
+    ],
+    "duplicate_frames": [],
+    "overlap_pixels": {
+      "scorpion_ambient": 0,
+      "scorpion_session": 0,
+      "crt_ambient": 0,
+      "crt_session": 0
+    }
+  },
+  "attention-asking": {
+    "alpha_ok": true,
+    "palette_ok": true,
+    "bounds_ok": true,
+    "stroke_2px_intent": true,
+    "adjacent_deltas": [
+      12,
+      10,
+      12,
+      32
+    ],
+    "duplicate_frames": [],
+    "overlap_pixels": {
+      "scorpion_ambient": 0,
+      "scorpion_session": 0,
+      "crt_ambient": 0,
+      "crt_session": 0
+    }
+  },
+  "done": {
+    "alpha_ok": true,
+    "palette_ok": true,
+    "bounds_ok": true,
+    "stroke_2px_intent": true,
+    "adjacent_deltas": [
+      24,
+      26,
+      11,
+      57
+    ],
+    "duplicate_frames": [],
+    "overlap_pixels": {
+      "scorpion_ambient": 0,
+      "scorpion_session": 0,
+      "crt_ambient": 0,
+      "crt_session": 0
+    }
+  },
+  "error": {
+    "alpha_ok": true,
+    "palette_ok": true,
+    "bounds_ok": true,
+    "stroke_2px_intent": true,
+    "adjacent_deltas": [
+      156,
+      168,
+      156
+    ],
+    "duplicate_frames": [],
+    "overlap_pixels": {
+      "scorpion_ambient": 0,
+      "scorpion_session": 0,
+      "crt_ambient": 0,
+      "crt_session": 0
+    }
+  }
+}
