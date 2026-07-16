@@ -22,8 +22,13 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 mod keep_awake;
+mod notification;
 
 use keep_awake::KeepAwakeState;
+use notification::{
+    cancel_pomodoro_notification, notification_permission_state, request_notification_permission,
+    schedule_pomodoro_notification, PomodoroNotificationState,
+};
 
 #[cfg(target_os = "macos")]
 use objc2::{msg_send, rc::Retained, MainThreadMarker};
@@ -4083,11 +4088,13 @@ pub fn run() {
     let app = tauri::Builder::default()
         .manage(KeepAwakeState::default())
         .manage(DisplayPreferenceState::default())
+        .manage(PomodoroNotificationState::default())
         .invoke_handler(tauri::generate_handler![
             agent_halo_mod_path,
             agent_halo_mod_status,
             agy_usage,
             bridge_health,
+            cancel_pomodoro_notification,
             claude_usage,
             codex_usage,
             cursor_usage,
@@ -4096,14 +4103,18 @@ pub fn run() {
             grok_usage,
             install_agent_halo_mod,
             notch_metrics,
+            notification_permission_state,
             open_external_url,
             reconcile_display,
+            request_notification_permission,
+            schedule_pomodoro_notification,
             set_keep_awake,
             set_panel_open,
             select_display
         ])
         .setup(|app| {
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+            notification::initialize();
             let preference = read_display_preference(app.handle());
             app.state::<DisplayPreferenceState>().set(preference);
 

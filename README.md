@@ -28,6 +28,7 @@ It is designed for people who keep multiple Letta Code conversations, subagents,
 - Keeps completed sessions visible until you explicitly clear them, with per-session detail and Ghostty focus access inside expandable workspace groups.
 - Provides a native Ghostty focus fallback for matching terminal tabs/windows by cwd/title/session hints.
 - Shows local AI usage for supported providers when credentials or local usage sources are available.
+- Includes a local Pomodoro timer with customizable Focus/Short break/Long break durations and long-break cadence, 25/5/15/every-4 defaults, persisted deadlines, collapsed-notch countdown, and silent macOS completion alerts.
 - Can keep the macOS display awake while current Letta work is actively running, without treating stale or completed sessions as active work.
 - Lets the user choose which connected display owns the top-center notch. The native app remembers that display, falls back to Primary while it is disconnected, and returns when it reconnects.
 - Installs and verifies the local Letta Code mod from the desktop setup view.
@@ -36,7 +37,7 @@ Agent Halo intentionally stays local. It uses the public Letta Code mod surface,
 
 ## Current status
 
-Agent Halo is an early macOS app. The core bridge, desktop overlay, setup flow, workspace grouping, session controls, mascot activity, and local usage views are active. The project is still evolving quickly; expect the event protocol and native controls to stay conservative until Letta exposes stable public APIs for deeper session/process control.
+Agent Halo is an early macOS app. The core bridge, desktop overlay, setup flow, workspace grouping, session controls, mascot activity, local Pomodoro timer, and local usage views are active. The project is still evolving quickly; expect the event protocol and native controls to stay conservative until Letta exposes stable public APIs for deeper session/process control.
 
 ## Architecture
 

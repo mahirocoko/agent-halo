@@ -8,7 +8,7 @@ Runtime flow:
 http://127.0.0.1:47621/events
 ```
 
-The renderer derives compact presence and persisted per-conversation Sessions from the protocol package plus bounded local event history. `src/main.tsx` owns shell/native-window orchestration; owner-local modules under `src/features/` own Sessions, presence ingestion, Setup, Usage, one persisted global robot mascot selection, and the native target-display control. Ordered CSS ownership lives under `src/styles/`.
+The renderer derives compact presence and persisted per-conversation Sessions from the protocol package plus bounded local event history. `src/main.tsx` owns shell/native-window orchestration; owner-local modules under `src/features/` own Sessions, presence ingestion, Setup, Usage, Pomodoro, one persisted global robot mascot selection, and the native target-display control. Ordered CSS ownership lives under `src/styles/`.
 
 Do not start by scraping terminal output or transcript files. Those can be fallback diagnostics later, not the primary source.
 

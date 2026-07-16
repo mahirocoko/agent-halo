@@ -7,9 +7,9 @@ const distRoot = join(repoRoot, "apps/desktop/dist");
 const assetRoot = join(distRoot, "assets");
 
 const BUDGETS = {
-  cssGzipBytes: 7_579,
+  cssGzipBytes: 8_300,
   distBytes: 573_055,
-  jsGzipBytes: 82_000,
+  jsGzipBytes: 89_000,
 };
 
 const walk = async (directory) => {
@@ -53,6 +53,7 @@ await findLegacy(distRoot);
 
 const payload = {
   baselineCommit: "4a5c0f1",
+  budgetRevision: "pomodoro-custom-v1",
   budgets: BUDGETS,
   current: {
     cssGzipBytes: css.gzipBytes,

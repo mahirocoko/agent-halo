@@ -35,6 +35,8 @@ The initial registry-native refactor measured:
 | Derive summaries | 0.30ms | 0.20ms | −33.3% |
 | Group 1,000 sessions | 2.1ms | 0.9ms | −57.1% |
 
+The `pomodoro-custom-v1` budget revision intentionally raises the primary bundle ceilings to 8,300 bytes CSS gzip and 89,000 bytes JavaScript gzip. The feature adds a persisted deadline/settings state machine, compact timer and custom-settings UI, collapsed-notch countdown, and native-notification orchestration; its final measured candidate build is 8,153 bytes CSS gzip and 87,262 bytes JavaScript gzip. The total `dist/` ceiling remains unchanged at 573,055 bytes, and legacy session-cat assets remain forbidden. This is an explicit product-feature allowance rather than an unreviewed regression.
+
 The low-risk bridge refactor's three-run median measured event duration `603.06ms → 574.18ms` (−4.79%) and throughput `33,164 → 34,832 events/s` (+5.03%) for 20,000 deterministic events. Startup stayed effectively flat; synchronous NDJSON durability and event ordering remain unchanged.
 
 ## Commands

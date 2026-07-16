@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { BarChart3, Check, ChevronLeft, Focus, List, Settings, Trash2, X } from "lucide-react";
+import { BarChart3, Check, ChevronLeft, Focus, List, Settings, Timer, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createRoot } from "react-dom/client";
 import type { AgentHaloPresenceStatus } from "@agent-halo/protocol";
@@ -32,6 +32,8 @@ import {
 } from "./features/session/selectors";
 import type { ActivityKind, DeletedSessionRegistry, DismissedSessionRegistry, ISessionDetail, ISessionSummary, IWorkspaceSessionGroup } from "./features/session/types";
 import { useAgentHaloPresence } from "./features/presence/useAgentHaloPresence";
+import { PomodoroPanel } from "./features/pomodoro/components";
+import { usePomodoro } from "./features/pomodoro/usePomodoro";
 import { SetupPanel } from "./features/setup/SetupPanel";
 import type { IDisplayStateSnapshot } from "./features/setup/display";
 import { readUsageSettings, writeUsageSettings } from "./features/usage/adapters";
@@ -81,7 +83,7 @@ interface INotchMetrics {
   closedHeight: number;
 }
 
-type MainPanelTab = "sessions" | "usage";
+type MainPanelTab = "sessions" | "pomodoro" | "usage";
 
 const estimateLiveActivityWingWidth = (label: string): number => {
   const textWidth = Math.ceil(label.length * 5.6);
@@ -180,6 +182,7 @@ const App = () => {
       ? ({ ...view, status: "idle", label: "idle" } satisfies IStatusView)
       : view;
   const canUseNativeControls = typeof window.__TAURI_INTERNALS__ !== "undefined";
+  const pomodoro = usePomodoro(canUseNativeControls);
   const isConnected = connection.status === "connected";
   const connectionTitle = DEMO_MODE ? "Demo mode" : (connection.message ?? connection.status);
   const workspace = shortenPath(presence.cwd);
@@ -253,17 +256,19 @@ const App = () => {
     ? "Setup"
     : selectedSession
       ? selectedSession.project
-      : activeMainTab === "usage"
-        ? "Usage"
-        : sessionGroups.length === 0
+      : activeMainTab === "pomodoro"
+        ? "Pomodoro"
+        : activeMainTab === "usage"
+          ? "Usage"
+          : sessionGroups.length === 0
           ? "Agent Halo"
           : sessionGroups.length === 1
             ? sessionGroups[0].sessions.length === 1 ? "1 session" : `${sessionGroups[0].sessions.length} sessions`
             : `${sessionGroups.length} workspaces`;
   const activitySession =
     sessions.find((session) => session.status === "attention") ??
-    sessions.find((session) => session.status === "working") ??
     sessions.find((session) => session.status === "error" && now.getTime() - Date.parse(session.lastActivityAt) <= STALE_AFTER_MS) ??
+    sessions.find((session) => session.status === "working") ??
     sessions.find(
       (session) =>
         session.status === "done" &&
@@ -293,7 +298,11 @@ const App = () => {
     sessions,
     fallbackActivityStatus,
   );
-  const hasLiveActivity = isWorkingActivity || activityStatus === "attention" || activityStatus === "done" || activityStatus === "error";
+  const hasAgentLiveActivity = isWorkingActivity || activityStatus === "attention" || activityStatus === "done" || activityStatus === "error";
+  const hasCriticalAgentActivity = activityStatus === "attention" || activityStatus === "error";
+  const hasPomodoroActivity = pomodoro.state.status === "running" || pomodoro.state.status === "paused" || pomodoro.completionVisible;
+  const showPomodoroActivity = !hasCriticalAgentActivity && hasPomodoroActivity;
+  const hasLiveActivity = hasAgentLiveActivity || showPomodoroActivity;
 
   useEffect(() => {
     if (!canUseNativeControls) {
@@ -343,13 +352,25 @@ const App = () => {
   }, [canUseNativeControls, hasWorkingActivity, keepAwakeEnabled]);
 
   const pillDetail = (() => {
+    if (showPomodoroActivity) return pomodoro.completionVisible ? "Done" : pomodoro.countdownLabel;
     if (activitySession?.status === "working") return activitySession.detail === "thinking" ? "Thinking" : activitySession.detail;
     if (activityStatus === "attention") return activitySession?.detail ?? (lastLiveEvent?.type === "attention_requested" && lastLiveEvent.data.kind === "question" ? "Question" : "Approval needed");
     if (activitySession?.status === "done") return "Done";
     if (activityStatus === "error") return "Error";
     return project;
   })();
-  const liveActivityWingWidth = hasLiveActivity ? estimateLiveActivityWingWidth(pillDetail) : 0;
+  const pomodoroPhaseDetail = pomodoro.completionVisible
+    ? `${pomodoro.phaseLabel} ready`
+    : pomodoro.state.status === "paused"
+      ? `${pomodoro.phaseLabel} paused`
+      : pomodoro.phaseLabel;
+  const liveActivityWidthLabel = showPomodoroActivity && pomodoroPhaseDetail.length > pillDetail.length ? pomodoroPhaseDetail : pillDetail;
+  const closedSurfaceLabel = showPomodoroActivity
+    ? pomodoro.completionVisible
+      ? `Open Agent Halo — ${pomodoro.phaseLabel} ready`
+      : `Open Agent Halo — ${pomodoro.phaseLabel}${pomodoro.state.status === "paused" ? " paused" : ""}, ${pomodoro.countdownLabel} remaining`
+    : "Open Agent Halo";
+  const liveActivityWingWidth = hasLiveActivity ? estimateLiveActivityWingWidth(liveActivityWidthLabel) : 0;
   const closedSurfaceWidth = Math.round(notchMetrics.cameraWidth + liveActivityWingWidth * 2);
   const closedSurfaceHeight = Math.round(notchMetrics.closedHeight);
   const notchStyle = {
@@ -734,7 +755,7 @@ const App = () => {
   const handleMainTabKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, currentTab: MainPanelTab) => {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
-    const tabs: MainPanelTab[] = ["sessions", "usage"];
+    const tabs: MainPanelTab[] = ["sessions", "pomodoro", "usage"];
     const currentIndex = tabs.indexOf(currentTab);
     const nextTab = event.key === "Home"
       ? tabs[0]
@@ -989,7 +1010,7 @@ const App = () => {
   }, [setupOpen]);
 
   return (
-    <main className="overlay-root" data-live={hasLiveActivity ? "true" : "false"} data-running={isWorkingActivity ? "true" : "false"} data-status={activityViewStatus}>
+    <main className="overlay-root" data-live={hasLiveActivity ? "true" : "false"} data-running={isWorkingActivity || (showPomodoroActivity && pomodoro.state.status === "running") ? "true" : "false"} data-status={activityViewStatus} data-pomodoro-status={pomodoro.state.status} data-pomodoro-complete={pomodoro.completionVisible ? "true" : "false"}>
       <section className={`notch-wrap ${surfaceState === "open" ? "is-open" : surfaceState === "closing" ? "is-closing" : ""}`} style={notchStyle}>
         <div
           ref={surfaceRef}
@@ -1005,7 +1026,7 @@ const App = () => {
           }}
           onKeyDown={handleSurfaceKeyDown}
           role={renderPanel ? "region" : "button"}
-          aria-label={renderPanel ? "Agent Halo panel" : "Open Agent Halo"}
+          aria-label={renderPanel ? "Agent Halo panel" : closedSurfaceLabel}
           aria-expanded={panelOpen}
           tabIndex={renderPanel ? -1 : 0}
           data-tauri-drag-region="false"
@@ -1016,15 +1037,22 @@ const App = () => {
           <div className="surface-pill" aria-hidden={surfaceState === "open"}>
             <div className="notch-wing notch-wing-left">
               {hasLiveActivity ? (
-                <>
-                  <StatusGlyph status={glyphStatus} />
-                  <span className="pill-detail">{pillDetail}</span>
-                </>
+                showPomodoroActivity ? (
+                  <>
+                    <span className="pomodoro-pill-icon"><Timer size={12} strokeWidth={2.4} /></span>
+                    <span className="pill-detail">{pillDetail}</span>
+                  </>
+                ) : (
+                  <>
+                    <StatusGlyph status={glyphStatus} />
+                    <span className="pill-detail">{pillDetail}</span>
+                  </>
+                )
               ) : null}
             </div>
             <div className="camera-spacer" aria-hidden="true" />
             <div className="notch-wing notch-wing-right" aria-hidden="true">
-              {hasLiveActivity ? <ActivityMascot activityKind={activityKind} mascot={mascot} status={activityStatus} /> : null}
+              {showPomodoroActivity ? <span className="pomodoro-pill-phase">{pomodoroPhaseDetail}</span> : hasLiveActivity ? <ActivityMascot activityKind={activityKind} mascot={mascot} status={activityStatus} /> : null}
             </div>
           </div>
 
@@ -1056,6 +1084,9 @@ const App = () => {
                   <div className="header-tablist" role="tablist" aria-label="Agent Halo sections">
                     <button id="main-tab-sessions" className="header-tab" data-active={activeMainTab === "sessions"} data-panel-focus-target={activeMainTab === "sessions" ? "true" : undefined} type="button" role="tab" aria-label="Sessions" aria-selected={activeMainTab === "sessions"} aria-controls="main-panel-sessions" tabIndex={activeMainTab === "sessions" ? 0 : -1} onKeyDown={(event) => handleMainTabKeyDown(event, "sessions")} onClick={(event) => { event.stopPropagation(); activateMainTab("sessions"); }} data-tauri-drag-region="false" title="Sessions">
                       <List size={13} strokeWidth={2.3} />
+                    </button>
+                    <button id="main-tab-pomodoro" className="header-tab" data-active={activeMainTab === "pomodoro"} data-panel-focus-target={activeMainTab === "pomodoro" ? "true" : undefined} type="button" role="tab" aria-label="Pomodoro" aria-selected={activeMainTab === "pomodoro"} aria-controls="main-panel-pomodoro" tabIndex={activeMainTab === "pomodoro" ? 0 : -1} onKeyDown={(event) => handleMainTabKeyDown(event, "pomodoro")} onClick={(event) => { event.stopPropagation(); activateMainTab("pomodoro"); }} data-tauri-drag-region="false" title="Pomodoro">
+                      <Timer size={13} strokeWidth={2.3} />
                     </button>
                     <button id="main-tab-usage" className="header-tab" data-active={activeMainTab === "usage"} data-panel-focus-target={activeMainTab === "usage" ? "true" : undefined} type="button" role="tab" aria-label="Usage" aria-selected={activeMainTab === "usage"} aria-controls="main-panel-usage" tabIndex={activeMainTab === "usage" ? 0 : -1} onKeyDown={(event) => handleMainTabKeyDown(event, "usage")} onClick={(event) => { event.stopPropagation(); activateMainTab("usage"); }} data-tauri-drag-region="false" title="Usage">
                       <BarChart3 size={13} strokeWidth={2.3} />
@@ -1131,6 +1162,8 @@ const App = () => {
                     </div>
                   )}
                 </div>
+              ) : activeMainTab === "pomodoro" ? (
+                <PomodoroPanel pomodoro={pomodoro} />
               ) : activeMainTab === "usage" ? (
                 <AgentUsageList usages={agentUsages} onRefresh={refreshAgentUsage} settings={usageSettings} onSettingsChange={updateUsageSettings} />
               ) : sessions.length === 0 ? (

@@ -22,7 +22,9 @@ tauri = { version = "2", features = ["tray-icon", "image-png", "macos-private-ap
 time = { version = "0.3", features = ["formatting", "parsing"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6.2"
 core-foundation = "0.10.1"
 objc2 = "0.6.4"
 objc2-app-kit = { version = "0.3.2", features = ["NSWindow", "NSScreen", "NSGraphics"] }
-objc2-foundation = { version = "0.3.2", features = ["NSArray", "NSDictionary", "NSGeometry", "NSObject", "NSString"] }
+objc2-foundation = { version = "0.3.2", features = ["NSArray", "NSCalendar", "NSDate", "NSDictionary", "NSGeometry", "NSObject", "NSString"] }
+objc2-user-notifications = { version = "0.3.2", default-features = false, features = ["block2", "UNNotification", "UNNotificationContent", "UNNotificationRequest", "UNNotificationSettings", "UNNotificationTrigger", "UNUserNotificationCenter"] }

@@ -46,11 +46,18 @@ test("pointer interaction still allows hover close after keyboard navigation", a
   await expect(page.getByRole("button", { name: "Open Agent Halo" })).toBeVisible();
 });
 
-test("main and usage tabs provide roving keyboard navigation and panel relationships", async ({ page }) => {
+test("main section tabs provide roving keyboard navigation and panel relationships", async ({ page }) => {
   await page.goto("/?demo=1&demoScenario=multi");
 
   const sessionsTab = page.getByRole("tab", { name: "Sessions" });
   await sessionsTab.focus();
+  await page.keyboard.press("ArrowRight");
+
+  const pomodoroTab = page.getByRole("tab", { name: "Pomodoro" });
+  await expect(pomodoroTab).toBeFocused();
+  await expect(pomodoroTab).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tabpanel", { name: "Pomodoro" })).toBeVisible();
+
   await page.keyboard.press("ArrowRight");
 
   const usageTab = page.getByRole("tab", { name: "Usage" });

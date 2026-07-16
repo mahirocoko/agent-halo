@@ -278,6 +278,45 @@ const createScenario = (scenario: string): AgentHaloEvent[] => {
     ];
   }
 
+  if (scenario === "mixed-working-error") {
+    const item = (conversationId: string) => ({ ...common, conversationId });
+    return [
+      {
+        ...item("local-conv-demo-working"),
+        id: `${common.id}-working-open`,
+        type: "conversation_open",
+        data: { reason: "startup", previousConversationId: null },
+      },
+      {
+        ...item("local-conv-demo-working"),
+        id: `${common.id}-working-llm`,
+        timestamp: at(1),
+        type: "llm_start",
+        data: { model: "gpt-5.6-sol", messageCount: 4, contextWindow: 372_000 },
+      },
+      {
+        ...item("local-conv-demo-error"),
+        id: `${common.id}-error-open`,
+        timestamp: at(2),
+        type: "conversation_open",
+        data: { reason: "startup", previousConversationId: null },
+      },
+      {
+        ...item("local-conv-demo-error"),
+        id: `${common.id}-error-llm`,
+        timestamp: at(3),
+        type: "llm_end",
+        data: {
+          model: "gpt-5.6-sol",
+          stopReason: "llm_api_error",
+          durationMs: 1_200,
+          usage: null,
+          error: { message: "Provider request failed", errorType: "provider_error", retryable: true },
+        },
+      },
+    ];
+  }
+
   if (scenario === "long-llm") {
     const old = new Date(now - 90_000).toISOString();
     return [
