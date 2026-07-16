@@ -26,15 +26,16 @@ mod keep_awake;
 use keep_awake::KeepAwakeState;
 
 #[cfg(target_os = "macos")]
-use objc2::MainThreadMarker;
+use objc2::{msg_send, rc::Retained, MainThreadMarker};
 #[cfg(target_os = "macos")]
 use objc2_app_kit::{NSScreen, NSStatusWindowLevel, NSWindow, NSWindowCollectionBehavior};
 #[cfg(target_os = "macos")]
-use objc2_foundation::{NSPoint, NSRect, NSSize};
+use objc2_foundation::{NSArray, NSPoint, NSRect, NSSize, NSString};
 
 const TRAY_SHOW: &str = "show";
 const TRAY_HIDE: &str = "hide";
 const TRAY_QUIT: &str = "quit";
+const DISPLAY_PREFERENCE_FILE: &str = "display-preference.json";
 const CODEX_USAGE_URL: &str = "https://chatgpt.com/backend-api/wham/usage";
 const CODEX_RESET_CREDITS_URL: &str =
     "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits";
@@ -68,6 +69,74 @@ const CURSOR_REFRESH_KEYCHAIN_SERVICE: &str = "cursor-refresh-token";
 const GROK_AUTH_PATH: &str = ".grok/auth.json";
 const GROK_BILLING_URL: &str = "https://cli-chat-proxy.grok.com/v1/billing";
 const GROK_SETTINGS_URL: &str = "https://cli-chat-proxy.grok.com/v1/settings";
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DisplayPreference {
+    id: String,
+    fingerprint: String,
+    #[serde(default)]
+    name: String,
+}
+
+#[derive(Default)]
+struct DisplayPreferenceState {
+    selection: Mutex<Option<DisplayPreference>>,
+}
+
+impl DisplayPreferenceState {
+    fn get(&self) -> Option<DisplayPreference> {
+        self.selection
+            .lock()
+            .ok()
+            .and_then(|selection| selection.clone())
+    }
+
+    fn set(&self, selection: Option<DisplayPreference>) {
+        if let Ok(mut current) = self.selection.lock() {
+            *current = selection;
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DisplayOption {
+    id: String,
+    fingerprint: String,
+    name: String,
+    width: u32,
+    height: u32,
+    scale_factor: f64,
+    is_primary: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DisplayStateSnapshot {
+    displays: Vec<DisplayOption>,
+    preferred_display_id: Option<String>,
+    preferred_display_name: Option<String>,
+    selected_display_id: Option<String>,
+    active_display_id: Option<String>,
+    fallback_active: bool,
+}
+
+#[cfg(any(test, not(target_os = "macos")))]
+fn preferred_display_index(
+    displays: &[DisplayOption],
+    preference: Option<&DisplayPreference>,
+) -> Option<usize> {
+    let preference = preference?;
+    displays
+        .iter()
+        .position(|display| display.id == preference.id)
+        .or_else(|| {
+            displays
+                .iter()
+                .position(|display| display.fingerprint == preference.fingerprint)
+        })
+}
 const GROK_TOKEN_AUTH_HEADER: &str = "xai-grok-cli";
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -3337,6 +3406,248 @@ fn apple_script_string(value: &str) -> String {
     format!("\"{escaped}\"")
 }
 
+fn display_preference_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_config_dir()
+        .map(|directory| directory.join(DISPLAY_PREFERENCE_FILE))
+        .map_err(|error| format!("Could not resolve Agent Halo config directory: {error}"))
+}
+
+fn read_display_preference(app: &tauri::AppHandle) -> Option<DisplayPreference> {
+    let path = display_preference_path(app).ok()?;
+    let contents = fs::read_to_string(path).ok()?;
+    serde_json::from_str(&contents).ok()
+}
+
+fn write_display_preference(
+    app: &tauri::AppHandle,
+    preference: &DisplayPreference,
+) -> Result<(), String> {
+    let path = display_preference_path(app)?;
+    let parent = path
+        .parent()
+        .ok_or_else(|| "Display preference path has no parent directory".to_string())?;
+    fs::create_dir_all(parent)
+        .map_err(|error| format!("Could not create Agent Halo config directory: {error}"))?;
+    let temporary_path = path.with_extension("json.tmp");
+    let contents = serde_json::to_vec_pretty(preference)
+        .map_err(|error| format!("Could not encode display preference: {error}"))?;
+    fs::write(&temporary_path, contents)
+        .map_err(|error| format!("Could not write display preference: {error}"))?;
+    fs::rename(&temporary_path, &path)
+        .map_err(|error| format!("Could not save display preference: {error}"))?;
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn appkit_display_id(screen: &NSScreen) -> Option<String> {
+    let description = screen.deviceDescription();
+    let key = NSString::from_str("NSScreenNumber");
+    let value = description.objectForKey(&key)?;
+    // SAFETY: NSScreenNumber is documented as an NSNumber-compatible unsigned display id.
+    let display_id: usize = unsafe { msg_send![&*value, unsignedIntegerValue] };
+    Some(format!("macos:{display_id}"))
+}
+
+#[cfg(target_os = "macos")]
+fn appkit_display_option(
+    screen: &NSScreen,
+    primary_display_id: Option<&str>,
+) -> Option<DisplayOption> {
+    let id = appkit_display_id(screen)?;
+    let name = screen.localizedName().to_string();
+    let frame = screen.frame();
+    let backing_frame =
+        screen.convertRectToBacking(NSRect::new(NSPoint::new(0.0, 0.0), frame.size));
+    let width = backing_frame.size.width.max(1.0).round() as u32;
+    let height = backing_frame.size.height.max(1.0).round() as u32;
+    let scale_factor = if frame.size.width > 0.0 {
+        backing_frame.size.width / frame.size.width
+    } else {
+        1.0
+    };
+    let fingerprint = format!("{name}|{width}x{height}|{scale_factor:.3}");
+
+    Some(DisplayOption {
+        is_primary: primary_display_id == Some(id.as_str()),
+        id,
+        fingerprint,
+        name,
+        width,
+        height,
+        scale_factor,
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn resolve_appkit_screen(
+    screens: &NSArray<NSScreen>,
+    preference: Option<&DisplayPreference>,
+) -> (Option<Retained<NSScreen>>, bool) {
+    if let Some(preference) = preference {
+        if let Some(screen) = screens
+            .iter()
+            .find(|screen| appkit_display_id(screen).is_some_and(|id| id == preference.id))
+        {
+            return (Some(screen), false);
+        }
+        if let Some(screen) = screens.iter().find(|screen| {
+            appkit_display_option(screen, None)
+                .is_some_and(|option| option.fingerprint == preference.fingerprint)
+        }) {
+            return (Some(screen), false);
+        }
+    }
+
+    (screens.iter().next(), preference.is_some())
+}
+
+#[cfg(target_os = "macos")]
+fn display_state_for_platform(window: &tauri::WebviewWindow) -> Option<DisplayStateSnapshot> {
+    let mtm = MainThreadMarker::new()?;
+    let screens = NSScreen::screens(mtm);
+    let primary_display_id = screens
+        .iter()
+        .next()
+        .and_then(|screen| appkit_display_id(&screen));
+    let preference = window.app_handle().state::<DisplayPreferenceState>().get();
+    let (active_screen, fallback_active) = resolve_appkit_screen(&screens, preference.as_ref());
+    let active_display_id = active_screen.as_deref().and_then(appkit_display_id);
+    let selected_display_id = if preference.is_none() || !fallback_active {
+        active_display_id.clone()
+    } else {
+        None
+    };
+    let displays = screens
+        .iter()
+        .filter_map(|screen| appkit_display_option(&screen, primary_display_id.as_deref()))
+        .collect();
+
+    Some(DisplayStateSnapshot {
+        displays,
+        preferred_display_id: preference.as_ref().map(|selection| selection.id.clone()),
+        preferred_display_name: preference.map(|selection| selection.name),
+        selected_display_id,
+        active_display_id,
+        fallback_active,
+    })
+}
+
+#[cfg(not(target_os = "macos"))]
+fn monitor_display_option(
+    monitor: &tauri::window::Monitor,
+    primary_id: Option<&str>,
+) -> DisplayOption {
+    let name = monitor
+        .name()
+        .cloned()
+        .unwrap_or_else(|| "Display".to_string());
+    let size = monitor.size();
+    let position = monitor.position();
+    let scale_factor = monitor.scale_factor();
+    let fingerprint = format!("{name}|{}x{}|{scale_factor:.3}", size.width, size.height);
+    let id = format!("monitor:{fingerprint}|{},{}", position.x, position.y);
+    DisplayOption {
+        is_primary: primary_id == Some(id.as_str()),
+        id,
+        fingerprint,
+        name,
+        width: size.width,
+        height: size.height,
+        scale_factor,
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn display_state_for_platform(window: &tauri::WebviewWindow) -> Option<DisplayStateSnapshot> {
+    let monitors = window.available_monitors().ok()?;
+    let primary = window.primary_monitor().ok().flatten();
+    let primary_option = primary
+        .as_ref()
+        .map(|monitor| monitor_display_option(monitor, None));
+    let primary_id = primary_option.as_ref().map(|option| option.id.as_str());
+    let displays: Vec<_> = monitors
+        .iter()
+        .map(|monitor| monitor_display_option(monitor, primary_id))
+        .collect();
+    let preference = window.app_handle().state::<DisplayPreferenceState>().get();
+    let matched = preferred_display_index(&displays, preference.as_ref())
+        .and_then(|index| displays.get(index));
+    let fallback_active = preference.is_some() && matched.is_none();
+    let active_display_id = matched
+        .map(|display| display.id.clone())
+        .or_else(|| primary_option.map(|display| display.id))
+        .or_else(|| displays.first().map(|display| display.id.clone()));
+    let selected_display_id = if preference.is_none() || !fallback_active {
+        active_display_id.clone()
+    } else {
+        None
+    };
+
+    Some(DisplayStateSnapshot {
+        displays,
+        preferred_display_id: preference.as_ref().map(|selection| selection.id.clone()),
+        preferred_display_name: preference.map(|selection| selection.name),
+        selected_display_id,
+        active_display_id,
+        fallback_active,
+    })
+}
+
+#[tauri::command]
+fn display_state(window: tauri::WebviewWindow) -> Result<DisplayStateSnapshot, String> {
+    if let Some(state) = display_state_for_platform(&window) {
+        return Ok(state);
+    }
+
+    let (sender, receiver) = mpsc::channel();
+    let scheduled_window = window.clone();
+    window
+        .run_on_main_thread(move || {
+            let _ = sender.send(display_state_for_platform(&scheduled_window));
+        })
+        .map_err(|error| format!("Could not query displays: {error}"))?;
+
+    receiver
+        .recv_timeout(Duration::from_millis(500))
+        .map_err(|_| "Timed out while querying displays".to_string())?
+        .ok_or_else(|| "No displays are available".to_string())
+}
+
+#[tauri::command]
+fn select_display(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    display_id: String,
+) -> Result<DisplayStateSnapshot, String> {
+    let current = display_state(window.clone())?;
+    let selected = current
+        .displays
+        .iter()
+        .find(|display| display.id == display_id)
+        .ok_or_else(|| "That display is no longer connected".to_string())?;
+    let preference = DisplayPreference {
+        id: selected.id.clone(),
+        fingerprint: selected.fingerprint.clone(),
+        name: selected.name.clone(),
+    };
+
+    let preference_state = app.state::<DisplayPreferenceState>();
+    let previous = preference_state.get();
+    preference_state.set(Some(preference.clone()));
+    if let Err(error) = position_main_window_on_selected_display(&window) {
+        preference_state.set(previous.clone());
+        let _ = position_main_window(&window);
+        return Err(error);
+    }
+    if let Err(error) = write_display_preference(&app, &preference) {
+        preference_state.set(previous);
+        let _ = position_main_window(&window);
+        return Err(error);
+    }
+    display_state(window)
+}
+
 #[tauri::command]
 fn notch_metrics(window: tauri::WebviewWindow) -> (f64, f64) {
     if let Some(metrics) = notch_metrics_for_platform(&window) {
@@ -3362,34 +3673,32 @@ fn notch_metrics(window: tauri::WebviewWindow) -> (f64, f64) {
 #[cfg(target_os = "macos")]
 fn notch_metrics_for_platform(window: &tauri::WebviewWindow) -> Option<(f64, f64)> {
     let mtm = MainThreadMarker::new()?;
-    let ns_window_ptr = window.ns_window().ok()?;
+    let screens = NSScreen::screens(mtm);
+    let preference = window.app_handle().state::<DisplayPreferenceState>().get();
+    let (screen, _) = resolve_appkit_screen(&screens, preference.as_ref());
+    let screen = screen?;
 
-    // SAFETY: Tauri owns this NSWindow and we only query AppKit on the main thread.
-    unsafe {
-        let ns_window: &NSWindow = &*ns_window_ptr.cast();
-        let screen = ns_window.screen().or_else(|| NSScreen::mainScreen(mtm))?;
-        let screen_frame = screen.frame();
-        let visible_frame = screen.visibleFrame();
-        let safe_insets = screen.safeAreaInsets();
-        let left_area = screen.auxiliaryTopLeftArea();
-        let right_area = screen.auxiliaryTopRightArea();
-        let derived_camera_width =
-            screen_frame.size.width - left_area.size.width - right_area.size.width + 4.0;
-        let camera_width = if safe_insets.top > 0.0 {
-            derived_camera_width.clamp(160.0, 260.0)
-        } else {
-            184.0
-        };
-        let menu_bar_height = (screen_frame.origin.y + screen_frame.size.height)
-            - (visible_frame.origin.y + visible_frame.size.height);
-        let closed_height = if safe_insets.top > 0.0 {
-            safe_insets.top.clamp(28.0, 44.0)
-        } else {
-            menu_bar_height.clamp(28.0, 40.0)
-        };
+    let screen_frame = screen.frame();
+    let visible_frame = screen.visibleFrame();
+    let safe_insets = screen.safeAreaInsets();
+    let left_area = screen.auxiliaryTopLeftArea();
+    let right_area = screen.auxiliaryTopRightArea();
+    let derived_camera_width =
+        screen_frame.size.width - left_area.size.width - right_area.size.width + 4.0;
+    let camera_width = if safe_insets.top > 0.0 {
+        derived_camera_width.clamp(160.0, 260.0)
+    } else {
+        184.0
+    };
+    let menu_bar_height = (screen_frame.origin.y + screen_frame.size.height)
+        - (visible_frame.origin.y + visible_frame.size.height);
+    let closed_height = if safe_insets.top > 0.0 {
+        safe_insets.top.clamp(28.0, 44.0)
+    } else {
+        menu_bar_height.clamp(28.0, 40.0)
+    };
 
-        Some((camera_width, closed_height))
-    }
+    Some((camera_width, closed_height))
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -3428,7 +3737,7 @@ fn set_main_window_frame_for_platform(
     width: f64,
     height: f64,
 ) -> tauri::Result<()> {
-    if position_main_window_with_appkit(window, Some((width, height))) {
+    if position_main_window_with_appkit(window, Some((width, height)), false) {
         return Ok(());
     }
 
@@ -3438,6 +3747,7 @@ fn set_main_window_frame_for_platform(
         let _ = sender.send(position_main_window_with_appkit(
             &scheduled_window,
             Some((width, height)),
+            false,
         ));
     })?;
 
@@ -3467,6 +3777,141 @@ fn position_main_window(window: &tauri::WebviewWindow) -> tauri::Result<()> {
     position_main_window_for_physical_width(window, width)
 }
 
+#[cfg(target_os = "macos")]
+fn main_window_matches_selected_frame(window: &tauri::WebviewWindow) -> Option<bool> {
+    let mtm = MainThreadMarker::new()?;
+    let ns_window_ptr = window.ns_window().ok()?;
+    let screens = NSScreen::screens(mtm);
+    let preference = window.app_handle().state::<DisplayPreferenceState>().get();
+    let (screen, _) = resolve_appkit_screen(&screens, preference.as_ref());
+    let screen = screen?;
+
+    // SAFETY: Tauri owns this NSWindow and this helper only runs on AppKit's main thread.
+    unsafe {
+        let ns_window: &NSWindow = &*ns_window_ptr.cast();
+        let frame = ns_window.frame();
+        let screen_frame = screen.frame();
+        let expected_x =
+            screen_frame.origin.x + (screen_frame.size.width / 2.0) - (frame.size.width / 2.0);
+        let expected_y = screen_frame.origin.y + screen_frame.size.height - frame.size.height;
+        Some(
+            (frame.origin.x - expected_x).abs() <= 1.0
+                && (frame.origin.y - expected_y).abs() <= 1.0,
+        )
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn main_window_matches_selected_frame(window: &tauri::WebviewWindow) -> Option<bool> {
+    let preference = window.app_handle().state::<DisplayPreferenceState>().get();
+    let monitors = window.available_monitors().ok()?;
+    let monitor = preference
+        .as_ref()
+        .and_then(|selection| {
+            monitors
+                .iter()
+                .find(|monitor| monitor_display_option(monitor, None).id == selection.id)
+                .or_else(|| {
+                    monitors.iter().find(|monitor| {
+                        monitor_display_option(monitor, None).fingerprint == selection.fingerprint
+                    })
+                })
+        })
+        .cloned()
+        .or(window.primary_monitor().ok().flatten())
+        .or(window.current_monitor().ok().flatten())?;
+    let frame_position = window.outer_position().ok()?;
+    let frame_width = window.outer_size().ok()?.width;
+    let monitor_position = monitor.position();
+    let monitor_size = monitor.size();
+    let expected_x =
+        monitor_position.x + ((monitor_size.width.saturating_sub(frame_width)) / 2) as i32;
+    Some(frame_position.x == expected_x && frame_position.y == monitor_position.y)
+}
+
+#[tauri::command]
+fn reconcile_display(window: tauri::WebviewWindow) -> Result<DisplayStateSnapshot, String> {
+    reconcile_display_position(&window)?;
+    display_state(window)
+}
+
+#[cfg(target_os = "macos")]
+fn reconcile_display_position(window: &tauri::WebviewWindow) -> Result<(), String> {
+    if let Some(matches) = main_window_matches_selected_frame(window) {
+        if matches || position_main_window_with_appkit(window, None, false) {
+            return Ok(());
+        }
+        return Err("Could not reconcile Agent Halo display position".to_string());
+    }
+
+    let (sender, receiver) = mpsc::channel();
+    let scheduled_window = window.clone();
+    window
+        .run_on_main_thread(move || {
+            let matches = main_window_matches_selected_frame(&scheduled_window) == Some(true);
+            let positioned =
+                matches || position_main_window_with_appkit(&scheduled_window, None, false);
+            let _ = sender.send(positioned);
+        })
+        .map_err(|error| format!("Could not schedule display reconciliation: {error}"))?;
+
+    if receiver
+        .recv_timeout(Duration::from_millis(500))
+        .unwrap_or(false)
+    {
+        Ok(())
+    } else {
+        Err("Timed out while reconciling Agent Halo display position".to_string())
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn reconcile_display_position(window: &tauri::WebviewWindow) -> Result<(), String> {
+    if main_window_matches_selected_frame(window) == Some(true) {
+        return Ok(());
+    }
+    position_main_window(window)
+        .map_err(|error| format!("Could not reconcile Agent Halo display position: {error}"))
+}
+
+#[cfg(target_os = "macos")]
+fn position_main_window_on_selected_display(window: &tauri::WebviewWindow) -> Result<(), String> {
+    if position_main_window_with_appkit(window, None, true) {
+        return Ok(());
+    }
+
+    let (sender, receiver) = mpsc::channel();
+    let scheduled_window = window.clone();
+    window
+        .run_on_main_thread(move || {
+            let _ = sender.send(position_main_window_with_appkit(
+                &scheduled_window,
+                None,
+                true,
+            ));
+        })
+        .map_err(|error| format!("Could not schedule display move: {error}"))?;
+
+    if receiver
+        .recv_timeout(Duration::from_millis(500))
+        .unwrap_or(false)
+    {
+        Ok(())
+    } else {
+        Err("The selected display disconnected before Agent Halo could move".to_string())
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn position_main_window_on_selected_display(window: &tauri::WebviewWindow) -> Result<(), String> {
+    let state = display_state(window.clone())?;
+    if state.selected_display_id.is_none() {
+        return Err("The selected display disconnected before Agent Halo could move".to_string());
+    }
+    position_main_window(window)
+        .map_err(|error| format!("Could not move Agent Halo to the selected display: {error}"))
+}
+
 fn position_main_window_for_logical_width(
     window: &tauri::WebviewWindow,
     width: f64,
@@ -3487,13 +3932,13 @@ fn position_main_window_for_platform(
     window: &tauri::WebviewWindow,
     _width: f64,
 ) -> tauri::Result<()> {
-    if position_main_window_with_appkit(window, None) {
+    if position_main_window_with_appkit(window, None, false) {
         return Ok(());
     }
 
     let scheduled_window = window.clone();
     window.run_on_main_thread(move || {
-        let _ = position_main_window_with_appkit(&scheduled_window, None);
+        let _ = position_main_window_with_appkit(&scheduled_window, None, false);
     })?;
     Ok(())
 }
@@ -3503,10 +3948,23 @@ fn position_main_window_for_platform(
     window: &tauri::WebviewWindow,
     width: f64,
 ) -> tauri::Result<()> {
-    let monitor = match window.primary_monitor()? {
-        Some(monitor) => Some(monitor),
-        None => window.current_monitor()?,
-    };
+    let preference = window.app_handle().state::<DisplayPreferenceState>().get();
+    let monitors = window.available_monitors()?;
+    let monitor = preference
+        .as_ref()
+        .and_then(|selection| {
+            monitors
+                .iter()
+                .find(|monitor| monitor_display_option(monitor, None).id == selection.id)
+                .or_else(|| {
+                    monitors.iter().find(|monitor| {
+                        monitor_display_option(monitor, None).fingerprint == selection.fingerprint
+                    })
+                })
+        })
+        .cloned()
+        .or(window.primary_monitor()?)
+        .or(window.current_monitor()?);
 
     if let Some(monitor) = monitor {
         let monitor_position = monitor.position();
@@ -3524,6 +3982,7 @@ fn position_main_window_for_platform(
 fn position_main_window_with_appkit(
     window: &tauri::WebviewWindow,
     target_size: Option<(f64, f64)>,
+    require_preferred_display: bool,
 ) -> bool {
     let Some(mtm) = MainThreadMarker::new() else {
         return false;
@@ -3532,15 +3991,20 @@ fn position_main_window_with_appkit(
     let Ok(ns_window_ptr) = window.ns_window() else {
         return false;
     };
+    let screens = NSScreen::screens(mtm);
+    let preference = window.app_handle().state::<DisplayPreferenceState>().get();
+    let (screen, fallback_active) = resolve_appkit_screen(&screens, preference.as_ref());
+    if require_preferred_display && fallback_active {
+        return false;
+    }
+    let Some(screen) = screen else {
+        return false;
+    };
 
     // SAFETY: Tauri gives us the backing NSWindow pointer for this WebviewWindow.
     // We only touch AppKit from the main thread (guarded above), matching AppKit's thread rules.
     unsafe {
         let ns_window: &NSWindow = &*ns_window_ptr.cast();
-        let Some(screen) = ns_window.screen().or_else(|| NSScreen::mainScreen(mtm)) else {
-            return false;
-        };
-
         let frame = ns_window.frame();
         let (width, height) = target_size.unwrap_or((frame.size.width, frame.size.height));
         let screen_frame = screen.frame();
@@ -3618,6 +4082,7 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
 pub fn run() {
     let app = tauri::Builder::default()
         .manage(KeepAwakeState::default())
+        .manage(DisplayPreferenceState::default())
         .invoke_handler(tauri::generate_handler![
             agent_halo_mod_path,
             agent_halo_mod_status,
@@ -3626,19 +4091,25 @@ pub fn run() {
             claude_usage,
             codex_usage,
             cursor_usage,
+            display_state,
             focus_terminal,
             grok_usage,
             install_agent_halo_mod,
             notch_metrics,
             open_external_url,
+            reconcile_display,
             set_keep_awake,
-            set_panel_open
+            set_panel_open,
+            select_display
         ])
         .setup(|app| {
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+            let preference = read_display_preference(app.handle());
+            app.state::<DisplayPreferenceState>().set(preference);
 
             if let Some(window) = app.get_webview_window("main") {
                 position_main_window(&window)?;
+                window.show()?;
             }
             setup_tray(app)?;
             Ok(())
@@ -3659,4 +4130,67 @@ pub fn run() {
         }
         _ => {}
     });
+}
+
+#[cfg(test)]
+mod display_selection_tests {
+    use super::*;
+
+    fn display(id: &str, fingerprint: &str) -> DisplayOption {
+        DisplayOption {
+            id: id.to_string(),
+            fingerprint: fingerprint.to_string(),
+            name: id.to_string(),
+            width: 2560,
+            height: 1440,
+            scale_factor: 2.0,
+            is_primary: id == "primary",
+        }
+    }
+
+    #[test]
+    fn selected_display_matches_exact_native_id_first() {
+        let displays = vec![
+            display("same-model-a", "studio"),
+            display("external", "studio"),
+        ];
+        let preference = DisplayPreference {
+            id: "external".to_string(),
+            fingerprint: "studio".to_string(),
+            name: "Studio Display".to_string(),
+        };
+
+        assert_eq!(
+            preferred_display_index(&displays, Some(&preference)),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn selected_display_recovers_by_fingerprint_when_native_id_changes() {
+        let displays = vec![display("primary", "built-in"), display("new-id", "studio")];
+        let preference = DisplayPreference {
+            id: "old-id".to_string(),
+            fingerprint: "studio".to_string(),
+            name: "Studio Display".to_string(),
+        };
+
+        assert_eq!(
+            preferred_display_index(&displays, Some(&preference)),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn disconnected_preference_has_no_match_so_platform_can_fallback_to_primary() {
+        let displays = vec![display("primary", "built-in")];
+        let preference = DisplayPreference {
+            id: "external".to_string(),
+            fingerprint: "studio".to_string(),
+            name: "Studio Display".to_string(),
+        };
+
+        assert_eq!(preferred_display_index(&displays, Some(&preference)), None);
+        assert_eq!(preferred_display_index(&displays, None), None);
+    }
 }

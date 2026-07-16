@@ -45,7 +45,7 @@ Legacy persisted or snapshot events whose conversation id is `default` are migra
 
 ## Derived activity semantics
 
-The desktop UI derives a smaller “activity kind” from raw bridge events for recent-activity rows. The deterministic project mascot roster keeps two independent layers: the selected project body maps truthful session status to five broad affect states (`idle`, `working`, `attention`, `done`, `error`), while one shared detached pixel signal maps grouped activity/status truth. A stable workspace/project key selects the same mascot for every session in that project; mascot color is not randomized. Idle/inactive and bridge/session lifecycle show no signal. This is intentionally a UI derivation, not a new bridge protocol field, and it never invents task content.
+The desktop UI derives a smaller “activity kind” from raw bridge events for recent-activity rows. The robot mascot system keeps two independent layers: one user-selected global body maps truthful session status to five broad affect states (`idle`, `working`, `attention`, `done`, `error`), while one shared detached pixel signal maps grouped activity/status truth. Scorpion is the default; workspace/project hashing and mascot color randomization are disabled. Idle/inactive and bridge/session lifecycle show no signal. This is intentionally a UI derivation, not a new bridge protocol field, and it never invents task content.
 
 Current raw events:
 

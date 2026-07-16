@@ -19,6 +19,7 @@ export const HALO_MASCOT_ROSTER = [
   "squid",
 ] as const;
 export type HaloMascotName = (typeof HALO_MASCOT_ROSTER)[number];
+export const DEFAULT_HALO_MASCOT: HaloMascotName = "scorpion";
 type HaloMascotState = "idle" | "working" | "attention" | "done" | "error";
 export type HaloMascotSignal =
   | "none"
@@ -54,16 +55,11 @@ const SIGNAL_BY_ACTIVITY: Record<ActivityKind, HaloMascotSignal> = {
   error: "error",
 };
 
-const hashIdentityKey = (value: string): number => {
-  let hash = 0;
-  for (let index = 0; index < value.length; index += 1) hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
-  return hash;
-};
+export const isHaloMascotName = (value: unknown): value is HaloMascotName =>
+  typeof value === "string" && (HALO_MASCOT_ROSTER as readonly string[]).includes(value);
 
-export const getHaloMascotName = (identityKey?: string | null): HaloMascotName => {
-  if (!identityKey) return "scorpion";
-  return HALO_MASCOT_ROSTER[hashIdentityKey(identityKey) % HALO_MASCOT_ROSTER.length] ?? "scorpion";
-};
+export const getHaloMascotName = (value?: string | null): HaloMascotName =>
+  isHaloMascotName(value) ? value : DEFAULT_HALO_MASCOT;
 
 const getState = (status?: ISessionSummary["status"], kind?: ActivityKind): HaloMascotState => {
   if (status === "error" || kind === "error") return "error";
@@ -91,13 +87,11 @@ const getStyle = (mascot: HaloMascotName, state: HaloMascotState, signal: HaloMa
 export interface IHaloMascotProps {
   activityKind?: ActivityKind;
   className: string;
-  identityKey?: string | null;
-  sessionId?: string | null;
+  mascot?: HaloMascotName;
   status?: ISessionSummary["status"];
 }
 
-export const HaloMascot = ({ activityKind, className, identityKey, sessionId, status }: IHaloMascotProps) => {
-  const mascot = getHaloMascotName(identityKey || sessionId);
+export const HaloMascot = ({ activityKind, className, mascot = DEFAULT_HALO_MASCOT, status }: IHaloMascotProps) => {
   const state = getState(status, activityKind);
   const signal = getHaloMascotSignal(status, activityKind);
   const visualStatus = status === "idle" || status === "inactive" ? status : state;

@@ -29,6 +29,7 @@ It is designed for people who keep multiple Letta Code conversations, subagents,
 - Provides a native Ghostty focus fallback for matching terminal tabs/windows by cwd/title/session hints.
 - Shows local AI usage for supported providers when credentials or local usage sources are available.
 - Can keep the macOS display awake while current Letta work is actively running, without treating stale or completed sessions as active work.
+- Lets the user choose which connected display owns the top-center notch. The native app remembers that display, falls back to Primary while it is disconnected, and returns when it reconnects.
 - Installs and verifies the local Letta Code mod from the desktop setup view.
 
 Agent Halo intentionally stays local. It uses the public Letta Code mod surface, a local bridge, local credentials, and local logs. It does not depend on a hosted dashboard and does not use transcript parsing as its primary source of truth.
@@ -183,7 +184,7 @@ scripts/install-desktop.mjs     Desktop build/install helper
 
 ## Design direction
 
-Agent Halo should feel like a quiet companion, not a generic AI dashboard. The interface follows a dark hardware-notch direction with compact workspace rows, hairline dividers, restrained orange/green state accents, and small mascot activity.
+Agent Halo should feel like a quiet companion, not a generic AI dashboard. The interface follows a dark hardware-notch direction with compact workspace rows, hairline dividers, restrained orange/green state accents, and small mascot activity. Setup exposes the original robot roster as one global persisted choice; Scorpion is the default and neither mascot identity nor color is randomized per project.
 
 Design references and parity notes live in [`docs/notchcode-parity.md`](docs/notchcode-parity.md).
 

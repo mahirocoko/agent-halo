@@ -49,7 +49,7 @@ Raw events are normalized into a UI-facing presence model in `packages/protocol/
 
 ## Desktop renderer
 
-`apps/desktop` is the active Notchcode-like renderer. It uses Tauri for an always-on-top transparent macOS surface while the frontend stays protocol-driven React. `src/main.tsx` is the shell/native-window orchestrator; `src/features/session`, `presence`, `setup`, and `usage` own focused typed behavior, and ordered files under `src/styles/` preserve CSS cascade ownership. The app includes tray controls, monitor-aware native notch metrics, state-directed session detail, local usage, and setup without changing the bridge contract.
+`apps/desktop` is the active Notchcode-like renderer. It uses Tauri for an always-on-top transparent macOS surface while the frontend stays protocol-driven React. `src/main.tsx` is the shell/native-window orchestrator; `src/features/session`, `presence`, `setup`, and `usage` own focused typed behavior, and ordered files under `src/styles/` preserve CSS cascade ownership. The app includes tray controls, selected-monitor-aware native notch metrics and positioning, state-directed session detail, local usage, and setup without changing the bridge contract. The selected macOS screen is persisted natively by `NSScreenNumber` plus a name/resolution/scale fingerprint; a missing screen falls back to Primary without discarding the saved preference.
 
 
 ## Demo mode and visual QA

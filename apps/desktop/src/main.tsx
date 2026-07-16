@@ -3,7 +3,7 @@ import { BarChart3, Check, ChevronLeft, Focus, List, Settings, Trash2, X } from 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createRoot } from "react-dom/client";
 import type { AgentHaloPresenceStatus } from "@agent-halo/protocol";
-import { ActivityMascot } from "./features/session/HaloMascot";
+import { ActivityMascot, type HaloMascotName } from "./features/session/HaloMascot";
 import { SessionContextSummary, StatusGlyph, WorkspaceSessionGroupItem } from "./features/session/components";
 import {
   formatTime,
@@ -23,6 +23,7 @@ import {
   writeDismissedSessionIds,
   writeSessionEventRegistry,
 } from "./features/session/persistence";
+import { readHaloMascotPreference, writeHaloMascotPreference } from "./features/session/mascotPreference";
 import {
   buildSessionDetail,
   buildSessionSummaries,
@@ -32,6 +33,7 @@ import {
 import type { ActivityKind, DeletedSessionRegistry, DismissedSessionRegistry, ISessionDetail, ISessionSummary, IWorkspaceSessionGroup } from "./features/session/types";
 import { useAgentHaloPresence } from "./features/presence/useAgentHaloPresence";
 import { SetupPanel } from "./features/setup/SetupPanel";
+import type { IDisplayStateSnapshot } from "./features/setup/display";
 import { readUsageSettings, writeUsageSettings } from "./features/usage/adapters";
 import { AgentUsageList } from "./features/usage/components";
 import type { IUsageSettings } from "./features/usage/types";
@@ -53,6 +55,7 @@ const PANEL_MAX_HEIGHT = 440;
 const ACTIVITY_COLLAPSE_MS = 220;
 const HOVER_OPEN_DELAY_MS = 24;
 const HOVER_CLOSE_DELAY_MS = 170;
+const DISPLAY_RECONCILE_INTERVAL_MS = 3_000;
 const KEEP_AWAKE_RETRY_DELAYS_MS = [750, 2_500] as const;
 const CLOSED_TOP_SHOULDER_RADIUS = 11;
 const OPEN_TOP_SHOULDER_RADIUS = 19;
@@ -134,6 +137,10 @@ const writeKeepAwakeEnabled = (enabled: boolean) => {
 const App = () => {
   const { capabilities, connection, lastLiveEvent, now, presence, recentEvents, refreshCapabilities, sessionEventRegistry, setSessionEventRegistry, view } = useAgentHaloPresence({ demoMode: DEMO_MODE, demoScenario: DEMO_SCENARIO });
   const [usageSettings, setUsageSettings] = useState<IUsageSettings>(readUsageSettings);
+  const [mascot, setMascot] = useState<HaloMascotName>(readHaloMascotPreference);
+  const [displayState, setDisplayState] = useState<IDisplayStateSnapshot | null>(null);
+  const [displayLoading, setDisplayLoading] = useState(false);
+  const [displayError, setDisplayError] = useState<string | null>(null);
   const { refresh: refreshAgentUsage, usages: agentUsages } = useAgentUsageList(usageSettings, DEMO_MODE);
   const [acknowledgedConversationId, setAcknowledgedConversationId] = useState<string | null>(null);
   const [nativeAction, setNativeAction] = useState<INativeActionState>({ bridgeOnline: null, message: null });
@@ -165,6 +172,8 @@ const App = () => {
   const hoverOpenTimerRef = useRef<number | null>(null);
   const hoverCloseTimerRef = useRef<number | null>(null);
   const keepAwakeRequestRef = useRef<Promise<unknown>>(Promise.resolve());
+  const displayRequestBusyRef = useRef(false);
+  const displayStateRef = useRef<IDisplayStateSnapshot | null>(null);
   const displayView =
     isDeletedAfter(deletedSessionIds, presence.conversationId, presence.lastEventAt) ||
     (view.status === "closed" && (acknowledgedConversationId === presence.conversationId || isDismissedAfter(dismissedSessionIds, presence.conversationId, presence.lastEventAt)))
@@ -409,10 +418,9 @@ const App = () => {
     if (shouldAutoOpen) setPanelOpen(true);
   }, [shouldAutoOpen]);
 
-  useEffect(() => {
-    if (!canUseNativeControls) return;
-
-    void invoke<[number, number]>("notch_metrics")
+  const refreshNotchMetrics = (): Promise<void> => {
+    if (!canUseNativeControls) return Promise.resolve();
+    return invoke<[number, number]>("notch_metrics")
       .then(([cameraWidth, closedHeight]) => {
         setNotchMetrics({
           cameraWidth: Number.isFinite(cameraWidth) ? cameraWidth : DEFAULT_CAMERA_NOTCH_WIDTH,
@@ -422,6 +430,44 @@ const App = () => {
       .catch(() => {
         setNotchMetrics({ cameraWidth: DEFAULT_CAMERA_NOTCH_WIDTH, closedHeight: DEFAULT_CLOSED_NOTCH_HEIGHT });
       });
+  };
+
+  const applyDisplayState = (next: IDisplayStateSnapshot | null): void => {
+    displayStateRef.current = next;
+    setDisplayState(next);
+  };
+
+  useEffect(() => {
+    void refreshNotchMetrics();
+  }, [canUseNativeControls]);
+
+  useEffect(() => {
+    if (!canUseNativeControls) return undefined;
+    let cancelled = false;
+    const reconcile = async () => {
+      if (displayRequestBusyRef.current) return;
+      displayRequestBusyRef.current = true;
+      try {
+        const next = await invoke<IDisplayStateSnapshot>("reconcile_display");
+        if (cancelled) return;
+        const current = displayStateRef.current;
+        const changed = current?.activeDisplayId !== next.activeDisplayId
+          || current?.fallbackActive !== next.fallbackActive
+          || current?.displays.map((display) => display.id).join("|") !== next.displays.map((display) => display.id).join("|");
+        applyDisplayState(next);
+        if (changed) await refreshNotchMetrics();
+      } catch {
+        // Keep the last usable display state; Setup refresh exposes persistent failures.
+      } finally {
+        displayRequestBusyRef.current = false;
+      }
+    };
+    void reconcile();
+    const timer = window.setInterval(() => void reconcile(), DISPLAY_RECONCILE_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
   }, [canUseNativeControls]);
 
   useEffect(() => {
@@ -467,18 +513,42 @@ const App = () => {
   useEffect(() => {
     let cancelled = false;
 
-    const resizeNativePanel = async (open: boolean) => {
-      if (!canUseNativeControls) return;
-      await invoke("set_panel_open", {
-        open,
-        width: open ? PANEL_WINDOW_WIDTH : nativeClosedSurfaceWidth,
-        height: open ? panelHeight : closedSurfaceHeight,
-      });
+    const resizeNativePanel = async (open: boolean): Promise<boolean> => {
+      if (!canUseNativeControls) return true;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          await invoke("set_panel_open", {
+            open,
+            width: open ? PANEL_WINDOW_WIDTH : nativeClosedSurfaceWidth,
+            height: open ? panelHeight : closedSurfaceHeight,
+          });
+          return true;
+        } catch (error) {
+          if (attempt === 0) {
+            await new Promise((resolve) => window.setTimeout(resolve, 120));
+            continue;
+          }
+          if (!cancelled) {
+            setNativeAction((current) => ({
+              bridgeOnline: current.bridgeOnline,
+              message: error instanceof Error ? `Window positioning unavailable · ${error.message}` : "Window positioning unavailable",
+            }));
+          }
+        }
+      }
+      return false;
     };
 
     if (panelOpen) {
       void (async () => {
-        await resizeNativePanel(true);
+        const opened = await resizeNativePanel(true);
+        if (!opened) {
+          if (!cancelled) {
+            setPanelOpen(false);
+            setRenderPanel(false);
+          }
+          return;
+        }
         await waitForNextPaint();
         await waitForNextPaint();
         if (!cancelled) setRenderPanel(true);
@@ -700,6 +770,11 @@ const App = () => {
     writeUsageSettings(settings);
   };
 
+  const updateMascot = (selection: HaloMascotName) => {
+    setMascot(selection);
+    writeHaloMascotPreference(selection);
+  };
+
   const updateKeepAwakeEnabled = (enabled: boolean) => {
     setKeepAwakeEnabled(enabled);
     writeKeepAwakeEnabled(enabled);
@@ -807,6 +882,46 @@ const App = () => {
     }
   };
 
+  const loadDisplayState = async () => {
+    if (!canUseNativeControls) {
+      applyDisplayState(null);
+      setDisplayError(null);
+      return;
+    }
+    if (displayRequestBusyRef.current) return;
+
+    displayRequestBusyRef.current = true;
+    setDisplayLoading(true);
+    try {
+      const next = await invoke<IDisplayStateSnapshot>("display_state");
+      applyDisplayState(next);
+      setDisplayError(null);
+    } catch (error) {
+      setDisplayError(error instanceof Error ? error.message : "Could not read connected displays");
+    } finally {
+      displayRequestBusyRef.current = false;
+      setDisplayLoading(false);
+    }
+  };
+
+  const updateDisplay = async (displayId: string) => {
+    if (!canUseNativeControls) return;
+    if (displayRequestBusyRef.current) return;
+    displayRequestBusyRef.current = true;
+    setDisplayLoading(true);
+    try {
+      const next = await invoke<IDisplayStateSnapshot>("select_display", { displayId });
+      applyDisplayState(next);
+      setDisplayError(null);
+      await refreshNotchMetrics();
+    } catch (error) {
+      setDisplayError(error instanceof Error ? error.message : "Could not move Agent Halo to that display");
+    } finally {
+      displayRequestBusyRef.current = false;
+      setDisplayLoading(false);
+    }
+  };
+
   const acknowledgeDone = () => {
     const conversationId = activitySession?.status === "done" ? activitySession.conversationId : presence.conversationId;
     setAcknowledgedConversationId(conversationId);
@@ -867,7 +982,10 @@ const App = () => {
   };
 
   useEffect(() => {
-    if (setupOpen) void loadModStatus();
+    if (setupOpen) {
+      void loadModStatus();
+      void loadDisplayState();
+    }
   }, [setupOpen]);
 
   return (
@@ -906,7 +1024,7 @@ const App = () => {
             </div>
             <div className="camera-spacer" aria-hidden="true" />
             <div className="notch-wing notch-wing-right" aria-hidden="true">
-              {hasLiveActivity ? <ActivityMascot activityKind={activityKind} identityKey={activitySession?.workspacePath ?? presence.cwd} sessionId={activitySession?.conversationId ?? presence.conversationId} status={activityStatus} /> : null}
+              {hasLiveActivity ? <ActivityMascot activityKind={activityKind} mascot={mascot} status={activityStatus} /> : null}
             </div>
           </div>
 
@@ -963,20 +1081,27 @@ const App = () => {
                   capabilities={capabilities}
                   canUseNativeControls={canUseNativeControls}
                   connectionTitle={connectionTitle}
+                  displayError={displayError}
+                  displayLoading={displayLoading}
+                  displayState={displayState}
                   guidance={setupGuidance}
                   isConnected={isConnected}
                   keepAwakeActive={keepAwakeActive}
                   keepAwakeEnabled={keepAwakeEnabled}
                   keepAwakeError={keepAwakeError}
+                  mascot={mascot}
                   modStatus={modStatus}
                   nativeAction={nativeAction}
                   onCheckBridge={() => void checkBridge()}
+                  onDisplayChange={updateDisplay}
+                  onDisplayRefresh={loadDisplayState}
                   onInstallMod={() => void installMod()}
                   onKeepAwakeChange={updateKeepAwakeEnabled}
+                  onMascotChange={updateMascot}
                 />
               ) : selectedSession ? (
                 <div className="detail-body session-context-view" data-status={selectedSession.status}>
-                  <SessionContextSummary session={selectedSession} />
+                  <SessionContextSummary mascot={mascot} session={selectedSession} />
                   <div className="detail-path" title={selectedSession.cwd}>{shortenPath(selectedSession.cwd)}</div>
                   {canUseNativeControls ? (
                     <div className="capability-note">Focus matches Ghostty terminal cwd/title and selects its tab</div>
@@ -1037,6 +1162,7 @@ const App = () => {
                                 expanded={expandedSessionGroupKeys.has(groupKey)}
                                 group={group}
                                 groupKey={groupKey}
+                                mascot={mascot}
                                 onClear={dismissSession}
                                 onClearGroup={clearCompletedSessionGroup}
                                 onFocus={(session) => void focusSelectedSession(session)}
@@ -1073,6 +1199,7 @@ const App = () => {
                                 expanded={expandedSessionGroupKeys.has(groupKey)}
                                 group={group}
                                 groupKey={groupKey}
+                                mascot={mascot}
                                 onClear={dismissSession}
                                 onClearGroup={clearCompletedSessionGroup}
                                 onFocus={(session) => void focusSelectedSession(session)}

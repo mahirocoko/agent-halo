@@ -1,0 +1,175 @@
+{
+  "thinking-model": {
+    "alpha_ok": true,
+    "palette_ok": true,
+    "bounds_ok": true,
+    "adjacent_deltas": [
+      10,
+      10,
+      10,
+      10
+    ],
+    "duplicate_frames": [],
+    "overlap_pixels": {
+      "scorpion_ambient": 0,
+      "scorpion_session": 0,
+      "crt_ambient": 0,
+      "crt_session": 0
+    }
+  },
+  "shell-tool-skill": {
+    "alpha_ok": true,
+    "palette_ok": true,
+    "bounds_ok": true,
+    "adjacent_deltas": [
+      12,
+      10,
+      10
+    ],
+    "duplicate_frames": [],
+    "overlap_pixels": {
+      "scorpion_ambient": 0,
+      "scorpion_session": 0,
+      "crt_ambient": 0,
+      "crt_session": 0
+    }
+  },
+  "editing": {
+    "alpha_ok": true,
+    "palette_ok": true,
+    "bounds_ok": true,
+    "adjacent_deltas": [
+      34,
+      34,
+      46
+    ],
+    "duplicate_frames": [],
+    "overlap_pixels": {
+      "scorpion_ambient": 0,
+      "scorpion_session": 0,
+      "crt_ambient": 0,
+      "crt_session": 0
+    }
+  },
+  "planning-goal": {
+    "alpha_ok": true,
+    "palette_ok": true,
+    "bounds_ok": false,
+    "adjacent_deltas": [
+      19,
+      21,
+      5
+    ],
+    "duplicate_frames": [],
+    "overlap_pixels": {
+      "scorpion_ambient": 0,
+      "scorpion_session": 0,
+      "crt_ambient": 0,
+      "crt_session": 0
+    }
+  },
+  "delegating": {
+    "alpha_ok": true,
+    "palette_ok": true,
+    "bounds_ok": true,
+    "adjacent_deltas": [
+      8,
+      8,
+      4
+    ],
+    "duplicate_frames": [],
+    "overlap_pixels": {
+      "scorpion_ambient": 0,
+      "scorpion_session": 0,
+      "crt_ambient": 0,
+      "crt_session": 0
+    }
+  },
+  "visual": {
+    "alpha_ok": true,
+    "palette_ok": true,
+    "bounds_ok": true,
+    "adjacent_deltas": [
+      8,
+      12,
+      8
+    ],
+    "duplicate_frames": [],
+    "overlap_pixels": {
+      "scorpion_ambient": 0,
+      "scorpion_session": 0,
+      "crt_ambient": 0,
+      "crt_session": 0
+    }
+  },
+  "memory": {
+    "alpha_ok": true,
+    "palette_ok": true,
+    "bounds_ok": true,
+    "adjacent_deltas": [
+      1,
+      4,
+      5
+    ],
+    "duplicate_frames": [],
+    "overlap_pixels": {
+      "scorpion_ambient": 0,
+      "scorpion_session": 0,
+      "crt_ambient": 0,
+      "crt_session": 0
+    }
+  },
+  "attention-asking": {
+    "alpha_ok": true,
+    "palette_ok": true,
+    "bounds_ok": true,
+    "adjacent_deltas": [
+      6,
+      6,
+      6,
+      15
+    ],
+    "duplicate_frames": [],
+    "overlap_pixels": {
+      "scorpion_ambient": 0,
+      "scorpion_session": 0,
+      "crt_ambient": 0,
+      "crt_session": 0
+    }
+  },
+  "done": {
+    "alpha_ok": true,
+    "palette_ok": true,
+    "bounds_ok": true,
+    "adjacent_deltas": [
+      11,
+      16,
+      1,
+      20
+    ],
+    "duplicate_frames": [],
+    "overlap_pixels": {
+      "scorpion_ambient": 0,
+      "scorpion_session": 0,
+      "crt_ambient": 0,
+      "crt_session": 0
+    }
+  },
+  "error": {
+    "alpha_ok": true,
+    "palette_ok": true,
+    "bounds_ok": true,
+    "adjacent_deltas": [
+      42,
+      56,
+      42
+    ],
+    "duplicate_frames": [],
+    "overlap_pixels": {
+      "scorpion_ambient": 0,
+      "scorpion_session": 0,
+      "crt_ambient": 0,
+      "crt_session": 0
+    }
+  }
+}

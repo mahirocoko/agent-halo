@@ -179,17 +179,12 @@
   --halo-mascot-frame-2-x: -96px;
   --halo-mascot-frame-3-x: -144px;
   --halo-mascot-signal-left: 48px;
-  --halo-mascot-signal-top: 12px;
+  --halo-mascot-signal-top: 10px;
   position: relative;
-  width: 60px;
+  width: 64px;
   height: 36px;
   display: inline-block;
   flex: none;
-  filter:
-    drop-shadow(0 0 2px rgba(85, 199, 232, 0.32))
-    hue-rotate(var(--halo-mascot-hue))
-    saturate(var(--halo-mascot-saturation))
-    brightness(var(--halo-mascot-brightness));
   image-rendering: pixelated;
 }
 
@@ -202,13 +197,13 @@
   --halo-mascot-frame-2-x: -80px;
   --halo-mascot-frame-3-x: -120px;
   --halo-mascot-signal-left: 40px;
-  --halo-mascot-signal-top: 9px;
-  width: 52px;
+  --halo-mascot-signal-top: 7px;
+  width: 56px;
   height: 30px;
 }
 
 .session-mascot.halo-mascot {
-  width: 60px;
+  width: 64px;
   height: 36px;
 }
 
@@ -228,15 +223,26 @@
   width: var(--halo-mascot-frame-width);
   height: var(--halo-mascot-frame-height);
   background-image: var(--halo-mascot-body);
+  filter:
+    drop-shadow(0 0 2px rgba(85, 199, 232, 0.32))
+    hue-rotate(var(--halo-mascot-hue))
+    saturate(var(--halo-mascot-saturation))
+    brightness(var(--halo-mascot-brightness));
 }
 
 .halo-mascot-signal {
   top: var(--halo-mascot-signal-top);
   left: var(--halo-mascot-signal-left);
-  width: 12px;
-  height: 12px;
+  width: 16px;
+  height: 16px;
   background-image: var(--halo-mascot-signal);
-  background-size: 24px 12px;
+  background-size: 48px 16px;
+}
+
+.halo-mascot[data-signal="thinking-model"] .halo-mascot-signal,
+.halo-mascot[data-signal="attention-asking"] .halo-mascot-signal,
+.halo-mascot[data-signal="done"] .halo-mascot-signal {
+  background-size: 64px 16px;
 }
 
 .halo-mascot[data-status="idle"] {
@@ -247,6 +253,9 @@
 .halo-mascot[data-status="inactive"] {
   --halo-mascot-saturation: 0;
   --halo-mascot-brightness: 0.7;
+}
+
+.halo-mascot[data-status="inactive"] .halo-mascot-body {
   filter: saturate(0) brightness(0.7);
 }
 
@@ -299,27 +308,17 @@
   animation: halo-mascot-done 1.7s step-end 1 forwards;
 }
 
-.halo-mascot[data-signal]:not([data-signal="none"]):not([data-signal="done"]) .halo-mascot-signal {
-  animation: halo-mascot-signal-loop var(--halo-signal-duration, 0.72s) steps(2) infinite;
+.halo-mascot[data-signal]:not([data-signal="none"]):not([data-signal="thinking-model"]):not([data-signal="attention-asking"]):not([data-signal="done"]) .halo-mascot-signal {
+  animation: halo-mascot-signal-three-frame-loop 0.6s step-end infinite;
 }
 
-.halo-mascot[data-signal="thinking-model"],
-.halo-mascot[data-signal="memory"],
-.halo-mascot[data-signal="visual"] {
-  --halo-signal-duration: 0.9s;
-}
-
-.halo-mascot[data-signal="planning-goal"],
-.halo-mascot[data-signal="delegating"] {
-  --halo-signal-duration: 0.8s;
-}
-
-.halo-mascot[data-signal="error"] {
-  --halo-signal-duration: 0.52s;
+.halo-mascot[data-signal="thinking-model"] .halo-mascot-signal,
+.halo-mascot[data-signal="attention-asking"] .halo-mascot-signal {
+  animation: halo-mascot-signal-four-frame-loop 0.8s step-end infinite;
 }
 
 .halo-mascot[data-signal="done"] .halo-mascot-signal {
-  animation: halo-mascot-signal-settle 0.35s steps(1, end) 1 forwards;
+  animation: halo-mascot-signal-done 1.2s step-end 1 forwards;
 }
 
 .halo-mascot[data-status="inactive"] .halo-mascot-body,
@@ -391,15 +390,56 @@
   }
 }
 
-@keyframes halo-mascot-signal-loop {
-  to {
-    background-position-x: -24px;
+@keyframes halo-mascot-signal-three-frame-loop {
+  0%,
+  33.32% {
+    background-position-x: 0;
+  }
+  33.33%,
+  66.65% {
+    background-position-x: -16px;
+  }
+  66.66%,
+  100% {
+    background-position-x: -32px;
   }
 }
 
-@keyframes halo-mascot-signal-settle {
-  to {
-    background-position-x: -12px;
+@keyframes halo-mascot-signal-four-frame-loop {
+  0%,
+  24.99% {
+    background-position-x: 0;
+  }
+  25%,
+  49.99% {
+    background-position-x: -16px;
+  }
+  50%,
+  74.99% {
+    background-position-x: -32px;
+  }
+  75%,
+  100% {
+    background-position-x: -48px;
+  }
+}
+
+@keyframes halo-mascot-signal-done {
+  0%,
+  16.66% {
+    background-position-x: 0;
+  }
+  16.67%,
+  33.32% {
+    background-position-x: -16px;
+  }
+  33.33%,
+  49.99% {
+    background-position-x: -32px;
+  }
+  50%,
+  100% {
+    background-position-x: -48px;
   }
 }
 
@@ -429,6 +469,6 @@
   }
 
   .halo-mascot[data-signal="done"] .halo-mascot-signal {
-    background-position-x: -12px;
+    background-position-x: -48px;
   }
 }

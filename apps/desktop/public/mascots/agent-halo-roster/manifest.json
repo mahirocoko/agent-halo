@@ -1,9 +1,9 @@
 {
   "name": "Agent Halo Project Mascot Roster",
-  "version": 2,
-  "status": "production-approved",
+  "version": 4,
+  "status": "integration-candidate",
   "humanApproved": true,
-  "productionApproved": true,
+  "productionApproved": false,
   "mainMascot": "scorpion",
   "roster": [
     "pot",
@@ -23,10 +23,12 @@
     "squid"
   ],
   "assignment": {
-    "status": "deterministic-active",
-    "strategy": "Unsigned JavaScript 31x string hash of workspace/project identity modulo roster length",
-    "key": "workspacePath, then project/session fallback",
+    "status": "user-selected-global",
+    "strategy": "One persisted mascot selection is used for ambient, session, group, and detail surfaces.",
+    "storageKey": "agent-halo.mascot",
+    "default": "scorpion",
     "fallback": "scorpion",
+    "projectHashing": false,
     "colorRandomization": false
   },
   "body": {
@@ -109,29 +111,43 @@
     }
   },
   "signal": {
-    "status": "production-approved-shared",
-    "source": "Human-approved Candidate C semantic signal grids",
+    "status": "integration-candidate-gemini-v3",
+    "source": "Human-directed Gemini 3.5 Signal V3 direct-native grids",
     "frameSize": [
       12,
       12
     ],
-    "stripSize": [
-      24,
-      12
+    "displaySize": [
+      16,
+      16
     ],
     "sessionDisplayOrigin": [
       48,
-      12
+      10
     ],
     "ambientDisplayOrigin": [
       40,
-      9
+      7
     ],
-    "framesPerSignal": 2,
+    "frameCounts": {
+      "thinking-model": 4,
+      "shell-tool-skill": 3,
+      "editing": 3,
+      "planning-goal": 3,
+      "delegating": 3,
+      "visual": 3,
+      "memory": 3,
+      "attention-asking": 4,
+      "done": 4,
+      "error": 3
+    },
+    "frameDurationMs": 200,
+    "doneFinalHoldMs": 600,
     "idleIncluded": false,
-    "semanticModel": "Independent grouped action/status signal; mascot body affect remains separate."
+    "semanticModel": "Independent grouped action/status signal; mascot body affect and user selection remain separate.",
+    "productionApproved": false
   },
-  "colorStrategy": "One shared cyan base palette. No project/mascot hue randomization; only truthful state filters may alter color.",
+  "colorStrategy": "One authored cyan robot palette. No project, mascot, or user-randomized hue; only truthful lifecycle state filters may alter the body.",
   "palette": {
     "base": [
       "#E6FAFF",
@@ -167,7 +183,10 @@
       "source": "roster-attention-error-motion-v1",
       "sourceProductionManifestSha256": "44e678f42170d9688af8848daa40b3823a3db82ff434f3007407c352a572a118",
       "evidence": "Mahiro reviewed the 15-identity Attention/Error animation gallery and responded \u0e1c\u0e48\u0e32\u0e19\u0e19\u0e30."
-    }
+    },
+    "selectionDecision": "Mahiro returned to the original robot roster, chose Scorpion as the default/main mascot, disabled project assignment, and requested explicit user selection.",
+    "signalDecision": "Mahiro directed Signal V3 semantic corrections and requested a larger 16x16 delivery alongside the original robot bodies.",
+    "signalReviewSource": "20260716-halo-semantic-signals-gemini-v2/v3-correction"
   },
   "files": {
     "body/bat/attention.png": "a0ad12799723f4893db93cda09ea359539d37cab8ebf54b5d60e32376b0f3f59",
@@ -245,15 +264,16 @@
     "body/turtle/error.png": "9e415254295b3c93d744c259a08ac6e8092618407c56c860dad1949ca9869f42",
     "body/turtle/idle.png": "bb5da656d148e1ec17d26a3172786feaf33f944f777ec654bb760d742790ff20",
     "body/turtle/working.png": "07da8c09ad5531fb3120499e2c3727b77ecf2737818009449a9a650780d90994",
-    "signals/attention-asking.png": "f5ed429b2db8f32f0e3045727faf017b115d4e9d8c04e3696a7c1e8fb7f87e27",
-    "signals/delegating.png": "361f9ec6180101ac187022d7288b297c838f5f67070bb18d9c695e2ccbf615fa",
-    "signals/done.png": "b076d1f7ab2875e6ae2b1b4863337823c27705290154e73d1e7c12c28c1560bc",
-    "signals/editing.png": "b4512efb3054bc6e8449781a2fe2d412b1fcd70ecc6f7100b4d595cd247d2f9b",
-    "signals/error.png": "f6c46b287e21ef4181b8453ab63afed8047c63d05450a14b92f58c30e44ddf0f",
-    "signals/memory.png": "574ceeb4facf82d08f1b8ccac22af22896e05309eeee99f96ed813a3abf10001",
-    "signals/planning-goal.png": "6d8c11529e81cd0bc5f6ee9b1443ee6bbfc629b7982559e62beaff95ccbeffc0",
-    "signals/shell-tool-skill.png": "1d48db0e972d4604b015f7174b8181e871614147336aa51c2eab92cdc29113dc",
-    "signals/thinking-model.png": "60406ddb83c661c14aa0cc6d0d262d0997021499e713b917a27715314c81c562",
-    "signals/visual.png": "3d0ee756e426a2370406f3ea417ec986f2dee516fe8f42da04da52cb7f654769"
-  }
+    "signals/attention-asking.png": "e2a79e744f6e1dd16f48932c8de402b536505b7ebcbdfb0b1e62e8b5bd0d6808",
+    "signals/delegating.png": "d38af101e623a4ac61dd8896c7d51fefee587b36daf48600fabe407661e4f97c",
+    "signals/done.png": "b97fb7866acbace34ff3ee4c5df869a133ebb73da390ab20d5bdd2cc973ab2ec",
+    "signals/editing.png": "3a03b764b7d3229814fdb6ce07d2878ad819ecf480ef34d591bee4a677d2d3b0",
+    "signals/error.png": "0b5d7056a59abf0202f063d1890f7bc4b9101d80ec68781270aaefe092b7e371",
+    "signals/memory.png": "64fe5f45daeac57821abc35eebc7bdec562a71667fb4eb8ddc20765495b44afc",
+    "signals/planning-goal.png": "86f211bee4067e04a58693e1f572af352d95fed3acc2b024172da5e24c2b0272",
+    "signals/shell-tool-skill.png": "cf05323737410d4de69aa2eb59ff9e4e1cca657b800f27c708eba02a4698bd86",
+    "signals/thinking-model.png": "70f3232e7bbc635584bce038680668233eadf63dfba3b96dec146fce2705f13e",
+    "signals/visual.png": "0c433322cb2f8486db4319213aa6d6d1794ead28eb673bf78199b727433a93f2"
+  },
+  "defaultMascot": "scorpion"
 }

@@ -1,0 +1,380 @@
+{
+  "schemaVersion": 2,
+  "id": "20260716-halo-semantic-signals-gemini-v2",
+  "title": "Agent Halo semantic action/status signals v3 correction",
+  "kind": "animation-strip",
+  "workflowMode": "sprite-generate",
+  "targetRepo": "/Users/mahiro/ghq/github.com/mahirocoko/agent-halo",
+  "sourceLane": "gemini",
+  "executorModel": "Gemini 3.5 Flash (High)",
+  "usage": "source-candidate",
+  "frameSize": [
+    12,
+    12
+  ],
+  "displaySize": [
+    16,
+    16
+  ],
+  "delivery": {
+    "ambient": {
+      "wrapper": [
+        56,
+        30
+      ],
+      "origin": [
+        40,
+        7
+      ]
+    },
+    "session": {
+      "wrapper": [
+        64,
+        36
+      ],
+      "origin": [
+        48,
+        10
+      ]
+    }
+  },
+  "frameCount": 33,
+  "states": [
+    "thinking-model",
+    "shell-tool-skill",
+    "editing",
+    "planning-goal",
+    "delegating",
+    "visual",
+    "memory",
+    "attention-asking",
+    "done",
+    "error"
+  ],
+  "frames": [
+    {
+      "file": "frames/thinking-model-00.png",
+      "state": "thinking-model",
+      "index": 0,
+      "durationMs": 200
+    },
+    {
+      "file": "frames/thinking-model-01.png",
+      "state": "thinking-model",
+      "index": 1,
+      "durationMs": 200
+    },
+    {
+      "file": "frames/thinking-model-02.png",
+      "state": "thinking-model",
+      "index": 2,
+      "durationMs": 200
+    },
+    {
+      "file": "frames/thinking-model-03.png",
+      "state": "thinking-model",
+      "index": 3,
+      "durationMs": 200
+    },
+    {
+      "file": "frames/shell-tool-skill-00.png",
+      "state": "shell-tool-skill",
+      "index": 0,
+      "durationMs": 200
+    },
+    {
+      "file": "frames/shell-tool-skill-01.png",
+      "state": "shell-tool-skill",
+      "index": 1,
+      "durationMs": 200
+    },
+    {
+      "file": "frames/shell-tool-skill-02.png",
+      "state": "shell-tool-skill",
+      "index": 2,
+      "durationMs": 200
+    },
+    {
+      "file": "frames/editing-00.png",
+      "state": "editing",
+      "index": 0,
+      "durationMs": 200
+    },
+    {
+      "file": "frames/editing-01.png",
+      "state": "editing",
+      "index": 1,
+      "durationMs": 200
+    },
+    {
+      "file": "frames/editing-02.png",
+      "state": "editing",
+      "index": 2,
+      "durationMs": 200
+    },
+    {
+      "file": "frames/planning-goal-00.png",
+      "state": "planning-goal",
+      "index": 0,
+      "durationMs": 200
+    },
+    {
+      "file": "frames/planning-goal-01.png",
+      "state": "planning-goal",
+      "index": 1,
+      "durationMs": 200
+    },
+    {
+      "file": "frames/planning-goal-02.png",
+      "state": "planning-goal",
+      "index": 2,
+      "durationMs": 200
+    },
+    {
+      "file": "frames/delegating-00.png",
+      "state": "delegating",
+      "index": 0,
+      "durationMs": 200
+    },
+    {
+      "file": "frames/delegating-01.png",
+      "state": "delegating",
+      "index": 1,
+      "durationMs": 200
+    },
+    {
+      "file": "frames/delegating-02.png",
+      "state": "delegating",
+      "index": 2,
+      "durationMs": 200
+    },
+    {
+      "file": "frames/visual-00.png",
+      "state": "visual",
+      "index": 0,
+      "durationMs": 200
+    },
+    {
+      "file": "frames/visual-01.png",
+      "state": "visual",
+      "index": 1,
+      "durationMs": 200
+    },
+    {
+      "file": "frames/visual-02.png",
+      "state": "visual",
+      "index": 2,
+      "durationMs": 200
+    },
+    {
+      "file": "frames/memory-00.png",
+      "state": "memory",
+      "index": 0,
+      "durationMs": 200
+    },
+    {
+      "file": "frames/memory-01.png",
+      "state": "memory",
+      "index": 1,
+      "durationMs": 200
+    },
+    {
+      "file": "frames/memory-02.png",
+      "state": "memory",
+      "index": 2,
+      "durationMs": 200
+    },
+    {
+      "file": "frames/attention-asking-00.png",
+      "state": "attention-asking",
+      "index": 0,
+      "durationMs": 200
+    },
+    {
+      "file": "frames/attention-asking-01.png",
+      "state": "attention-asking",
+      "index": 1,
+      "durationMs": 200
+    },
+    {
+      "file": "frames/attention-asking-02.png",
+      "state": "attention-asking",
+      "index": 2,
+      "durationMs": 200
+    },
+    {
+      "file": "frames/attention-asking-03.png",
+      "state": "attention-asking",
+      "index": 3,
+      "durationMs": 200
+    },
+    {
+      "file": "frames/done-00.png",
+      "state": "done",
+      "index": 0,
+      "durationMs": 200
+    },
+    {
+      "file": "frames/done-01.png",
+      "state": "done",
+      "index": 1,
+      "durationMs": 200
+    },
+    {
+      "file": "frames/done-02.png",
+      "state": "done",
+      "index": 2,
+      "durationMs": 200
+    },
+    {
+      "file": "frames/done-03.png",
+      "state": "done",
+      "index": 3,
+      "durationMs": 600
+    },
+    {
+      "file": "frames/error-00.png",
+      "state": "error",
+      "index": 0,
+      "durationMs": 200
+    },
+    {
+      "file": "frames/error-01.png",
+      "state": "error",
+      "index": 1,
+      "durationMs": 200
+    },
+    {
+      "file": "frames/error-02.png",
+      "state": "error",
+      "index": 2,
+      "durationMs": 200
+    }
+  ],
+  "anchors": {
+    "default": [
+      8,
+      8
+    ]
+  },
+  "lineage": {
+    "sourceIds": [],
+    "normalization": null
+  },
+  "provenance": {
+    "sourceLane": "gemini",
+    "usage": "source-candidate"
+  },
+  "status": "review-candidate",
+  "humanApproved": false,
+  "productionApproved": false,
+  "files": {
+    "frames/thinking-model-00.png": "a9018a0546e0ad153c2ac53600f55b4aba0018c9b606495f636c66f612475002",
+    "frames/thinking-model-01.png": "b14ecec651a936dbf6413ee767cc88da57d1bc6b4100eef985c3fbf991ea4c3a",
+    "frames/thinking-model-02.png": "7e9858b9dfe4a70e51f5ff9805d84b4d06ebdb7edf84304d59269b2846fe4a69",
+    "frames/thinking-model-03.png": "e7859c5db24e100456d031d4ace771930f52d8218f81086577b0ac4a3b634aee",
+    "strips/thinking-model.png": "70f3232e7bbc635584bce038680668233eadf63dfba3b96dec146fce2705f13e",
+    "gifs/thinking-model.gif": "4fa0be6251e02bdfbf68deee3ed96e2cfa1a2c3c6fc2d8810c2ac85c907816f3",
+    "frames/shell-tool-skill-00.png": "a726dd3d92323f68c441e24890fd1a91a8bcf602da658d8f3b8695e8a7fe3c66",
+    "frames/shell-tool-skill-01.png": "6a42ad5db327d43fcab1953f0de8dea21b8eb2dd3645816d5597f5d447cb74a3",
+    "frames/shell-tool-skill-02.png": "c0630d13dad3bfa01a797b5c0cf40689c685353d762bfaf76aad98af224c71f3",
+    "strips/shell-tool-skill.png": "cf05323737410d4de69aa2eb59ff9e4e1cca657b800f27c708eba02a4698bd86",
+    "gifs/shell-tool-skill.gif": "68350177c66664d927641f6e128e20a17c34ec79aa249cda28f246dde4c47814",
+    "frames/editing-00.png": "1fa82c96dd80c2a38e57357b06e2a21630fa09dec2824562d0c9233f60b2f4a7",
+    "frames/editing-01.png": "e3b6a2c2ec555acfe45d29e68a20fce87438412c28ed92ec0ba658929241f6ac",
+    "frames/editing-02.png": "17f547069a590a57bee87630e3b22c10dbafa8558e15050234e68979025ba9ea",
+    "strips/editing.png": "3a03b764b7d3229814fdb6ce07d2878ad819ecf480ef34d591bee4a677d2d3b0",
+    "gifs/editing.gif": "498df04af6b4e1cec88aa6538620fc997c8221d8f8181c3a7f90185f4e19fac1",
+    "frames/planning-goal-00.png": "834a0195ece478c58084ccf786e0bfbbe06bcc1d7f9b25b0af82762d8647cf7c",
+    "frames/planning-goal-01.png": "166ba8a7a07be84adaf595de18147c84d4a7f40ffa9af9bf00da62a5db901045",
+    "frames/planning-goal-02.png": "8da806e22978f52d44212121895eece5bbc3f44772f0577874f97d16f7b1bf02",
+    "strips/planning-goal.png": "86f211bee4067e04a58693e1f572af352d95fed3acc2b024172da5e24c2b0272",
+    "gifs/planning-goal.gif": "12fb3fd2b56750666ff7f5c60ad71c0f1f5e745e43529d99498905e06c0fd8f4",
+    "frames/delegating-00.png": "228f40bd78e6e5c49569f233eca00a8f44bcd4d698f1edc6df4d3ce1cb616802",
+    "frames/delegating-01.png": "d09d574bc42579633b1bf1c8a3a1891f90c2c7d2499870080daefa3699d8aae4",
+    "frames/delegating-02.png": "79545c48f6642da3f06adad9b0160b9be510f466a47e2080c4e98a26ce5f71f9",
+    "strips/delegating.png": "d38af101e623a4ac61dd8896c7d51fefee587b36daf48600fabe407661e4f97c",
+    "gifs/delegating.gif": "2808c47556ead9bd8398720c57f6b7c3dc81bc59e0517783522d2f316d95125c",
+    "frames/visual-00.png": "8577812a813e05e375e0f6d6201f250bb59c8adf8f9cebd1b17dd7bca842a64b",
+    "frames/visual-01.png": "acac0afebc6d8a29937482762f62f92f859defd521330a3b594630dcbc0da153",
+    "frames/visual-02.png": "6bde50eae5f05774692b085aaabebd4b0d587f72322bede3bd3bfccd52e34a96",
+    "strips/visual.png": "0c433322cb2f8486db4319213aa6d6d1794ead28eb673bf78199b727433a93f2",
+    "gifs/visual.gif": "dfe5d3dcbe9e70ac66a4848cf63e986d555aab0fe2724bb599c171f9238ac88e",
+    "frames/memory-00.png": "90e2eaa6f74876d3232226d8571f6a0439e130c2ffd3ac2fc81d6e326cc7e56b",
+    "frames/memory-01.png": "83a2f9571e4580bf2ad5ac383bbfde6edc7b7eb0e20258b1913cfd3f009e7d89",
+    "frames/memory-02.png": "623beed1300ca2ea5bceea68edde453a6a46ec856d1da0fab8021c77e19323b3",
+    "strips/memory.png": "64fe5f45daeac57821abc35eebc7bdec562a71667fb4eb8ddc20765495b44afc",
+    "gifs/memory.gif": "14216408f782fcdf4e278026d607641a8d5abae085882919ad1a737d246d2f08",
+    "frames/attention-asking-00.png": "4fd9b8e31e43ae12a82bb9487c046dd866f929f2c16f22e13b93f491191803d1",
+    "frames/attention-asking-01.png": "92fb7c5e774562d2fa66874bbba11a709a5d07d87191f233d34d8954a9a86c51",
+    "frames/attention-asking-02.png": "64a9e9f68a46de394c6e3bc072f9ed54c7f584073c830dd9785ab6f10cd675bf",
+    "frames/attention-asking-03.png": "9c693d86b05fc3cb4a860cf786ee61c6eb72813e9d02d16e47703d158dfecd27",
+    "strips/attention-asking.png": "e2a79e744f6e1dd16f48932c8de402b536505b7ebcbdfb0b1e62e8b5bd0d6808",
+    "gifs/attention-asking.gif": "b0990bd9708b3742eb293cf63d22e520e57e801628d682a58a46d248c834b7e9",
+    "frames/done-00.png": "b74a111a68b79e36d1a6356fc5486bb77314914ed9f953ff0661d8a74f8e9b28",
+    "frames/done-01.png": "c677eae1b57c8212067e0ab36d7c178a86abf3f8c875fc528b50f5a867550517",
+    "frames/done-02.png": "bbd7be32ea4d2ae1afddfb65cb4df9415aabf61d9e3a5549b2d2c3616df827fe",
+    "frames/done-03.png": "9e648af8099b32b5a82e3af396173ca3db5033ae339dc9462255ede5961b9f8a",
+    "strips/done.png": "b97fb7866acbace34ff3ee4c5df869a133ebb73da390ab20d5bdd2cc973ab2ec",
+    "gifs/done.gif": "c3dacfd986ab184d5bcf27e2e39cd76ee5bbf24a253212dfc68e7a03754a00f7",
+    "frames/error-00.png": "1daba65b0c8bbadbf5dbcc1e4ed2fb06fe34b7f71289f9d83cccf7f3da67da48",
+    "frames/error-01.png": "ddae9f27c6453e90cfac6989244fdb16dc523b73b0c1a61b4ff0f23cd62fd3f5",
+    "frames/error-02.png": "798d63a8bd12c7706b7d65290e531f557bf7ce7543195f4ee981475b21ed72cb",
+    "strips/error.png": "0b5d7056a59abf0202f063d1890f7bc4b9101d80ec68781270aaefe092b7e371",
+    "gifs/error.gif": "d8dcf684f69652f8940f0a538aae858e1d8e501c7ef6c9831ed9e33edacfc29b",
+    "previews/ambient/scorpion_thinking-model_ambient.gif": "c0d5dcd4d4f7ac8bab4cb0df24f5416a1c986412439b602386a2926ef4bcb187",
+    "previews/session/scorpion_thinking-model_session.gif": "f6d6920cfe9b3f17f353da4093c14bbde27c00d6b1d6fa7e99fdd2deadcd08f0",
+    "previews/ambient/scorpion_shell-tool-skill_ambient.gif": "a5e8af9c997e3d3286424494d486639e17ba8ef978aee7def0f0a4c22d418c13",
+    "previews/session/scorpion_shell-tool-skill_session.gif": "267a304c33444a6038769fcfcbe1b6dbda9a7ebf199d07cce0a30910d7d5ed4c",
+    "previews/ambient/scorpion_editing_ambient.gif": "6c533df9b5ff49171f5013161dfce385d585632b7ef8d1da78e41b7eb7f2f3a8",
+    "previews/session/scorpion_editing_session.gif": "4cd1b41c5656f03594050cb53d5abd3d0697ff666528034ff5fc205b505a7e1a",
+    "previews/ambient/scorpion_planning-goal_ambient.gif": "d8a26dbfc71b32ce31a9b997fb30c0655f3f303ca9134b0f4116a4bab16b4d65",
+    "previews/session/scorpion_planning-goal_session.gif": "cf75aab90890d4b6315450384f71cfb8d45c0623bf8dd1046a6779c61456d8d2",
+    "previews/ambient/scorpion_delegating_ambient.gif": "666f240d602332e3c68278775d3b8fae5af7723e68de6b9b0eb5c2747a157b9d",
+    "previews/session/scorpion_delegating_session.gif": "75abb8741e715ab7298f51fce8dbe4851f798e245be274d55898b74485e8d79b",
+    "previews/ambient/scorpion_visual_ambient.gif": "5e964eb8ee2ee7622669e10234cf12235b977dadfd37d34ddd02456821bbf11e",
+    "previews/session/scorpion_visual_session.gif": "e6bf5e2c9e539d5992cacfdd3e4fb6ce016994261327ac8f4f69c724a1637ca0",
+    "previews/ambient/scorpion_memory_ambient.gif": "8b1a45cddb36a5f408ca5a2cf1de458c394d132d0146e3ae57467faec9d1a62b",
+    "previews/session/scorpion_memory_session.gif": "19bf730112b9a10703ad1b76d2ebbc311040ddacf29e4368d2ec05dbd1a47380",
+    "previews/ambient/scorpion_attention-asking_ambient.gif": "4ee1b5c6fc09401856ae74b8de306b44760afd77241d19b9db66227f2b50fe67",
+    "previews/session/scorpion_attention-asking_session.gif": "d62fef965d3d2312ffa64120a5f8af89d70a8f038c532a0ebc505fbc30668639",
+    "previews/ambient/scorpion_done_ambient.gif": "04da866aeafcf1947a7ce37ef06e56bc2a4bd730b42fd0a76a5b2b5dc63b389b",
+    "previews/session/scorpion_done_session.gif": "cfbafdaa36f5811fe17b6612939d4a9b1b90d4fad528fb6b69bd4dcf35008691",
+    "previews/ambient/scorpion_error_ambient.gif": "b945349486753662cdc3406f3c733882538a3329e438c442875a83ced866cfca",
+    "previews/session/scorpion_error_session.gif": "8c39df7ef5c1847aa4672e316ccb6abd369443355a672e5bd252a0596191d5d0",
+    "previews/ambient/crt_thinking-model_ambient.gif": "418ea767a1373ab9377386b96e22b59f3c14e36f80176b64424b6ee3dc33019b",
+    "previews/session/crt_thinking-model_session.gif": "a9d3036e08cd0037932e09ac1b44d7ce9aa7031a757f80db7c58c35b79b8e77c",
+    "previews/ambient/crt_shell-tool-skill_ambient.gif": "44535307ffb7f782db791cfc0c10f5ec227e7eeb62a2df375fdebf969e1f52b2",
+    "previews/session/crt_shell-tool-skill_session.gif": "58769485e2788284cb93e4da39461661ecac0acfd0329ebdc60c49c04b35ddb7",
+    "previews/ambient/crt_editing_ambient.gif": "9933c3ac7706623c53ff39da3b47a512bd2ab189a07dd93e68e7f46574d9d01d",
+    "previews/session/crt_editing_session.gif": "fabbe38b31d1d7c144307ae8a536524f24bb1ed9b78f41b702cebad638ab45b5",
+    "previews/ambient/crt_planning-goal_ambient.gif": "698ca89b8da1d4d90238f944e5d421bd76a51a95c1cafa4dffd4e9a0f707355d",
+    "previews/session/crt_planning-goal_session.gif": "ec365877ba9dae3779e65f884956a9b845b91238bc2183e79c66641bf5badf9f",
+    "previews/ambient/crt_delegating_ambient.gif": "a1ea0a3a9273786df913f87a0adf19544e2de39e8d9b92ca1228e437a12f4008",
+    "previews/session/crt_delegating_session.gif": "d97a6add3395307acff44234d009ec34e2eb40afebc7d12b6a2767b00ff595dc",
+    "previews/ambient/crt_visual_ambient.gif": "9f2d18c1ca78efdddd45744d8e68c05b6d632d04ae0abf56bd90fe3dbb33cbf4",
+    "previews/session/crt_visual_session.gif": "65e153a0ebe8cf1dedf73568b9f3b10dfc3e09631a6066d28b5aa76c9b24f91e",
+    "previews/ambient/crt_memory_ambient.gif": "12b1483806e617382625ecfdbf6930c2ba35fcfa0c56f110fdafe2306c940f73",
+    "previews/session/crt_memory_session.gif": "f6e624067b31dd69238c94edf3b2bb3194e704969821319ae684ab1382f70a95",
+    "previews/ambient/crt_attention-asking_ambient.gif": "8b54639435d0c5498bcdfa62f59355cfb49eef2e7fd4a2d558d6cb5cee812646",
+    "previews/session/crt_attention-asking_session.gif": "c43ea8d08a4cd8930a513aa270acf965c4cdfd3918d1e395838399a7ecaab099",
+    "previews/ambient/crt_done_ambient.gif": "0fb72dba9bad17a5b70aae419ef81da4a1dab961cb11e98f02e9a07ce459543a",
+    "previews/session/crt_done_session.gif": "4c61831fd515cac4e2a4a1562fcddc1e1f774dadfdc64dcb98d314a6ebc60771",
+    "previews/ambient/crt_error_ambient.gif": "f8540d90d9b5abdd661b94688c6a410de2e958d7795fb9f964e2c76ed92ade02",
+    "previews/session/crt_error_session.gif": "1b5631c7628c29318e8611457335429fb0cbceac1ac7a0be31397cc2ddc4b2e2",
+    "contacts/contact-dark-1x.png": "0a285bfc4b0f599ff0e4b4d2ae2c76ade8e9d9aae0152af3e45a0d576e9ba5ad",
+    "contacts/contact-dark-4x.png": "5e4087f1a45028f8442719bb7c280f9f3580af7e239929610d2514b4daf1d7d0",
+    "contacts/contact-light-1x.png": "33f3e2ca61c9f043a8677e02c110de01cadce5d7ef888d59414f3dee8063970f",
+    "contacts/contact-light-4x.png": "a342b78b05b843fc30773864e784ef8492a5e9115b5f1ffb334e8c60bcdf738e",
+    "contacts/contact-checker-1x.png": "5531f583193d0f828224c47acb3ac4eeeddc684ac89535dee2d4f6bbe8ca0703",
+    "contacts/contact-checker-4x.png": "ac05eb3b1a12bec85d3c18d9df246967796fba85874cc2364eea3e52644ca26a",
+    "contacts/body-scorpion-ambient-1x.png": "8143a8966d651d5709351f41eaedb341e05f389bdcc8e22ea466f1e38cf9d610",
+    "contacts/body-scorpion-ambient-4x.png": "618ed6dc33dd0d046618e286dd788151464267e24a1ea8d8e119a3cca26875b6",
+    "contacts/body-scorpion-session-1x.png": "02ed179c84eb30651336e77dd4a4367ffc68ae1cc9bbfc3fac4f8cad30da4b46",
+    "contacts/body-scorpion-session-4x.png": "fc4934b7d15aa86de56c8ab2205ff34ca9f907052815fb40d87d09bdaa89e1ed",
+    "contacts/body-crt-ambient-1x.png": "57c59f9feaf16381595871ed0372e9604d5e6b4e8a0efb810b0de6d4cb7c399d",
+    "contacts/body-crt-ambient-4x.png": "ca598d4228619943878ea1794d2a14342b25b598405f0b110bf147000852f620",
+    "contacts/body-crt-session-1x.png": "dac94b4d78cb8fafc6364abcde8b74ad81f219330d1cef2f7d27fdfbc1712fd7",
+    "contacts/body-crt-session-4x.png": "77b72733b7963ea3aaa6edf6f5eb71cac3029933e68ca5920fd01334cad4bf2d"
+  }
+}
