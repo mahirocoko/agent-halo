@@ -3,6 +3,13 @@ import type { IRuntimeSessionView, IRuntimeTargetSource, IRuntimeUsageSnapshot, 
 
 const GIB = 1024 ** 3;
 const RECENT_SHARED_PROCESS_MS = 10 * 60_000;
+export const RUNTIME_NATIVE_TARGET_LIMIT = 64;
+export const RUNTIME_HISTORY_TARGET_LIMIT = 512;
+
+export const runtimeTargetKey = (target: Pick<IRuntimeUsageTarget, "conversationId" | "processId" | "sourceStartedAtMs">): string =>
+  `${target.processId}:${target.sourceStartedAtMs}:${target.conversationId}`;
+
+export const isTerminalRuntimeStatus = (status: IRuntimeUsageSnapshot["status"]): boolean => status === "missing" || status === "pidReused";
 
 const PRESSURE_PRIORITY: Record<RuntimePressureLevel, number> = {
   unavailable: -1,
@@ -16,7 +23,7 @@ const isHostRuntime = (runtime: IAgentHaloEventRuntime | null | undefined): runt
   runtime?.sourceKind === "lettaHost" && Number.isInteger(runtime.sourcePid) && runtime.sourcePid > 1 && Number.isFinite(runtime.sourceStartedAtMs);
 
 export const buildRuntimeUsageTargets = ({ sessions, registry }: IRuntimeTargetSource): IRuntimeUsageTarget[] => {
-  const byPid = new Map<number, IRuntimeUsageTarget[]>();
+  const byProcessIdentity = new Map<string, IRuntimeUsageTarget[]>();
 
   for (const session of sessions) {
     const runtimeEvent = (registry[session.conversationId] ?? []).find((event) => isHostRuntime(event.runtime));
@@ -36,12 +43,13 @@ export const buildRuntimeUsageTargets = ({ sessions, registry }: IRuntimeTargetS
       relatedConversationCount: 1,
       mappingStatus: "exact",
     };
-    const group = byPid.get(target.processId) ?? [];
+    const processIdentity = `${target.processId}:${target.sourceStartedAtMs}`;
+    const group = byProcessIdentity.get(processIdentity) ?? [];
     group.push(target);
-    byPid.set(target.processId, group);
+    byProcessIdentity.set(processIdentity, group);
   }
 
-  return [...byPid.values()]
+  return [...byProcessIdentity.values()]
     .map((group) => {
       const sorted = [...group].sort((a, b) => Date.parse(b.lastActivityAt) - Date.parse(a.lastActivityAt));
       const newest = sorted[0];
@@ -57,8 +65,12 @@ export const buildRuntimeUsageTargets = ({ sessions, registry }: IRuntimeTargetS
         mappingStatus: recentLive.length > 1 ? "sharedProcess" as const : "exact" as const,
       };
     })
-    .sort((a, b) => Date.parse(b.lastActivityAt) - Date.parse(a.lastActivityAt));
+    .sort((a, b) => Date.parse(b.lastActivityAt) - Date.parse(a.lastActivityAt))
+    .slice(0, RUNTIME_HISTORY_TARGET_LIMIT);
 };
+
+export const selectRuntimeSamplingTargets = (targets: IRuntimeUsageTarget[], endedIdentities: ReadonlyMap<string, number>): IRuntimeUsageTarget[] =>
+  targets.filter((target) => !endedIdentities.has(runtimeTargetKey(target))).slice(0, RUNTIME_NATIVE_TARGET_LIMIT);
 
 export const classifyRuntimePressure = (
   snapshot: IRuntimeUsageSnapshot | null,
@@ -92,10 +104,14 @@ export const buildRuntimeSessionViews = (
   targets: IRuntimeUsageTarget[],
   snapshots: IRuntimeUsageSnapshot[],
 ): IRuntimeSessionView[] => {
-  const byConversation = new Map(snapshots.map((snapshot) => [snapshot.conversationId, snapshot]));
+  const byTarget = new Map(snapshots.map((snapshot) => [`${snapshot.processId}:${snapshot.conversationId}`, snapshot]));
   return targets
     .map((target) => {
-      const snapshot = byConversation.get(target.conversationId) ?? null;
+      const candidate = byTarget.get(`${target.processId}:${target.conversationId}`) ?? null;
+      const snapshot = candidate?.targetSourceStartedAtMs === target.sourceStartedAtMs &&
+        (candidate.processStartTimeMs == null || Math.abs(candidate.processStartTimeMs - target.sourceStartedAtMs) <= 2_000)
+        ? candidate
+        : null;
       return { ...target, snapshot, ...classifyRuntimePressure(snapshot, target.sessionStatus) };
     })
     .sort(
@@ -118,7 +134,7 @@ export const createDemoRuntimeSnapshots = (targets: IRuntimeUsageTarget[]): IRun
   targets.map((target, index) => {
     const critical = index === 0;
     const toolsHeavy = index === 1;
-    if (index === targets.length - 1 && targets.length > 1) {
+    if (target.project === "paoplew") {
       return {
         conversationId: target.conversationId,
         processId: target.processId,
@@ -131,10 +147,23 @@ export const createDemoRuntimeSnapshots = (targets: IRuntimeUsageTarget[]): IRun
         children: null,
       };
     }
+    if (target.conversationId.includes("done-b")) {
+      return {
+        conversationId: target.conversationId,
+        processId: target.processId,
+        processStartTimeMs: target.sourceStartedAtMs,
+        cwd: target.cwd,
+        sampledAtMs: Date.now(),
+        status: "identityMismatch",
+        error: "PID now belongs to a different working directory",
+        host: null,
+        children: null,
+      };
+    }
     return {
       conversationId: target.conversationId,
       processId: target.processId,
-      processStartTimeMs: Date.now() - 3_600_000,
+      processStartTimeMs: target.sourceStartedAtMs,
       cwd: target.cwd,
       sampledAtMs: Date.now(),
       status: "ok",

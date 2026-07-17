@@ -45,6 +45,13 @@
   font-variant-numeric: tabular-nums;
 }
 
+.runtime-ended-count {
+  color: var(--text-3);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .runtime-list {
   display: grid;
   gap: 0;

@@ -97,12 +97,15 @@ const normalizeCapabilities = (value: unknown): IAgentHaloBridgeCapabilities => 
   };
 };
 
-const demoRuntime = (key: string) => ({
-  sourcePid: 41_000 + [...key].reduce((sum, character) => sum + character.charCodeAt(0), 0) % 1_000,
-  sourcePpid: 1,
-  sourceStartedAtMs: Date.now() - 3_600_000,
-  sourceKind: "lettaHost" as const,
-});
+const demoRuntime = (key: string) => {
+  const identityHash = [...key].reduce((sum, character) => sum + character.charCodeAt(0), 0) % 1_000;
+  return {
+    sourcePid: 41_000 + identityHash,
+    sourcePpid: 1,
+    sourceStartedAtMs: 1_700_000_000_000 + identityHash * 1_000,
+    sourceKind: "lettaHost" as const,
+  };
+};
 
 const base = (scenario: string, timestamp: string) => ({
   version: 2 as const,

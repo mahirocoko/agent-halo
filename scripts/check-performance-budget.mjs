@@ -53,7 +53,7 @@ await findLegacy(distRoot);
 
 const payload = {
   baselineCommit: "4a5c0f1",
-  budgetRevision: "runtime-monitor-v1",
+  budgetRevision: "runtime-monitor-v2",
   budgets: BUDGETS,
   current: {
     cssGzipBytes: css.gzipBytes,

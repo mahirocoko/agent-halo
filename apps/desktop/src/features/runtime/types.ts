@@ -48,6 +48,7 @@ export interface IRuntimeChildMetrics {
 export interface IRuntimeUsageSnapshot {
   conversationId: string;
   processId: number;
+  targetSourceStartedAtMs?: number | null;
   processStartTimeMs: number | null;
   cwd: string | null;
   sampledAtMs: number;
@@ -65,6 +66,8 @@ export interface IRuntimeSessionView extends IRuntimeUsageTarget {
 
 export interface IRuntimeMonitorView {
   rows: IRuntimeSessionView[];
+  endedCount: number;
+  omittedCount: number;
   loading: boolean;
   error: string | null;
   sampledAtMs: number | null;

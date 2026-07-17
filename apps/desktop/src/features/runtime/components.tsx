@@ -42,6 +42,10 @@ export const RuntimePanel = ({ monitor }: { monitor: IRuntimeMonitorView }) => {
   const [hiddenRows, setHiddenRows] = useState<Set<string>>(() => new Set());
   const rows = useMemo(() => monitor.rows.filter((row) => !hiddenRows.has(runtimeRowKey(row))), [hiddenRows, monitor.rows]);
   const alertCount = rows.filter((row) => row.pressure === "high" || row.pressure === "critical").length;
+  const hiddenSummary = [
+    monitor.endedCount > 0 ? `${monitor.endedCount} ended hidden` : null,
+    monitor.omittedCount > 0 ? `${monitor.omittedCount} older not sampled` : null,
+  ].filter(Boolean).join(" · ");
   const refresh = () => {
     setHiddenRows(new Set());
     monitor.refresh();
@@ -54,8 +58,9 @@ export const RuntimePanel = ({ monitor }: { monitor: IRuntimeMonitorView }) => {
       <div className="runtime-toolbar">
         <div className="runtime-subtitle">Local host and child-process pressure</div>
         <div className="runtime-toolbar-actions">
+          {hiddenSummary ? <span className="runtime-ended-count" role="status" aria-live="polite" aria-atomic="true">{hiddenSummary}</span> : null}
           {alertCount > 0 ? <span className="runtime-alert-count"><TriangleAlert size={12} /> {alertCount}</span> : null}
-          <button className="gear-btn" type="button" onClick={refresh} disabled={monitor.loading} aria-label="Refresh runtime metrics" title="Refresh metrics and restore hidden rows">
+          <button className="gear-btn" type="button" onClick={refresh} disabled={monitor.loading} aria-label="Refresh runtime metrics" title="Refresh metrics and restore temporarily hidden diagnostic rows">
             <RefreshCw size={13} className={monitor.loading ? "is-spinning" : undefined} />
           </button>
         </div>
@@ -63,8 +68,8 @@ export const RuntimePanel = ({ monitor }: { monitor: IRuntimeMonitorView }) => {
       {monitor.error ? <div className="notice-row compact" data-online="false" role="status">{monitor.error}</div> : null}
       {rows.length === 0 ? (
         <div className="empty-state runtime-empty">
-          <div className="empty-text">No PID-aware events yet</div>
-          <div className="empty-text small">Install the current mod, then reload active Letta sessions.</div>
+          <div className="empty-text">{monitor.endedCount > 0 ? "No live Letta processes" : "No PID-aware events yet"}</div>
+          <div className="empty-text small">{monitor.endedCount > 0 ? `${monitor.endedCount} ended runtime ${monitor.endedCount === 1 ? "record is" : "records are"} hidden` : "Install the current mod, then reload active Letta sessions."}</div>
         </div>
       ) : (
         <ul className="runtime-list">

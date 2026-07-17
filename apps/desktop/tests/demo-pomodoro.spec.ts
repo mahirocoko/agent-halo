@@ -200,24 +200,32 @@ test("completed focus shows a quiet collapsed Done state and prepares the break"
 });
 
 test("an elapsed deadline wins atomically over Pause before the next timer tick", async ({ page }) => {
-  await page.addInitScript(([key, now]) => {
+  await page.addInitScript((key) => {
+    const controlledWindow = window as typeof window & { __pomodoroControlledNow: number };
+    controlledWindow.__pomodoroControlledNow = Date.now();
+    Date.now = () => controlledWindow.__pomodoroControlledNow;
     window.localStorage.setItem(key, JSON.stringify({
       schemaVersion: 1,
       phase: "focus",
       status: "running",
       completedFocusSessions: 0,
       remainingMs: 25 * 60 * 1_000,
-      endsAt: now + 120,
+      endsAt: controlledWindow.__pomodoroControlledNow + 120,
       runId: "deadline-precedence",
       notificationScheduled: false,
       lastCompletion: null,
     }));
-  }, [storageKey, Date.now()] as const);
+  }, storageKey);
 
   await page.goto("/?demo=1&demoScenario=idle");
   await page.getByRole("tab", { name: "Pomodoro" }).click();
-  await page.waitForTimeout(170);
-  await page.getByRole("button", { name: "Pause" }).click();
+  await page.evaluate(() => {
+    const controlledWindow = window as typeof window & { __pomodoroControlledNow: number };
+    controlledWindow.__pomodoroControlledNow += 200;
+    const pause = [...document.querySelectorAll("button")].find((button) => button.textContent?.includes("Pause"));
+    if (!(pause instanceof HTMLButtonElement)) throw new Error("Pause control is unavailable");
+    pause.click();
+  });
   await expect.poll(() => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? "null"), storageKey)).toMatchObject({
     phase: "short-break",
     status: "idle",

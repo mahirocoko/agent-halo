@@ -84,6 +84,26 @@ struct ProcessReading {
     cpu_percent: Option<f64>,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum ProcessSampleAvailability {
+    Missing,
+    Unavailable,
+    Ready,
+}
+
+fn process_sample_availability(
+    process_exists: bool,
+    usage_exists: bool,
+) -> ProcessSampleAvailability {
+    if !process_exists {
+        ProcessSampleAvailability::Missing
+    } else if !usage_exists {
+        ProcessSampleAvailability::Unavailable
+    } else {
+        ProcessSampleAvailability::Ready
+    }
+}
+
 fn unix_time_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -333,19 +353,44 @@ mod macos {
         targets
             .into_iter()
             .map(|target| {
-                let Some(root) = readings.get(&target.process_id) else {
-                    return RuntimeUsageSnapshot {
-                        conversation_id: target.conversation_id,
-                        process_id: target.process_id,
-                        process_start_time_ms: None,
-                        cwd: None,
-                        sampled_at_ms,
-                        status: "missing".to_string(),
-                        error: Some("Letta host process is no longer available".to_string()),
-                        host: None,
-                        children: None,
-                    };
-                };
+                match process_sample_availability(
+                    processes.contains_key(&target.process_id),
+                    readings.contains_key(&target.process_id),
+                ) {
+                    ProcessSampleAvailability::Missing => {
+                        return RuntimeUsageSnapshot {
+                            conversation_id: target.conversation_id,
+                            process_id: target.process_id,
+                            process_start_time_ms: None,
+                            cwd: None,
+                            sampled_at_ms,
+                            status: "missing".to_string(),
+                            error: Some("Letta host process is no longer available".to_string()),
+                            host: None,
+                            children: None,
+                        };
+                    }
+                    ProcessSampleAvailability::Unavailable => {
+                        let root_basic = processes
+                            .get(&target.process_id)
+                            .expect("process availability checked");
+                        return RuntimeUsageSnapshot {
+                            conversation_id: target.conversation_id,
+                            process_id: target.process_id,
+                            process_start_time_ms: Some(root_basic.start_time_ms),
+                            cwd: process_cwd(root_basic.pid),
+                            sampled_at_ms,
+                            status: "unavailable".to_string(),
+                            error: Some("Could not read Letta host resource usage".to_string()),
+                            host: None,
+                            children: None,
+                        };
+                    }
+                    ProcessSampleAvailability::Ready => {}
+                }
+                let root = readings
+                    .get(&target.process_id)
+                    .expect("process reading availability checked");
                 let Some(expected_start_time_ms) = target.expected_start_time_ms else {
                     return RuntimeUsageSnapshot {
                         conversation_id: target.conversation_id,
@@ -565,6 +610,22 @@ mod tests {
     fn cwd_comparison_ignores_only_trailing_slashes() {
         assert!(same_cwd("/tmp/work/", "/tmp/work"));
         assert!(!same_cwd("/tmp/work", "/tmp/other"));
+    }
+
+    #[test]
+    fn process_sampling_distinguishes_ended_from_temporarily_unreadable() {
+        assert_eq!(
+            process_sample_availability(false, false),
+            ProcessSampleAvailability::Missing
+        );
+        assert_eq!(
+            process_sample_availability(true, false),
+            ProcessSampleAvailability::Unavailable
+        );
+        assert_eq!(
+            process_sample_availability(true, true),
+            ProcessSampleAvailability::Ready
+        );
     }
 
     #[cfg(target_os = "macos")]

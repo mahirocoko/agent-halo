@@ -46,7 +46,9 @@ delta(user + system) / delta(wall time) × 100
 
 `100%` means one fully used logical core, matching Activity Monitor semantics. `Letta` is the originating host process. `Subprocesses` sums all bounded recursive descendants without claiming every helper/server/watcher is a Letta tool. Traversal is limited to 32 levels and 512 descendants per Letta host.
 
-Unavailable rows may be hidden temporarily from Runtime. This does not delete session history or touch the process. Manual Runtime refresh clears those temporary hides and rebuilds the rows from the current session registry.
+Confirmed terminal identities (`missing` because the host PID is absent from the native process list, or `pidReused`) are removed automatically from future Runtime sampling and recorded in a bounded local tombstone set keyed by conversation, PID, and process-start time. A PID that still exists but whose resource usage cannot be read remains `unavailable` and is never tombstoned. This prevents ended hosts from returning after Refresh/reopen and ensures a newly started process for the same conversation appears as a fresh identity. The tombstone never deletes session history or touches a process.
+
+Other unavailable diagnostics such as cwd identity mismatch or incomplete runtime metadata remain visible because they may describe a live configuration problem. Their `×` control is still a temporary view hide; manual Runtime refresh restores those diagnostic rows. Runtime considers the 512 most recently active distinct host identities and samples at most the newest 64 non-ended targets per refresh, preserving native CPU/PID continuity without letting a large historical registry invalidate the current sample. The toolbar reports any older eligible identities that were not sampled.
 
 Sampling starts only after the user opens Runtime and refreshes every 5 seconds while that tab remains visible. Closing or leaving Runtime stops native polling. The first sample has no CPU percentage because no prior delta exists.
 
@@ -67,6 +69,7 @@ A future notification lane should require a sustained window and remain opt-in. 
 
 - Sampling stays inside the local Tauri app.
 - Runtime samples are held in renderer/native memory only and are not appended to Agent Halo NDJSON.
+- Ended-identity tombstones contain only the strong local runtime identity and timestamp, are bounded to 512 entries in localStorage, and carry no CPU/memory samples.
 - The UI exposes process names for at most five largest descendants, never full command-line arguments.
 - No remote telemetry or hosted service is involved.
 
