@@ -9,7 +9,7 @@ const assetRoot = join(distRoot, "assets");
 const BUDGETS = {
   cssGzipBytes: 8_750,
   distBytes: 573_055,
-  jsGzipBytes: 91_000,
+  jsGzipBytes: 92_000,
 };
 
 const walk = async (directory) => {
@@ -53,7 +53,7 @@ await findLegacy(distRoot);
 
 const payload = {
   baselineCommit: "4a5c0f1",
-  budgetRevision: "runtime-monitor-v2",
+  budgetRevision: "focus-stability-v1",
   budgets: BUDGETS,
   current: {
     cssGzipBytes: css.gzipBytes,

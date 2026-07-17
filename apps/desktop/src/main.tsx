@@ -48,6 +48,7 @@ const KEEP_AWAKE_STORAGE_KEY = "agent-halo.keep-awake-while-working";
 const SEARCH_PARAMS = new URLSearchParams(window.location.search);
 const DEMO_MODE = SEARCH_PARAMS.has("demo");
 const DEMO_SCENARIO = SEARCH_PARAMS.get("demoScenario");
+const DEMO_COLLAPSED = SEARCH_PARAMS.has("demoCollapsed");
 const DEFAULT_CAMERA_NOTCH_WIDTH = 184;
 const DEFAULT_CLOSED_NOTCH_HEIGHT = 36;
 const MIN_LIVE_ACTIVITY_WING_WIDTH = 66;
@@ -154,8 +155,8 @@ const App = () => {
   const [acknowledgedConversationId, setAcknowledgedConversationId] = useState<string | null>(null);
   const [nativeAction, setNativeAction] = useState<INativeActionState>({ bridgeOnline: null, message: null });
   const [sessionAction, setSessionAction] = useState<ISessionActionState>({ ok: null, message: null });
-  const [panelOpen, setPanelOpen] = useState(DEMO_MODE);
-  const [renderPanel, setRenderPanel] = useState(DEMO_MODE);
+  const [panelOpen, setPanelOpen] = useState(DEMO_MODE && !DEMO_COLLAPSED);
+  const [renderPanel, setRenderPanel] = useState(DEMO_MODE && !DEMO_COLLAPSED);
   const [panelHeight, setPanelHeight] = useState(PANEL_MIN_HEIGHT);
   const [panelWindowWidth, setPanelWindowWidth] = useState(getPanelWindowWidth);
   const [hoverExpandSuppressed, setHoverExpandSuppressed] = useState(false);
@@ -178,9 +179,12 @@ const App = () => {
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const returnSessionIdRef = useRef<string | null>(null);
   const shouldFocusPanelRef = useRef(false);
+  const nativeFocusRequestRef = useRef(false);
   const keyboardNavigationRef = useRef(false);
   const hoverOpenTimerRef = useRef<number | null>(null);
   const hoverCloseTimerRef = useRef<number | null>(null);
+  const panelNativeOperationRef = useRef<Promise<void>>(Promise.resolve());
+  const panelNativeRequestVersionRef = useRef(0);
   const keepAwakeRequestRef = useRef<Promise<unknown>>(Promise.resolve());
   const displayRequestBusyRef = useRef(false);
   const displayStateRef = useRef<IDisplayStateSnapshot | null>(null);
@@ -405,7 +409,6 @@ const App = () => {
     "--panel-width": `${panelWindowWidth}px`,
     "--pill-text-width": `${Math.max(0, liveActivityWingWidth - LIVE_ACTIVITY_TEXT_WIDTH_BUFFER)}px`,
   } as CSSProperties & Record<"--closed-width" | "--closed-height" | "--camera-width" | "--panel-height" | "--panel-width" | "--pill-text-width", string>;
-  const shouldAutoOpen = activityStatus === "error";
   const surfaceState = renderPanel ? (panelOpen ? "open" : "closing") : "closed";
   const shapeMetrics = surfaceState === "open"
     ? { width: panelWindowWidth, height: panelHeight, topRadius: OPEN_TOP_SHOULDER_RADIUS, bottomRadius: PANEL_BOTTOM_RADIUS }
@@ -459,10 +462,6 @@ const App = () => {
       if (shrinkTimer !== null) window.clearTimeout(shrinkTimer);
     };
   }, [closedSurfaceWidth]);
-
-  useEffect(() => {
-    if (shouldAutoOpen) setPanelOpen(true);
-  }, [shouldAutoOpen]);
 
   const refreshNotchMetrics = (): Promise<void> => {
     if (!canUseNativeControls) return Promise.resolve();
@@ -565,18 +564,29 @@ const App = () => {
 
   useEffect(() => {
     let cancelled = false;
+    let closeTimer: number | null = null;
+    const requestVersion = panelNativeRequestVersionRef.current + 1;
+    panelNativeRequestVersionRef.current = requestVersion;
+    const focus = panelOpen && nativeFocusRequestRef.current;
+    if (focus) nativeFocusRequestRef.current = false;
 
-    const resizeNativePanel = async (open: boolean): Promise<boolean> => {
+    const isCurrent = () => !cancelled && panelNativeRequestVersionRef.current === requestVersion;
+
+    const resizeNativePanel = async (open: boolean): Promise<boolean | null> => {
       if (!canUseNativeControls) return true;
       for (let attempt = 0; attempt < 2; attempt += 1) {
+        if (!isCurrent()) return null;
         try {
           await invoke("set_panel_open", {
             open,
+            focus: open && focus,
             width: open ? panelWindowWidth : nativeClosedSurfaceWidth,
             height: open ? panelHeight : closedSurfaceHeight,
           });
+          if (!isCurrent()) return null;
           return true;
         } catch (error) {
+          if (!isCurrent()) return null;
           if (attempt === 0) {
             await new Promise((resolve) => window.setTimeout(resolve, 120));
             continue;
@@ -592,11 +602,18 @@ const App = () => {
       return false;
     };
 
+    const enqueueNativePanelOperation = (operation: () => Promise<void>) => {
+      const queued = panelNativeOperationRef.current.catch(() => undefined).then(operation);
+      panelNativeOperationRef.current = queued.catch(() => undefined);
+    };
+
     if (panelOpen) {
-      void (async () => {
+      enqueueNativePanelOperation(async () => {
         const opened = await resizeNativePanel(true);
-        if (!opened) {
-          if (!cancelled) {
+        if (opened === null) return;
+        if (opened === false) {
+          if (isCurrent()) {
+            nativeFocusRequestRef.current = false;
             setPanelOpen(false);
             setRenderPanel(false);
           }
@@ -604,28 +621,29 @@ const App = () => {
         }
         await waitForNextPaint();
         await waitForNextPaint();
-        if (!cancelled) setRenderPanel(true);
-      })();
+        if (isCurrent()) setRenderPanel(true);
+      });
       return () => {
         cancelled = true;
       };
     }
 
     if (!renderPanel) {
-      void resizeNativePanel(false);
+      enqueueNativePanelOperation(async () => { await resizeNativePanel(false); });
       return () => {
         cancelled = true;
       };
     }
 
-    const timer = window.setTimeout(() => {
+    closeTimer = window.setTimeout(() => {
+      if (!isCurrent()) return;
       setRenderPanel(false);
-      void resizeNativePanel(false);
+      enqueueNativePanelOperation(async () => { await resizeNativePanel(false); });
     }, 220);
 
     return () => {
       cancelled = true;
-      window.clearTimeout(timer);
+      if (closeTimer !== null) window.clearTimeout(closeTimer);
     };
   }, [canUseNativeControls, closedSurfaceHeight, nativeClosedSurfaceWidth, panelHeight, panelOpen, panelWindowWidth, renderPanel]);
 
@@ -698,6 +716,7 @@ const App = () => {
     clearHoverOpenTimer();
     clearHoverCloseTimer();
     if (suppressHover) setHoverExpandSuppressed(true);
+    nativeFocusRequestRef.current = false;
     setSelectedSessionId(null);
     setSetupOpen(false);
     setPanelOpen(false);
@@ -717,7 +736,7 @@ const App = () => {
   const scheduleHoverClose = () => {
     clearHoverOpenTimer();
     setHoverExpandSuppressed(false);
-    if (shouldAutoOpen || setupOpen || selectedSessionId || !panelOpen) return;
+    if (setupOpen || selectedSessionId || !panelOpen) return;
     if (keyboardNavigationRef.current && surfaceRef.current?.contains(document.activeElement)) return;
     if (hoverCloseTimerRef.current !== null) return;
     hoverCloseTimerRef.current = window.setTimeout(() => {
@@ -728,7 +747,7 @@ const App = () => {
   };
 
   useEffect(() => {
-    if (!panelOpen || setupOpen || selectedSessionId || shouldAutoOpen) return;
+    if (!panelOpen || setupOpen || selectedSessionId) return;
 
     const isOutsideSurface = (event: MouseEvent) => {
       const surface = surfaceRef.current;
@@ -751,12 +770,13 @@ const App = () => {
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseout", handleMouseOut);
     };
-  }, [panelOpen, selectedSessionId, setupOpen, shouldAutoOpen]);
+  }, [panelOpen, selectedSessionId, setupOpen]);
 
   const openSession = (conversationId: string) => {
     rememberFocusOrigin();
     returnSessionIdRef.current = conversationId;
     shouldFocusPanelRef.current = true;
+    nativeFocusRequestRef.current = true;
     clearHoverOpenTimer();
     clearHoverCloseTimer();
     setSetupOpen(false);
@@ -770,6 +790,7 @@ const App = () => {
     rememberFocusOrigin();
     returnSessionIdRef.current = null;
     shouldFocusPanelRef.current = true;
+    nativeFocusRequestRef.current = true;
     clearHoverOpenTimer();
     clearHoverCloseTimer();
     setSelectedSessionId(null);
@@ -814,6 +835,7 @@ const App = () => {
     if (event.target !== event.currentTarget || panelOpen || !["Enter", " "].includes(event.key)) return;
     event.preventDefault();
     shouldFocusPanelRef.current = true;
+    nativeFocusRequestRef.current = true;
     setHoverExpandSuppressed(false);
     setPanelOpen(true);
   };
@@ -1054,6 +1076,7 @@ const App = () => {
           onPointerMove={() => { keyboardNavigationRef.current = false; }}
           onClick={(event) => {
             if (event.target !== event.currentTarget || panelOpen) return;
+            nativeFocusRequestRef.current = true;
             setPanelOpen(true);
           }}
           onKeyDown={handleSurfaceKeyDown}

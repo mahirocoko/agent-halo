@@ -3717,13 +3717,14 @@ fn notch_metrics_for_platform(_window: &tauri::WebviewWindow) -> Option<(f64, f6
 fn set_panel_open(
     window: tauri::WebviewWindow,
     open: bool,
+    focus: bool,
     width: f64,
     height: f64,
 ) -> Result<(), String> {
     set_main_window_frame(&window, width, height)
         .map_err(|error| format!("Failed to resize/recenter Agent Halo window: {error}"))?;
 
-    if open {
+    if open && focus {
         let _ = window.set_focus();
     }
 

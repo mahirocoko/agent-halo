@@ -39,6 +39,8 @@ The `pomodoro-custom-v1` budget revision intentionally raises the primary bundle
 
 The `runtime-monitor-v2` revision keeps those ceilings at 8,750 bytes CSS gzip and 91,000 bytes JavaScript gzip while adding automatic ended-identity cleanup, bounded recent-target selection, stale-sample guards, and accessible hidden-row feedback. Its measured candidate is 8,719 bytes CSS gzip and 90,846 bytes JavaScript gzip. The compact read-only Runtime tab still includes PID-aware event plumbing, pressure classification, native polling state, and browser-demo evidence; native `libproc` code remains outside the web bundle. The total `dist/` ceiling remains 573,055 bytes and legacy session-cat assets remain forbidden.
 
+The `focus-stability-v1` revision keeps the CSS ceiling at 8,750 bytes and raises JavaScript gzip to 92,000 bytes for serialized native panel resize/focus intent, passive-hover focus protection, and status/Pomodoro focus-regression coverage. Its measured candidate is 8,719 bytes CSS gzip and 90,975 bytes JavaScript gzip. The total `dist/` and legacy-asset constraints remain unchanged.
+
 The low-risk bridge refactor's three-run median measured event duration `603.06ms → 574.18ms` (−4.79%) and throughput `33,164 → 34,832 events/s` (+5.03%) for 20,000 deterministic events. Startup stayed effectively flat; synchronous NDJSON durability and event ordering remain unchanged.
 
 ## Commands
