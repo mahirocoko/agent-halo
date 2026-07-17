@@ -111,6 +111,32 @@ test("runtime ended identities are strongly keyed and bounded", async ({ page })
   expect(result.restartedKey).not.toBe(result.originalKey);
 });
 
+test("runtime pressure colors distinguish healthy, elevated, high, critical, and unavailable states", async ({ page }) => {
+  await page.goto("/?demo=1&demoScenario=multi");
+  await page.getByRole("tab", { name: "Runtime" }).click();
+  const colors = await page.locator(".runtime-row").first().evaluate((row) => {
+    const mark = row.querySelector<HTMLElement>(".runtime-pressure-mark");
+    const label = row.querySelector<HTMLElement>(".runtime-pressure-label");
+    if (!mark || !label) throw new Error("Runtime pressure anatomy is unavailable");
+    return ["normal", "elevated", "high", "critical", "unavailable"].map((pressure) => {
+      row.setAttribute("data-pressure", pressure);
+      return {
+        pressure,
+        mark: getComputedStyle(mark).backgroundColor,
+        label: getComputedStyle(label).color,
+        borderStyle: getComputedStyle(label).borderStyle,
+      };
+    });
+  });
+  expect(colors).toEqual([
+    { pressure: "normal", mark: "rgb(74, 222, 128)", label: "rgb(74, 222, 128)", borderStyle: "solid" },
+    { pressure: "elevated", mark: "rgba(0, 0, 0, 0)", label: "rgb(160, 160, 168)", borderStyle: "solid" },
+    { pressure: "high", mark: "rgb(255, 178, 61)", label: "rgb(255, 178, 61)", borderStyle: "solid" },
+    { pressure: "critical", mark: "rgb(255, 107, 102)", label: "rgb(255, 107, 102)", borderStyle: "solid" },
+    { pressure: "unavailable", mark: "rgba(0, 0, 0, 0)", label: "rgb(160, 160, 168)", borderStyle: "dashed" },
+  ]);
+});
+
 test("runtime list stays readable at narrow width and reduced motion", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 700 });
   await page.emulateMedia({ reducedMotion: "reduce" });

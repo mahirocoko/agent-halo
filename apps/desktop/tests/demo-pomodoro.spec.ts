@@ -191,6 +191,14 @@ test("completed focus shows a quiet collapsed Done state and prepares the break"
   await expect(page.getByRole("button", { name: "Open Agent Halo" })).toBeVisible();
   await expect(page.locator(".pill-detail")).toHaveText("Done");
   await expect(page.locator(".pomodoro-pill-phase")).toHaveText("Short break ready");
+  const [rightWingBox, phaseBox] = await Promise.all([
+    page.locator(".notch-wing-right").boundingBox(),
+    page.locator(".pomodoro-pill-phase").boundingBox(),
+  ]);
+  expect(rightWingBox).not.toBeNull();
+  expect(phaseBox).not.toBeNull();
+  expect(phaseBox!.x - rightWingBox!.x).toBeGreaterThanOrEqual(10);
+  expect(phaseBox!.x - rightWingBox!.x).toBeLessThanOrEqual(14);
   await expect(page.getByRole("button", { name: "Open Agent Halo — Short break ready" })).toBeVisible();
   await expect.poll(() => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? "null")?.completedFocusSessions, storageKey)).toBe(1);
   await page.getByRole("button", { name: "Open Agent Halo — Short break ready" }).click();

@@ -1106,7 +1106,7 @@ const App = () => {
               ) : null}
             </div>
             <div className="camera-spacer" aria-hidden="true" />
-            <div className="notch-wing notch-wing-right" aria-hidden="true">
+            <div className={`notch-wing notch-wing-right ${showPomodoroActivity ? "is-pomodoro" : ""}`} aria-hidden="true">
               {showPomodoroActivity ? <span className="pomodoro-pill-phase">{pomodoroPhaseDetail}</span> : hasLiveActivity ? <ActivityMascot activityKind={activityKind} mascot={mascot} status={activityStatus} /> : null}
             </div>
           </div>

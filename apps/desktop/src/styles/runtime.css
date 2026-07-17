@@ -76,12 +76,21 @@
 .runtime-pressure-mark {
   width: 6px;
   height: 6px;
+  box-sizing: border-box;
   flex: 0 0 auto;
   border-radius: 50%;
   background: var(--text-3);
 }
 
-.runtime-row[data-pressure="elevated"] .runtime-pressure-mark,
+.runtime-row[data-pressure="normal"] .runtime-pressure-mark {
+  background: var(--done);
+}
+
+.runtime-row[data-pressure="elevated"] .runtime-pressure-mark {
+  border: 1px solid var(--waiting);
+  background: transparent;
+}
+
 .runtime-row[data-pressure="high"] .runtime-pressure-mark {
   background: var(--waiting);
 }
@@ -126,8 +135,19 @@
   text-transform: capitalize;
 }
 
-.runtime-row[data-pressure="high"] .runtime-pressure-label,
+.runtime-row[data-pressure="normal"] .runtime-pressure-label {
+  border-color: rgba(74, 222, 128, 0.24);
+  color: var(--done);
+  background: rgba(74, 222, 128, 0.08);
+}
+
 .runtime-row[data-pressure="elevated"] .runtime-pressure-label {
+  border-color: rgba(255, 178, 61, 0.24);
+  color: var(--text-2);
+  background: transparent;
+}
+
+.runtime-row[data-pressure="high"] .runtime-pressure-label {
   border-color: rgba(255, 178, 61, 0.24);
   color: var(--waiting);
   background: rgba(255, 178, 61, 0.09);
@@ -141,7 +161,12 @@
 
 .runtime-row[data-pressure="unavailable"] .runtime-pressure-label {
   border-style: dashed;
-  color: var(--text-3);
+  color: var(--text-2);
+  background: transparent;
+}
+
+.runtime-row[data-pressure="unavailable"] .runtime-pressure-mark {
+  border: 1px solid var(--text-3);
   background: transparent;
 }
 

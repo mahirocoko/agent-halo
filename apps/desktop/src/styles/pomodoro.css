@@ -333,6 +333,12 @@
   color: var(--done);
 }
 
+.notch-wing-right.is-pomodoro {
+  justify-content: flex-start;
+  padding-left: 12px;
+  padding-right: 14px;
+}
+
 .pomodoro-pill-icon + .pill-detail {
   max-width: 34px;
   font-variant-numeric: tabular-nums;

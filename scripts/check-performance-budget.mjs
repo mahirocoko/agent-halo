@@ -7,7 +7,7 @@ const distRoot = join(repoRoot, "apps/desktop/dist");
 const assetRoot = join(distRoot, "assets");
 
 const BUDGETS = {
-  cssGzipBytes: 8_750,
+  cssGzipBytes: 8_900,
   distBytes: 573_055,
   jsGzipBytes: 92_000,
 };
@@ -53,7 +53,7 @@ await findLegacy(distRoot);
 
 const payload = {
   baselineCommit: "4a5c0f1",
-  budgetRevision: "focus-stability-v1",
+  budgetRevision: "runtime-palette-v1",
   budgets: BUDGETS,
   current: {
     cssGzipBytes: css.gzipBytes,

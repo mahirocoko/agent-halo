@@ -41,6 +41,8 @@ The `runtime-monitor-v2` revision keeps those ceilings at 8,750 bytes CSS gzip a
 
 The `focus-stability-v1` revision keeps the CSS ceiling at 8,750 bytes and raises JavaScript gzip to 92,000 bytes for serialized native panel resize/focus intent, passive-hover focus protection, and status/Pomodoro focus-regression coverage. Its measured candidate is 8,719 bytes CSS gzip and 90,975 bytes JavaScript gzip. The total `dist/` and legacy-asset constraints remain unchanged.
 
+The `runtime-palette-v1` revision raises CSS gzip to 8,900 bytes while keeping JavaScript at 92,000 bytes. It adds a semantic Runtime pressure hierarchy—green Normal, hollow amber Elevated, solid amber High, red Critical, and hollow dashed neutral Unavailable—plus inner-left alignment for the Pomodoro phase wing. Its measured candidate is 8,793 bytes CSS gzip and 90,984 bytes JavaScript gzip. The total `dist/` and legacy-asset constraints remain unchanged.
+
 The low-risk bridge refactor's three-run median measured event duration `603.06ms → 574.18ms` (−4.79%) and throughput `33,164 → 34,832 events/s` (+5.03%) for 20,000 deterministic events. Startup stayed effectively flat; synchronous NDJSON durability and event ordering remain unchanged.
 
 ## Commands
