@@ -30,6 +30,7 @@ It is designed for people who keep multiple Letta Code conversations, subagents,
 - Shows local AI usage for supported providers when credentials or local usage sources are available.
 - Shows read-only local Runtime pressure per Letta conversation, separating the Letta host process from descendant browser/build/tool workloads without exposing process controls.
 - Includes a local Pomodoro timer with customizable Focus/Short break/Long break durations and long-break cadence, 25/5/15/every-4 defaults, persisted deadlines, collapsed-notch countdown, and silent macOS completion alerts.
+- Offers an opt-in 10-squat Movement Break after Focus completion, using one explicit local camera stream plus bundled shoulder-line tracking without saving video or audio.
 - Can keep the macOS display awake while current Letta work is actively running, without treating stale or completed sessions as active work.
 - Lets the user choose which connected display owns the top-center notch. The native app remembers that display, falls back to Primary while it is disconnected, and returns when it reconnects.
 - Installs and verifies the local Letta Code mod from the desktop setup view.
@@ -213,6 +214,7 @@ Agent Halo is built around local state:
 - Provider usage reads local credentials, CLIs, language servers, or local history where available.
 - The bridge does not store raw tool output by default.
 - Text preview capture is opt-in through local config and disabled by default.
+- Movement Break camera capture starts only after an explicit 10-squat action; pose analysis stays in memory on this Mac and camera frames are never stored or uploaded.
 
 ## Known boundaries
 

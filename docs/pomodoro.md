@@ -17,7 +17,7 @@ Renderer state is stored under `agent-halo.pomodoro`. A running phase stores an 
 
 Settings are stored separately under `agent-halo.pomodoro-settings`. Each phase snapshots `phaseDurationMs` when it is prepared. Editing settings updates an idle phase immediately, but never changes a running or paused countdown; Restart phase or the next prepared phase uses the new values. **Restart** reloads only the current phase while preserving cycle progress. Confirmed **Reset all** stops the old cycle, returns to idle Focus with zero completed sessions, clears recent completion/Pet state, and preserves custom timer settings. Restoring Defaults remains the separate 25/5/15/every-4 action.
 
-When a deadline has passed, the transition is applied once: completed Focus increments the focus count and prepares Short/Long break; a completed break prepares Focus. Completion remains visible briefly in the notch. A naturally completed Focus may also summon the optional event-only Completion Pet described in `docs/pet.md`; no other Pomodoro transition summons it.
+When a deadline has passed, the transition is applied once: completed Focus increments the focus count and prepares Short/Long break; a completed break prepares Focus. Completion remains visible briefly in the notch. A naturally completed Focus may also summon the optional event-only Completion Pet described in `docs/pet.md`; no other Pomodoro transition summons it. When explicitly enabled and selected from that Pet, the local 10-squat Movement Break described in `docs/movement-break.md` may run before the main renderer starts the prepared break.
 
 ## Collapsed-notch precedence
 

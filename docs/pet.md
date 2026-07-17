@@ -10,6 +10,7 @@ The Completion Pet is event-only:
 - Skip, Restart phase, Reset all, Pause, break completion, and app launch do not summon it;
 - the Pet appears in a separate transparent Tauri window without activating or focusing Agent Halo;
 - clicking the Pet opens transparent radial **Start Short break** (or **Start Long break**), **Later**, and **Close** controls;
+- when Movement Break is enabled, those controls also offer an explicit **10 Squats** action; it is the only Pet path that may request camera access;
 - **Close** and **Later** hide only the current summon;
 - Setup owns one global Pet On/Off preference, default On;
 - turning Pet Off hides any active summon immediately;
@@ -29,7 +30,7 @@ main Pomodoro state
   -> main renderer starts the prepared break
 ```
 
-The native Pet window stores the latest summon and one bounded pending action. The hidden Pet renderer reads this projection; the main renderer consumes actions and validates that the requested Short/Long break is still idle before starting it.
+The native Pet window stores the latest summon and one bounded pending action. The hidden Pet renderer reads this projection; the main renderer consumes actions and validates that the requested Short/Long break is still idle before starting it. Movement Break reuses this boundary: explicit entry creates a summon-bound native attempt token, the isolated Pet WebView runs one local camera stream through bundled shoulder tracking, and only that current attempt may queue a `movement-complete` action for the main renderer to revalidate. See `docs/movement-break.md`.
 
 ## Notification fallback
 

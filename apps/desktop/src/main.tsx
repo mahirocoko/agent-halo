@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { Activity, BarChart3, Check, ChevronLeft, Focus, List, Settings, Timer, Trash2, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createRoot } from "react-dom/client";
 import type { AgentHaloPresenceStatus } from "@agent-halo/protocol";
 import { ActivityPet, type HaloPetName } from "./features/session/HaloPet";
@@ -35,7 +35,6 @@ import { useAgentHaloPresence } from "./features/presence/useAgentHaloPresence";
 import { PomodoroPanel } from "./features/pomodoro/components";
 import { POMODORO_PET_HANDOFF_WINDOW_MS } from "./features/pomodoro/model";
 import { usePomodoro } from "./features/pomodoro/usePomodoro";
-import { PetApp } from "./features/pet/PetApp";
 import { readCompletionPetEnabled, readCompletionPetSize, writeCompletionPetEnabled, writeCompletionPetSize, type CompletionPetSize } from "./features/pet/preferences";
 import type { ICompletionPetActionRequest, ICompletionPetSummon } from "./features/pet/types";
 import { SetupPanel } from "./features/setup/SetupPanel";
@@ -46,6 +45,7 @@ import type { IUsageSettings } from "./features/usage/types";
 import { useAgentUsageList } from "./features/usage/useAgentUsageList";
 import { RuntimePanel } from "./features/runtime/components";
 import { useRuntimeMonitor } from "./features/runtime/useRuntimeMonitor";
+import { readMovementBreakEnabled, writeMovementBreakEnabled } from "./features/movement/preferences";
 import "./styles.css";
 
 const KEEP_AWAKE_STORAGE_KEY = "agent-halo.keep-awake-while-working";
@@ -54,6 +54,10 @@ const DEMO_MODE = SEARCH_PARAMS.has("demo");
 const DEMO_SCENARIO = SEARCH_PARAMS.get("demoScenario");
 const DEMO_COLLAPSED = SEARCH_PARAMS.has("demoCollapsed");
 const PET_SURFACE = SEARCH_PARAMS.get("surface") === "pet";
+const PetApp = lazy(async () => {
+  const module = await import("./features/pet/PetApp");
+  return { default: module.PetApp };
+});
 const DEFAULT_CAMERA_NOTCH_WIDTH = 184;
 const DEFAULT_CLOSED_NOTCH_HEIGHT = 36;
 const MIN_LIVE_ACTIVITY_WING_WIDTH = 66;
@@ -155,6 +159,7 @@ const App = () => {
   const [pet, setPet] = useState<HaloPetName>(readHaloPetPreference);
   const [completionPetEnabled, setCompletionPetEnabled] = useState(readCompletionPetEnabled);
   const [completionPetSize, setCompletionPetSize] = useState<CompletionPetSize>(readCompletionPetSize);
+  const [movementBreakEnabled, setMovementBreakEnabled] = useState(readMovementBreakEnabled);
   const [petPreviewStatus, setPetPreviewStatus] = useState<string | null>(null);
   const [petPreviewState, setPetPreviewState] = useState<"idle" | "showing" | "shown" | "stale" | "error">("idle");
   const completionPetEnabledRef = useRef(completionPetEnabled);
@@ -219,7 +224,7 @@ const App = () => {
       busy = true;
       try {
         const action = await invoke<ICompletionPetActionRequest | null>("take_completion_pet_action");
-        if (disposed || action?.action !== "start-break") return;
+        if (disposed || !action || !["movement-complete", "start-break"].includes(action.action)) return;
         const current = pomodoroRef.current;
         if (current.state.status === "idle" && current.state.phase === action.nextPhase && current.state.lastCompletion?.completedPhase === "focus" && current.state.lastCompletion.id === action.summonId) {
           current.start();
@@ -253,6 +258,7 @@ const App = () => {
       pet,
       petSize: completionPetSize,
       preview: false,
+      movementBreakEnabled,
       nextPhase: completion.nextPhase,
       title: "Focus complete",
       actionLabel: completion.nextPhase === "long-break" ? "Start Long break" : "Start Short break",
@@ -278,7 +284,7 @@ const App = () => {
       if (shown) await invoke("hide_completion_pet").catch(() => undefined);
       await restoreFallback();
     })();
-  }, [canUseNativeControls, completionPetEnabled, completionPetSize, pet, pomodoro.state.lastCompletion]);
+  }, [canUseNativeControls, completionPetEnabled, completionPetSize, movementBreakEnabled, pet, pomodoro.state.lastCompletion]);
   const isConnected = connection.status === "connected";
   const connectionTitle = DEMO_MODE ? "Demo mode" : (connection.message ?? connection.status);
   const workspace = shortenPath(presence.cwd);
@@ -943,7 +949,14 @@ const App = () => {
     completionPetSummonGenerationRef.current += 1;
     setCompletionPetEnabled(enabled);
     writeCompletionPetEnabled(enabled);
-    if (!enabled && canUseNativeControls) void invoke("hide_completion_pet").catch(() => undefined);
+    if (!enabled && canUseNativeControls) {
+      void invoke("hide_completion_pet").catch(() => undefined);
+    }
+  };
+
+  const updateMovementBreakEnabled = (enabled: boolean) => {
+    setMovementBreakEnabled(enabled);
+    writeMovementBreakEnabled(enabled);
   };
 
   const updateCompletionPetSize = (size: CompletionPetSize) => {
@@ -957,7 +970,9 @@ const App = () => {
 
   const resetAllPomodoroCycle = () => {
     completionPetSummonGenerationRef.current += 1;
-    if (canUseNativeControls) void invoke("hide_completion_pet").catch(() => undefined);
+    if (canUseNativeControls) {
+      void invoke("hide_completion_pet").catch(() => undefined);
+    }
     pomodoro.resetAll();
   };
 
@@ -977,6 +992,7 @@ const App = () => {
           pet,
           petSize: completionPetSize,
           preview: true,
+          movementBreakEnabled: false,
           nextPhase: "short-break",
           title: "Pet preview",
           actionLabel: "",
@@ -1321,6 +1337,7 @@ const App = () => {
                   pet={pet}
                   completionPetEnabled={completionPetEnabled}
                   completionPetSize={completionPetSize}
+                  movementBreakEnabled={movementBreakEnabled}
                   petPreviewStatus={petPreviewStatus}
                   petPreviewState={petPreviewState}
                   modStatus={modStatus}
@@ -1333,6 +1350,7 @@ const App = () => {
                   onPetChange={updatePet}
                   onCompletionPetEnabledChange={updateCompletionPetEnabled}
                   onCompletionPetSizeChange={updateCompletionPetSize}
+                  onMovementBreakEnabledChange={updateMovementBreakEnabled}
                   onShowPetPreview={showPetPreview}
                 />
               ) : selectedSession ? (
@@ -1544,4 +1562,4 @@ declare global {
   }
 }
 
-createRoot(document.getElementById("root")!).render(PET_SURFACE ? <PetApp /> : <App />);
+createRoot(document.getElementById("root")!).render(PET_SURFACE ? <Suspense fallback={null}><PetApp /></Suspense> : <App />);

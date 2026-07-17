@@ -9,6 +9,7 @@ export interface ICompletionPetSummon {
   pet: HaloPetName;
   petSize: CompletionPetSize;
   preview: boolean;
+  movementBreakEnabled?: boolean;
   nextPhase: CompletionPetBreakPhase;
   title: "Focus complete" | "Pet preview";
   actionLabel: "Start Short break" | "Start Long break" | "";
@@ -18,7 +19,7 @@ export interface ICompletionPetNativeState {
   summon: ICompletionPetSummon | null;
 }
 
-export type CompletionPetAction = "start-break";
+export type CompletionPetAction = "movement-complete" | "start-break";
 
 export interface ICompletionPetActionRequest {
   action: CompletionPetAction;

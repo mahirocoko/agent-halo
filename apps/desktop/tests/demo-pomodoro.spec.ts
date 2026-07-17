@@ -358,6 +358,44 @@ test("main renderer consumes one Pet action and remains the sole break timer own
   expect(state.endsAt).toBeGreaterThan(Date.now());
 });
 
+test("completed Movement Break is revalidated by the sole main Pomodoro owner", async ({ page }) => {
+  await page.addInitScript((key) => {
+    window.localStorage.setItem(key, JSON.stringify({
+      schemaVersion: 2,
+      phase: "long-break",
+      status: "idle",
+      completedFocusSessions: 4,
+      phaseDurationMs: 15 * 60_000,
+      remainingMs: 15 * 60_000,
+      endsAt: null,
+      runId: null,
+      notificationScheduled: false,
+      lastCompletion: { id: "movement-focus", completedAt: Date.now() - 1_000, observedAt: Date.now() - 1_000, completedPhase: "focus", nextPhase: "long-break", notificationScheduled: false },
+    }));
+    let pending = true;
+    (window as typeof window & { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
+      invoke: async (command: string, args?: Record<string, unknown>) => {
+        if (command === "take_completion_pet_action") {
+          if (!pending) return null;
+          pending = false;
+          return { action: "movement-complete", summonId: "movement-focus", nextPhase: "long-break" };
+        }
+        if (command === "notification_permission_state") return "authorized";
+        if (command === "notch_metrics") return [184, 36];
+        if (command === "set_keep_awake") return args?.active === true;
+        if (command === "agent_halo_mod_status") return ["", false];
+        return null;
+      },
+    };
+  }, storageKey);
+
+  await page.goto("/?demo=1&demoScenario=idle");
+  await expect.poll(() => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? "null")?.status, storageKey)).toBe("running");
+  const state = await page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? "null"), storageKey);
+  expect(state.phase).toBe("long-break");
+  expect(state.endsAt).toBeGreaterThan(Date.now());
+});
+
 test("reload inside the delayed fallback window preserves the pending notification without resummoning Pet", async ({ page }) => {
   const now = Date.now();
   await page.addInitScript(([key, now]) => {

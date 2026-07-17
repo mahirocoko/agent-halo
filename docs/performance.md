@@ -47,6 +47,8 @@ The `completion-pet-v1` revision raises CSS gzip to 9,300 bytes and JavaScript g
 
 The `completion-pet-controls-v2` revision raises CSS gzip to 10,500 bytes and JavaScript gzip to 97,000 bytes for the user-approved transparent 2× Pet, orbit-centered liquid squash/stretch reveal motion, pure-black borderless/shadowless smaller radial controls with larger icons, native-resize position compensation, three-section Setup sidebar, persisted floating-size controls, stateful Show-again/Update-Pet preview UX, and distinct Restart/Reset-progress Pomodoro controls. Its measured candidate is 10,235 bytes CSS gzip and 95,152 bytes JavaScript gzip. The main renderer still exclusively owns Pomodoro state and notification work; preview remains projection-only and cannot queue a break. The total `dist/` and legacy-asset constraints remain unchanged.
 
+The `movement-break-phase-1-code-split` revision keeps the primary ceilings at 10,500 bytes CSS gzip, 97,000 bytes JavaScript gzip, and 573,055 bytes core `dist/`. The explicitly user-triggered shoulder tracker is code-split and has a separate 28,250,000-byte offline runtime/model ceiling; its measured local payload is 28,192,416 bytes. This covers pinned MediaPipe WASM plus the hash-verified Pose Landmarker Lite model and avoids any runtime CDN/model request.
+
 The low-risk bridge refactor's three-run median measured event duration `603.06ms → 574.18ms` (−4.79%) and throughput `33,164 → 34,832 events/s` (+5.03%) for 20,000 deterministic events. Startup stayed effectively flat; synchronous NDJSON durability and event ordering remain unchanged.
 
 ## Commands

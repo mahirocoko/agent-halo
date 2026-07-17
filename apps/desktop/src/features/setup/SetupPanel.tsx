@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { ArrowRight, Bot, Check, Coffee, Download, Focus, Monitor as MonitorIcon, Play, PlugZap, RefreshCw } from "lucide-react";
+import { ArrowRight, Bot, Check, Coffee, Download, Dumbbell, Focus, Monitor as MonitorIcon, Play, PlugZap, RefreshCw } from "lucide-react";
 import type { IAgentHaloBridgeCapabilities } from "@agent-halo/protocol";
 import { HALO_PET_ROSTER, type HaloPetName } from "../session/HaloPet";
 import { shortenPath } from "../session/activity";
@@ -49,6 +49,7 @@ export interface ISetupPanelProps {
   pet: HaloPetName;
   completionPetEnabled: boolean;
   completionPetSize: CompletionPetSize;
+  movementBreakEnabled: boolean;
   petPreviewStatus: string | null;
   petPreviewState: "idle" | "showing" | "shown" | "stale" | "error";
   onCheckBridge: () => void;
@@ -59,10 +60,11 @@ export interface ISetupPanelProps {
   onPetChange: (pet: HaloPetName) => void;
   onCompletionPetEnabledChange: (enabled: boolean) => void;
   onCompletionPetSizeChange: (size: CompletionPetSize) => void;
+  onMovementBreakEnabledChange: (enabled: boolean) => void;
   onShowPetPreview: () => Promise<void>;
 }
 
-export const SetupPanel = ({ capabilities, canUseNativeControls, completionPetEnabled, completionPetSize, connectionTitle, displayError, displayLoading, displayState, guidance, isConnected, keepAwakeActive, keepAwakeEnabled, keepAwakeError, pet, petPreviewState, petPreviewStatus, modStatus, nativeAction, onCheckBridge, onCompletionPetEnabledChange, onCompletionPetSizeChange, onDisplayChange, onDisplayRefresh, onInstallMod, onKeepAwakeChange, onPetChange, onShowPetPreview }: ISetupPanelProps) => {
+export const SetupPanel = ({ capabilities, canUseNativeControls, completionPetEnabled, completionPetSize, connectionTitle, displayError, displayLoading, displayState, guidance, isConnected, keepAwakeActive, keepAwakeEnabled, keepAwakeError, movementBreakEnabled, pet, petPreviewState, petPreviewStatus, modStatus, nativeAction, onCheckBridge, onCompletionPetEnabledChange, onCompletionPetSizeChange, onDisplayChange, onDisplayRefresh, onInstallMod, onKeepAwakeChange, onMovementBreakEnabledChange, onPetChange, onShowPetPreview }: ISetupPanelProps) => {
   const [activeCategory, setActiveCategory] = useState<SetupCategory>("connection");
   const [compactNavigation, setCompactNavigation] = useState(() => window.matchMedia("(max-width: 380px)").matches);
   const [petPickerOpen, setPetPickerOpen] = useState(false);
@@ -221,6 +223,8 @@ export const SetupPanel = ({ capabilities, canUseNativeControls, completionPetEn
               ) : null}
               <div className="setup-row"><span className="status-slot"><Bot className="setup-icon" size={14} strokeWidth={2.3} /></span><span className="setup-copy"><span className="setup-title">Completion Pet size</span><span className="setup-detail">Changes only the floating Pet</span></span><span className="setup-size-options" role="radiogroup" aria-label="Completion Pet size">{COMPLETION_PET_SIZES.map((size) => <button id={`completion-pet-size-${size}`} type="button" role="radio" aria-checked={completionPetSize === size} tabIndex={completionPetSize === size ? 0 : -1} data-active={completionPetSize === size} onClick={() => onCompletionPetSizeChange(size)} onKeyDown={(event) => handlePetSizeKeyDown(event, size)} data-tauri-drag-region="false" key={size}>{size === "small" ? "1×" : size === "medium" ? "1.5×" : "2×"}</button>)}</span></div>
               <div className="setup-row"><span className="status-slot"><Bot className="setup-icon" size={14} strokeWidth={2.3} /></span><span className="setup-copy"><span className="setup-title">Completion Pet</span><span className="setup-detail">{completionPetEnabled ? "Shows after a completed Focus" : "Off · uses a macOS notification"}</span></span><button className={`pill-btn ${completionPetEnabled ? "accent" : ""}`} type="button" role="switch" aria-checked={completionPetEnabled} onClick={() => onCompletionPetEnabledChange(!completionPetEnabled)} data-tauri-drag-region="false" aria-label={`${completionPetEnabled ? "Disable" : "Enable"} completion pet`}>{completionPetEnabled ? "On" : "Off"}</button></div>
+              <div className="setup-row"><span className="status-slot"><Dumbbell className="setup-icon" size={14} strokeWidth={2.3} /></span><span className="setup-copy"><span className="setup-title">Movement break</span><span className="setup-detail">{movementBreakEnabled ? "10 squats · camera only after you choose it" : "Off · hidden from future completions"}</span></span><button className={`pill-btn ${movementBreakEnabled ? "accent" : ""}`} type="button" role="switch" aria-checked={movementBreakEnabled} onClick={() => onMovementBreakEnabledChange(!movementBreakEnabled)} data-tauri-drag-region="false" aria-label={`${movementBreakEnabled ? "Disable" : "Enable"} movement break`}>{movementBreakEnabled ? "On" : "Off"}</button></div>
+              {movementBreakEnabled ? <div className="notice-row movement-privacy-note" role="note">Camera opens only after 10 Squats is clicked. Pose analysis stays on this Mac; no video or audio is saved.</div> : null}
               {petPreviewStatus ? <div className="notice-row pet-preview-status" data-state={petPreviewState} data-online={petPreviewState === "shown"} role="status" aria-live="polite">{petPreviewStatus}</div> : null}
             </>
           ) : null}

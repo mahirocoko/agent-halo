@@ -7,9 +7,10 @@ const distRoot = join(repoRoot, "apps/desktop/dist");
 const assetRoot = join(distRoot, "assets");
 
 const BUDGETS = {
+  coreDistBytes: 573_055,
   cssGzipBytes: 10_500,
-  distBytes: 573_055,
   jsGzipBytes: 97_000,
+  movementAssetBytes: 28_250_000,
 };
 
 const walk = async (directory) => {
@@ -36,11 +37,20 @@ for (const name of await readdir(assetRoot)) {
   assets.push({ name, bytes: contents.length, gzipBytes: gzipSync(contents).length });
 }
 
-const css = assets.find((asset) => asset.name.endsWith(".css"));
-const js = assets.find((asset) => asset.name.endsWith(".js"));
+const largestAsset = (extension) => assets
+  .filter((asset) => asset.name.endsWith(extension))
+  .sort((left, right) => right.gzipBytes - left.gzipBytes)[0];
+const css = largestAsset(".css");
+const js = largestAsset(".js");
 if (!css || !js) throw new Error("desktop build is missing its primary CSS or JavaScript asset");
 
 const dist = await walk(distRoot);
+const movementAssets = await walk(join(distRoot, "mediapipe"));
+const movementRuntimeBytes = assets
+  .filter((asset) => asset.name.startsWith("vision_bundle-"))
+  .reduce((total, asset) => total + asset.bytes, 0);
+const movementAssetBytes = movementAssets.bytes + movementRuntimeBytes;
+const coreDistBytes = dist.bytes - movementAssetBytes;
 const legacyEntries = [];
 const findLegacy = async (directory, relative = "") => {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -53,13 +63,14 @@ await findLegacy(distRoot);
 
 const payload = {
   baselineCommit: "4a5c0f1",
-  budgetRevision: "completion-pet-controls-v2",
+  budgetRevision: "movement-break-phase-1-code-split",
   budgets: BUDGETS,
   current: {
     cssGzipBytes: css.gzipBytes,
-    distBytes: dist.bytes,
+    coreDistBytes,
     distFiles: dist.files,
     jsGzipBytes: js.gzipBytes,
+    movementAssetBytes,
   },
   legacySessionCatEntries: legacyEntries,
 };
@@ -68,5 +79,6 @@ console.log(JSON.stringify(payload, null, 2));
 
 if (css.gzipBytes > BUDGETS.cssGzipBytes) throw new Error(`CSS gzip budget exceeded: ${css.gzipBytes} > ${BUDGETS.cssGzipBytes}`);
 if (js.gzipBytes > BUDGETS.jsGzipBytes) throw new Error(`JavaScript gzip budget exceeded: ${js.gzipBytes} > ${BUDGETS.jsGzipBytes}`);
-if (dist.bytes > BUDGETS.distBytes) throw new Error(`desktop dist budget exceeded: ${dist.bytes} > ${BUDGETS.distBytes}`);
+if (coreDistBytes > BUDGETS.coreDistBytes) throw new Error(`desktop core dist budget exceeded: ${coreDistBytes} > ${BUDGETS.coreDistBytes}`);
+if (movementAssetBytes > BUDGETS.movementAssetBytes) throw new Error(`movement asset budget exceeded: ${movementAssetBytes} > ${BUDGETS.movementAssetBytes}`);
 if (legacyEntries.length > 0) throw new Error(`legacy session-cat assets remain in dist: ${legacyEntries.join(", ")}`);

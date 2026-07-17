@@ -121,6 +121,45 @@ test("Setup owns one global Completion Pet toggle", async ({ page }) => {
   expect(await page.evaluate(() => window.localStorage.getItem("agent-halo.completion-pet-enabled"))).toBe("false");
 });
 
+test("Movement Break is opt-in with truthful local camera copy", async ({ page }) => {
+  await page.goto("/?demo=1&demoScenario=idle");
+  await page.getByRole("button", { name: "Setup" }).click();
+  await page.getByRole("tab", { name: "Pet" }).click();
+  const row = page.locator(".setup-row").filter({ has: page.locator(".setup-title", { hasText: /^Movement break$/ }) });
+  await expect(row).toContainText("Off · hidden from future completions");
+  const toggle = row.getByRole("switch", { name: "Enable movement break" });
+  await expect(toggle).toHaveAttribute("aria-checked", "false");
+  await toggle.click();
+  await expect(row).toContainText("10 squats · camera only after you choose it");
+  await expect(page.getByRole("note")).toContainText("Pose analysis stays on this Mac; no video or audio is saved.");
+  await expect.poll(() => page.evaluate(() => window.localStorage.getItem("agent-halo.movement-break-enabled"))).toBe("true");
+});
+
+test("disabling future Movement Breaks does not dismiss an active completion Pet", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("agent-halo.movement-break-enabled", "true");
+    const calls: Array<{ command: string }> = [];
+    (window as typeof window & { __movementSettingCalls: typeof calls }).__movementSettingCalls = calls;
+    (window as typeof window & { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
+      invoke: async (command: string, args?: Record<string, unknown>) => {
+        calls.push({ command });
+        if (command === "take_completion_pet_action") return null;
+        if (command === "notch_metrics") return [184, 36];
+        if (command === "set_keep_awake") return args?.active === true;
+        if (command === "agent_halo_mod_status") return ["", false];
+        if (command === "display_state" || command === "reconcile_display") return { displays: [], preferredDisplayId: null, preferredDisplayName: null, selectedDisplayId: null, activeDisplayId: null, fallbackActive: false };
+        return null;
+      },
+    };
+  });
+  await page.goto("/?demo=1&demoScenario=idle");
+  await page.getByRole("button", { name: "Setup" }).click();
+  await page.getByRole("tab", { name: "Pet" }).click();
+  await page.getByRole("switch", { name: "Disable movement break" }).click();
+  await expect.poll(() => page.evaluate(() => window.localStorage.getItem("agent-halo.movement-break-enabled"))).toBe("false");
+  expect(await page.evaluate(() => (window as typeof window & { __movementSettingCalls: Array<{ command: string }> }).__movementSettingCalls.some((call) => call.command === "hide_completion_pet"))).toBe(false);
+});
+
 test("Pet Setup persists floating size and shows an isolated native preview", async ({ page }) => {
   await page.addInitScript(() => {
     const calls: Array<{ command: string; args?: Record<string, unknown> }> = [];

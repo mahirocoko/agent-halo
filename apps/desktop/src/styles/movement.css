@@ -1,0 +1,298 @@
+.movement-challenge {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-rows: 42px minmax(0, 1fr) 42px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 24px;
+  color: var(--text);
+  background: #000;
+}
+
+.movement-header,
+.movement-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+}
+
+.movement-header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.movement-title,
+.movement-local {
+  display: inline-flex;
+  align-items: center;
+}
+
+.movement-title {
+  gap: 6px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.movement-local {
+  gap: 5px;
+  margin-left: auto;
+  color: var(--text-2);
+  font-size: 10px;
+}
+
+.movement-local-dot {
+  width: 6px;
+  height: 6px;
+  border: 1px solid var(--text-3);
+  border-radius: 50%;
+}
+
+.movement-local-dot[data-active="true"] {
+  border-color: #39d98a;
+  background: #39d98a;
+}
+
+.movement-icon-button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  place-items: center;
+  color: var(--text-2);
+  background: transparent;
+  cursor: pointer;
+}
+
+.movement-icon-button:hover,
+.movement-icon-button:focus-visible {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.movement-icon-button:focus-visible,
+.movement-actions button:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.movement-body {
+  display: grid;
+  grid-template-columns: minmax(0, 446px) minmax(0, 152px);
+  min-height: 0;
+}
+
+.movement-pose-stage {
+  position: relative;
+  display: grid;
+  overflow: hidden;
+  min-width: 0;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  place-items: center;
+  background: #050505;
+}
+
+.movement-camera-preview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+.movement-pose-stage::before,
+.movement-pose-stage::after {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  border-color: rgba(255, 255, 255, 0.14);
+  border-style: solid;
+  content: "";
+  z-index: 3;
+}
+
+.movement-pose-stage::before {
+  top: 14px;
+  left: 14px;
+  border-width: 1px 0 0 1px;
+}
+
+.movement-pose-stage::after {
+  right: 14px;
+  bottom: 30px;
+  border-width: 0 1px 1px 0;
+}
+
+.movement-shoulder-line,
+.movement-target-line {
+  position: absolute;
+  right: 0;
+  left: 0;
+  z-index: 3;
+  pointer-events: none;
+  transition: top 80ms linear;
+}
+
+.movement-shoulder-line {
+  height: 3px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.75);
+}
+
+.movement-target-line {
+  height: 5px;
+  background: #39d98a;
+  box-shadow: 0 0 7px rgba(57, 217, 138, 0.72);
+}
+
+.movement-stage-icon {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  width: 74px;
+  height: 74px;
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  border-radius: 50%;
+  place-items: center;
+  color: var(--text-3);
+}
+
+.movement-stage-icon.is-complete {
+  border-color: rgba(57, 217, 138, 0.5);
+  color: #39d98a;
+}
+
+.movement-privacy {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  padding: 6px 12px;
+  color: var(--text-2);
+  background: rgba(0, 0, 0, 0.72);
+  font-size: 11px;
+  text-align: center;
+  z-index: 3;
+  text-shadow: 0 1px 3px #000;
+}
+
+.movement-preview-state {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  z-index: 3;
+  padding: 3px 6px;
+  border-radius: 999px;
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.68);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.movement-progress-copy {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 18px;
+}
+
+.movement-count {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  color: var(--text-3);
+}
+
+.movement-count strong {
+  color: #39d98a;
+  font-size: 46px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 760;
+  letter-spacing: -0.06em;
+  line-height: 0.9;
+}
+
+.movement-count span {
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.movement-guidance {
+  min-height: 28px;
+  color: var(--text-2);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.movement-depth-progress {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.movement-depth-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #39d98a;
+  transition: width 80ms linear;
+}
+
+.movement-depth-label {
+  color: var(--text-3);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.movement-error {
+  color: #ff6b6b;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.movement-actions {
+  justify-content: flex-end;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.movement-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  color: var(--text-2);
+  background: transparent;
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.movement-actions button.is-primary {
+  border-color: rgba(255, 157, 61, 0.48);
+  color: var(--accent);
+}
+
+.movement-safety {
+  margin-right: auto;
+  color: var(--text-2);
+  font-size: 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .movement-shoulder-line,
+  .movement-target-line,
+  .movement-depth-progress span {
+    transition: none;
+  }
+}

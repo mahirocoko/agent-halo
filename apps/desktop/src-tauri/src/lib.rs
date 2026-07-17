@@ -33,8 +33,8 @@ use notification::{
 };
 use pet_window::{
     activate_completion_pet, completion_pet_state, drag_completion_pet, hide_completion_pet,
-    set_completion_pet_expanded, show_completion_pet, submit_completion_pet_action,
-    take_completion_pet_action, CompletionPetWindowState,
+    set_completion_pet_expanded, set_completion_pet_movement, show_completion_pet,
+    submit_completion_pet_action, take_completion_pet_action, CompletionPetWindowState,
 };
 use runtime_usage::{runtime_usage, RuntimeUsageState};
 
@@ -4101,6 +4101,7 @@ fn completion_pet_command_allowed(command: &str) -> bool {
             | "drag_completion_pet"
             | "hide_completion_pet"
             | "set_completion_pet_expanded"
+            | "set_completion_pet_movement"
             | "submit_completion_pet_action"
     )
 }
@@ -4132,6 +4133,7 @@ pub fn run() {
             schedule_pomodoro_notification,
             set_keep_awake,
             set_completion_pet_expanded,
+            set_completion_pet_movement,
             set_panel_open,
             select_display,
             show_completion_pet,
@@ -4199,6 +4201,13 @@ pub fn run() {
             label,
             event: tauri::WindowEvent::Destroyed,
             ..
+        } if label == "pet" => {
+            pet_window::dismiss_pet(app_handle);
+        }
+        tauri::RunEvent::WindowEvent {
+            label,
+            event: tauri::WindowEvent::Destroyed,
+            ..
         } if label == "main" => {
             let _ = app_handle.state::<KeepAwakeState>().set_active(false);
         }
@@ -4218,6 +4227,7 @@ mod display_selection_tests {
             "drag_completion_pet",
             "hide_completion_pet",
             "set_completion_pet_expanded",
+            "set_completion_pet_movement",
             "submit_completion_pet_action",
         ] {
             assert!(completion_pet_command_allowed(command));

@@ -2,7 +2,7 @@ use std::{
     fs,
     path::PathBuf,
     sync::{
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering},
         Mutex,
     },
     thread,
@@ -17,8 +17,43 @@ const PET_COLLAPSED_WIDTH: f64 = 116.0;
 const PET_COLLAPSED_HEIGHT: f64 = 88.0;
 const PET_EXPANDED_WIDTH: f64 = 260.0;
 const PET_EXPANDED_HEIGHT: f64 = 230.0;
+const PET_MOVEMENT_WIDTH: f64 = 600.0;
+const PET_MOVEMENT_HEIGHT: f64 = 420.0;
 const PET_DEFAULT_INSET: f64 = 20.0;
 const PET_VISIBLE_MARGIN: f64 = 12.0;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CompletionPetSurfaceMode {
+    Collapsed = 0,
+    Expanded = 1,
+    Movement = 2,
+}
+
+impl CompletionPetSurfaceMode {
+    fn from_raw(value: u8) -> Self {
+        match value {
+            1 => Self::Expanded,
+            2 => Self::Movement,
+            _ => Self::Collapsed,
+        }
+    }
+
+    fn dimensions(self) -> (f64, f64) {
+        match self {
+            Self::Collapsed => (PET_COLLAPSED_WIDTH, PET_COLLAPSED_HEIGHT),
+            Self::Expanded => (PET_EXPANDED_WIDTH, PET_EXPANDED_HEIGHT),
+            Self::Movement => (PET_MOVEMENT_WIDTH, PET_MOVEMENT_HEIGHT),
+        }
+    }
+
+    fn anchor_offsets(self) -> (f64, f64) {
+        match self {
+            Self::Collapsed => (58.0, 44.0),
+            Self::Expanded => (130.0, 114.0),
+            Self::Movement => (PET_MOVEMENT_WIDTH / 2.0, PET_MOVEMENT_HEIGHT / 2.0),
+        }
+    }
+}
 
 const PET_NAMES: &[&str] = &[
     "pot",
@@ -46,6 +81,8 @@ pub struct CompletionPetSummon {
     pet: String,
     pet_size: String,
     preview: bool,
+    #[serde(default)]
+    movement_break_enabled: bool,
     next_phase: String,
     title: String,
     action_label: String,
@@ -66,7 +103,10 @@ impl CompletionPetSummon {
             return Err("Completion Pet size is invalid".to_string());
         }
         if self.preview {
-            if self.title != "Pet preview" || !self.action_label.is_empty() {
+            if self.title != "Pet preview"
+                || !self.action_label.is_empty()
+                || self.movement_break_enabled
+            {
                 return Err("Completion Pet preview copy is invalid".to_string());
             }
             return Ok(self);
@@ -111,11 +151,13 @@ pub(crate) struct PetPositionPreference {
 pub struct CompletionPetWindowState {
     summon: Mutex<Option<CompletionPetSummon>>,
     pending_action: Mutex<Option<CompletionPetActionRequest>>,
+    movement_attempt_summon_id: Mutex<Option<String>>,
     position: Mutex<Option<PetPositionPreference>>,
     revision: AtomicU64,
     move_revision: AtomicU64,
     persist_user_move: AtomicBool,
-    expanded: AtomicBool,
+    surface_mode: AtomicU8,
+    surface_operation: Mutex<()>,
 }
 
 impl CompletionPetWindowState {
@@ -155,12 +197,48 @@ impl CompletionPetWindowState {
         }
     }
 
-    fn set_expanded(&self, expanded: bool) {
-        self.expanded.store(expanded, Ordering::SeqCst);
+    fn clear_movement_attempt(&self) {
+        if let Ok(mut attempt) = self.movement_attempt_summon_id.lock() {
+            *attempt = None;
+        }
     }
 
-    fn swap_expanded(&self, expanded: bool) -> bool {
-        self.expanded.swap(expanded, Ordering::SeqCst)
+    fn set_movement_attempt(&self, summon_id: Option<String>) -> Result<(), String> {
+        let mut attempt = self
+            .movement_attempt_summon_id
+            .lock()
+            .map_err(|_| "Movement Break attempt state is unavailable".to_string())?;
+        *attempt = summon_id;
+        Ok(())
+    }
+
+    fn movement_attempt_matches(&self, summon_id: &str) -> bool {
+        self.movement_attempt_summon_id
+            .lock()
+            .ok()
+            .and_then(|attempt| attempt.clone())
+            .as_deref()
+            == Some(summon_id)
+    }
+
+    fn set_surface_mode(&self, mode: CompletionPetSurfaceMode) {
+        self.surface_mode.store(mode as u8, Ordering::SeqCst);
+    }
+
+    fn surface_mode(&self) -> CompletionPetSurfaceMode {
+        CompletionPetSurfaceMode::from_raw(self.surface_mode.load(Ordering::SeqCst))
+    }
+
+    pub(crate) fn lock_surface(&self) -> Result<std::sync::MutexGuard<'_, ()>, String> {
+        self.surface_operation
+            .lock()
+            .map_err(|_| "Completion Pet surface state is unavailable".to_string())
+    }
+
+    pub(crate) fn movement_summon_matches(&self, summon_id: &str) -> bool {
+        self.snapshot().summon.is_some_and(|summon| {
+            !summon.preview && summon.movement_break_enabled && summon.id == summon_id
+        })
     }
 
     fn begin_user_drag(&self) -> u64 {
@@ -246,14 +324,6 @@ mod platform {
 
     fn clamp(value: f64, minimum: f64, maximum: f64) -> f64 {
         value.max(minimum).min(maximum.max(minimum))
-    }
-
-    fn pet_center_offsets(width: f64) -> (f64, f64) {
-        if width > PET_COLLAPSED_WIDTH + 1.0 {
-            (130.0, 114.0)
-        } else {
-            (58.0, 44.0)
-        }
     }
 
     fn matching_screen(
@@ -358,8 +428,8 @@ mod platform {
 
     fn resize_on_main_thread(
         window: &WebviewWindow,
-        expanded: bool,
-        current_expanded: bool,
+        target_mode: CompletionPetSurfaceMode,
+        current_mode: CompletionPetSurfaceMode,
     ) -> bool {
         let Some(mtm) = MainThreadMarker::new() else {
             return false;
@@ -376,19 +446,11 @@ mod platform {
                 return false;
             };
             let visible = screen.visibleFrame();
-            let (width, height) = if expanded {
-                (PET_EXPANDED_WIDTH, PET_EXPANDED_HEIGHT)
-            } else {
-                (PET_COLLAPSED_WIDTH, PET_COLLAPSED_HEIGHT)
-            };
-            let (current_center_x, current_center_y) = if current_expanded {
-                pet_center_offsets(PET_EXPANDED_WIDTH)
-            } else {
-                pet_center_offsets(PET_COLLAPSED_WIDTH)
-            };
+            let (width, height) = target_mode.dimensions();
+            let (current_center_x, current_center_y) = current_mode.anchor_offsets();
             let pet_x = frame.origin.x + current_center_x;
             let pet_y = frame.origin.y + current_center_y;
-            let (target_center_x, target_center_y) = pet_center_offsets(width);
+            let (target_center_x, target_center_y) = target_mode.anchor_offsets();
             let x = clamp(
                 pet_x - target_center_x,
                 visible.origin.x + PET_VISIBLE_MARGIN,
@@ -419,7 +481,14 @@ mod platform {
             let screen = screen_for_frame(&screens, frame)?;
             let visible = screen.visibleFrame();
             let display = appkit_display_option(&screen, None)?;
-            let (center_x, center_y) = pet_center_offsets(frame.size.width);
+            let current_mode = if frame.size.width > PET_EXPANDED_WIDTH + 1.0 {
+                CompletionPetSurfaceMode::Movement
+            } else if frame.size.width > PET_COLLAPSED_WIDTH + 1.0 {
+                CompletionPetSurfaceMode::Expanded
+            } else {
+                CompletionPetSurfaceMode::Collapsed
+            };
+            let (center_x, center_y) = current_mode.anchor_offsets();
             let anchor_x = frame.origin.x + center_x - PET_COLLAPSED_WIDTH / 2.0;
             let anchor_y = frame.origin.y + center_y - PET_COLLAPSED_HEIGHT / 2.0;
             let available_x = (visible.size.width - PET_COLLAPSED_WIDTH).max(1.0);
@@ -462,10 +531,10 @@ mod platform {
 
     pub fn resize(
         window: &WebviewWindow,
-        expanded: bool,
-        current_expanded: bool,
+        target_mode: CompletionPetSurfaceMode,
+        current_mode: CompletionPetSurfaceMode,
     ) -> Result<(), String> {
-        if resize_on_main_thread(window, expanded, current_expanded) {
+        if resize_on_main_thread(window, target_mode, current_mode) {
             return Ok(());
         }
         let (sender, receiver) = mpsc::channel();
@@ -474,8 +543,8 @@ mod platform {
             .run_on_main_thread(move || {
                 let _ = sender.send(resize_on_main_thread(
                     &scheduled_window,
-                    expanded,
-                    current_expanded,
+                    target_mode,
+                    current_mode,
                 ));
             })
             .map_err(|error| format!("Could not schedule Completion Pet resize: {error}"))?;
@@ -539,14 +608,10 @@ mod platform {
 
     pub fn resize(
         window: &WebviewWindow,
-        expanded: bool,
-        _current_expanded: bool,
+        target_mode: CompletionPetSurfaceMode,
+        _current_mode: CompletionPetSurfaceMode,
     ) -> Result<(), String> {
-        let (width, height) = if expanded {
-            (PET_EXPANDED_WIDTH, PET_EXPANDED_HEIGHT)
-        } else {
-            (PET_COLLAPSED_WIDTH, PET_COLLAPSED_HEIGHT)
-        };
+        let (width, height) = target_mode.dimensions();
         window
             .set_size(Size::Logical(LogicalSize::new(width, height)))
             .map_err(|error| format!("Could not resize Completion Pet: {error}"))?;
@@ -566,14 +631,15 @@ pub fn show_completion_pet(
 ) -> Result<bool, String> {
     validate_window(&window, "main")?;
     let summon = summon.validate()?;
+    let _surface_guard = state.lock_surface()?;
     let revision = state.begin_operation();
     let pet_window = window
         .app_handle()
         .get_webview_window("pet")
         .ok_or_else(|| "Completion Pet window is unavailable".to_string())?;
     state.clear_pending_action();
+    state.clear_movement_attempt();
     state.set_summon(Some(summon));
-    state.set_expanded(false);
     if let Err(error) = platform::position_for_show(&pet_window, &state) {
         if state.is_current(revision) {
             state.set_summon(None);
@@ -581,6 +647,7 @@ pub fn show_completion_pet(
         }
         return Err(error);
     }
+    state.set_surface_mode(CompletionPetSurfaceMode::Collapsed);
     if !state.is_current(revision) {
         return Ok(false);
     }
@@ -628,16 +695,48 @@ pub fn set_completion_pet_expanded(
     expanded: bool,
 ) -> Result<(), String> {
     validate_window(&window, "pet")?;
-    let previous = state.swap_expanded(expanded);
-    let result = if expanded {
-        platform::resize(&window, true, previous)
+    let _surface_guard = state.lock_surface()?;
+    let target = if expanded {
+        CompletionPetSurfaceMode::Expanded
     } else {
+        CompletionPetSurfaceMode::Collapsed
+    };
+    let previous = state.surface_mode();
+    let result = if target == CompletionPetSurfaceMode::Collapsed {
         platform::position_for_show(&window, &state)
+    } else {
+        platform::resize(&window, target, previous)
     };
     if let Err(error) = result {
-        state.set_expanded(previous);
         return Err(error);
     }
+    state.set_surface_mode(target);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn set_completion_pet_movement(
+    window: WebviewWindow,
+    state: tauri::State<'_, CompletionPetWindowState>,
+    active: bool,
+    summon_id: String,
+) -> Result<(), String> {
+    validate_window(&window, "pet")?;
+    let _surface_guard = state.lock_surface()?;
+    if !state.movement_summon_matches(&summon_id) {
+        return Err("Movement Break summon is no longer active".to_string());
+    }
+    let target = if active {
+        CompletionPetSurfaceMode::Movement
+    } else {
+        CompletionPetSurfaceMode::Expanded
+    };
+    let previous = state.surface_mode();
+    if let Err(error) = platform::resize(&window, target, previous) {
+        return Err(error);
+    }
+    state.set_surface_mode(target);
+    state.set_movement_attempt(active.then_some(summon_id))?;
     Ok(())
 }
 
@@ -666,6 +765,7 @@ pub fn hide_completion_pet(
     if window.label() != "pet" && window.label() != "main" {
         return Err("Completion Pet hide requires an Agent Halo window".to_string());
     }
+    let _surface_guard = state.lock_surface()?;
     state.begin_operation();
     let pet_window = window
         .app_handle()
@@ -673,8 +773,9 @@ pub fn hide_completion_pet(
         .ok_or_else(|| "Completion Pet window is unavailable".to_string())?;
     state.set_summon(None);
     state.clear_pending_action();
-    state.set_expanded(false);
+    state.clear_movement_attempt();
     let _ = platform::position_for_show(&pet_window, &state);
+    state.set_surface_mode(CompletionPetSurfaceMode::Collapsed);
     let _ = pet_window.set_focusable(false);
     pet_window
         .hide()
@@ -688,7 +789,8 @@ pub fn submit_completion_pet_action(
     action: String,
 ) -> Result<(), String> {
     validate_window(&window, "pet")?;
-    if action != "start-break" {
+    let _surface_guard = state.lock_surface()?;
+    if action != "start-break" && action != "movement-complete" {
         return Err("Unsupported Completion Pet action".to_string());
     }
     let summon = state
@@ -698,8 +800,16 @@ pub fn submit_completion_pet_action(
     if summon.preview {
         return Err("Completion Pet preview cannot start a Pomodoro break".to_string());
     }
+    if action == "movement-complete" {
+        if !summon.movement_break_enabled {
+            return Err("Movement Break is disabled for this completion".to_string());
+        }
+        if !state.movement_attempt_matches(&summon.id) {
+            return Err("Movement Break attempt does not match this completion".to_string());
+        }
+    }
     state.begin_operation();
-    state.set_expanded(false);
+    state.set_surface_mode(CompletionPetSurfaceMode::Collapsed);
     let mut pending = state
         .pending_action
         .lock()
@@ -714,6 +824,7 @@ pub fn submit_completion_pet_action(
     });
     drop(pending);
     state.set_summon(None);
+    state.clear_movement_attempt();
     let _ = window.set_focusable(false);
     window
         .hide()
@@ -762,6 +873,9 @@ pub fn schedule_pet_position_persist(app: &AppHandle) {
 }
 
 pub fn hide_pet_on_exit(app: &AppHandle) {
+    let state = app.state::<CompletionPetWindowState>();
+    let _surface_guard = state.lock_surface().ok();
+    state.clear_movement_attempt();
     if let Some(window) = app.get_webview_window("pet") {
         let _ = window.set_focusable(false);
         let _ = window.hide();
@@ -770,11 +884,13 @@ pub fn hide_pet_on_exit(app: &AppHandle) {
 
 pub fn dismiss_pet(app: &AppHandle) {
     let state = app.state::<CompletionPetWindowState>();
+    let _surface_guard = state.lock_surface().ok();
     state.begin_operation();
     state.set_summon(None);
     state.clear_pending_action();
+    state.clear_movement_attempt();
     if let Some(window) = app.get_webview_window("pet") {
-        state.set_expanded(false);
+        state.set_surface_mode(CompletionPetSurfaceMode::Collapsed);
         let _ = platform::position_for_show(&window, &state);
         let _ = window.set_focusable(false);
         let _ = window.hide();
@@ -793,6 +909,7 @@ mod tests {
             pet: "scorpion".to_string(),
             pet_size: "large".to_string(),
             preview: false,
+            movement_break_enabled: false,
             next_phase: "short-break".to_string(),
             title: "Focus complete".to_string(),
             action_label: "Start Short break".to_string(),
@@ -806,10 +923,52 @@ mod tests {
         .is_err());
         assert!(CompletionPetSummon {
             action_label: "Start Long break".to_string(),
+            ..valid.clone()
+        }
+        .validate()
+        .is_err());
+        assert!(CompletionPetSummon {
+            movement_break_enabled: true,
+            ..valid.clone()
+        }
+        .validate()
+        .is_ok());
+        assert!(CompletionPetSummon {
+            preview: true,
+            movement_break_enabled: true,
+            title: "Pet preview".to_string(),
+            action_label: String::new(),
             ..valid
         }
         .validate()
         .is_err());
+    }
+
+    #[test]
+    fn movement_session_must_match_the_active_enabled_summon() {
+        let state = CompletionPetWindowState::default();
+        state.set_summon(Some(CompletionPetSummon {
+            schema_version: 1,
+            id: "focus-movement".to_string(),
+            pet: "scorpion".to_string(),
+            pet_size: "large".to_string(),
+            preview: false,
+            movement_break_enabled: true,
+            next_phase: "short-break".to_string(),
+            title: "Focus complete".to_string(),
+            action_label: "Start Short break".to_string(),
+        }));
+        assert!(state.movement_summon_matches("focus-movement"));
+        assert!(!state.movement_summon_matches("another-focus"));
+        state
+            .set_movement_attempt(Some("focus-movement".to_string()))
+            .unwrap();
+        assert!(state.movement_attempt_matches("focus-movement"));
+        assert!(!state.movement_attempt_matches("another-focus"));
+        state.clear_movement_attempt();
+        assert!(!state.movement_attempt_matches("focus-movement"));
+        state.set_summon(None);
+        assert!(!state.movement_summon_matches("focus-movement"));
     }
 
     #[test]
