@@ -43,6 +43,10 @@ The `focus-stability-v1` revision keeps the CSS ceiling at 8,750 bytes and raise
 
 The `runtime-palette-v1` revision raises CSS gzip to 8,900 bytes while keeping JavaScript at 92,000 bytes. It adds a semantic Runtime pressure hierarchy—green Normal, hollow amber Elevated, solid amber High, red Critical, and hollow dashed neutral Unavailable—plus inner-left alignment for the Pomodoro phase wing. Its measured candidate is 8,793 bytes CSS gzip and 90,984 bytes JavaScript gzip. The total `dist/` and legacy-asset constraints remain unchanged.
 
+The `completion-pet-v1` revision raises CSS gzip to 9,300 bytes and JavaScript gzip to 95,000 bytes for the separate projection-only Pet surface, radial action menu, preference migration/toggle, and delayed notification-fallback orchestration. Its measured candidate is 9,234 bytes CSS gzip and 93,282 bytes JavaScript gzip. The main renderer remains the sole Pomodoro owner; the Pet route does not mount bridge/session/timer ownership. The total `dist/` and legacy-asset constraints remain unchanged.
+
+The `completion-pet-controls-v2` revision raises CSS gzip to 10,500 bytes and JavaScript gzip to 97,000 bytes for the user-approved transparent 2× Pet, orbit-centered liquid squash/stretch reveal motion, pure-black borderless/shadowless smaller radial controls with larger icons, native-resize position compensation, three-section Setup sidebar, persisted floating-size controls, stateful Show-again/Update-Pet preview UX, and distinct Restart/Reset-progress Pomodoro controls. Its measured candidate is 10,235 bytes CSS gzip and 95,152 bytes JavaScript gzip. The main renderer still exclusively owns Pomodoro state and notification work; preview remains projection-only and cannot queue a break. The total `dist/` and legacy-asset constraints remain unchanged.
+
 The low-risk bridge refactor's three-run median measured event duration `603.06ms → 574.18ms` (−4.79%) and throughput `33,164 → 34,832 events/s` (+5.03%) for 20,000 deterministic events. Startup stayed effectively flat; synchronous NDJSON durability and event ordering remain unchanged.
 
 ## Commands

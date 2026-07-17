@@ -23,12 +23,18 @@ use sha2::{Digest, Sha256};
 
 mod keep_awake;
 mod notification;
+mod pet_window;
 mod runtime_usage;
 
 use keep_awake::KeepAwakeState;
 use notification::{
     cancel_pomodoro_notification, notification_permission_state, request_notification_permission,
     schedule_pomodoro_notification, PomodoroNotificationState,
+};
+use pet_window::{
+    activate_completion_pet, completion_pet_state, drag_completion_pet, hide_completion_pet,
+    set_completion_pet_expanded, show_completion_pet, submit_completion_pet_action,
+    take_completion_pet_action, CompletionPetWindowState,
 };
 use runtime_usage::{runtime_usage, RuntimeUsageState};
 
@@ -79,7 +85,7 @@ const GROK_SETTINGS_URL: &str = "https://cli-chat-proxy.grok.com/v1/settings";
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct DisplayPreference {
+pub(crate) struct DisplayPreference {
     id: String,
     fingerprint: String,
     #[serde(default)]
@@ -87,12 +93,12 @@ struct DisplayPreference {
 }
 
 #[derive(Default)]
-struct DisplayPreferenceState {
+pub(crate) struct DisplayPreferenceState {
     selection: Mutex<Option<DisplayPreference>>,
 }
 
 impl DisplayPreferenceState {
-    fn get(&self) -> Option<DisplayPreference> {
+    pub(crate) fn get(&self) -> Option<DisplayPreference> {
         self.selection
             .lock()
             .ok()
@@ -108,14 +114,14 @@ impl DisplayPreferenceState {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct DisplayOption {
-    id: String,
-    fingerprint: String,
-    name: String,
-    width: u32,
-    height: u32,
-    scale_factor: f64,
-    is_primary: bool,
+pub(crate) struct DisplayOption {
+    pub(crate) id: String,
+    pub(crate) fingerprint: String,
+    pub(crate) name: String,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) scale_factor: f64,
+    pub(crate) is_primary: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -3447,7 +3453,7 @@ fn write_display_preference(
 }
 
 #[cfg(target_os = "macos")]
-fn appkit_display_id(screen: &NSScreen) -> Option<String> {
+pub(crate) fn appkit_display_id(screen: &NSScreen) -> Option<String> {
     let description = screen.deviceDescription();
     let key = NSString::from_str("NSScreenNumber");
     let value = description.objectForKey(&key)?;
@@ -3457,7 +3463,7 @@ fn appkit_display_id(screen: &NSScreen) -> Option<String> {
 }
 
 #[cfg(target_os = "macos")]
-fn appkit_display_option(
+pub(crate) fn appkit_display_option(
     screen: &NSScreen,
     primary_display_id: Option<&str>,
 ) -> Option<DisplayOption> {
@@ -3487,7 +3493,7 @@ fn appkit_display_option(
 }
 
 #[cfg(target_os = "macos")]
-fn resolve_appkit_screen(
+pub(crate) fn resolve_appkit_screen(
     screens: &NSArray<NSScreen>,
     preference: Option<&DisplayPreference>,
 ) -> (Option<Retained<NSScreen>>, bool) {
@@ -4087,13 +4093,22 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
     Ok(())
 }
 
+fn completion_pet_command_allowed(command: &str) -> bool {
+    matches!(
+        command,
+        "activate_completion_pet"
+            | "completion_pet_state"
+            | "drag_completion_pet"
+            | "hide_completion_pet"
+            | "set_completion_pet_expanded"
+            | "submit_completion_pet_action"
+    )
+}
+
 pub fn run() {
-    let app = tauri::Builder::default()
-        .manage(KeepAwakeState::default())
-        .manage(DisplayPreferenceState::default())
-        .manage(PomodoroNotificationState::default())
-        .manage(RuntimeUsageState::default())
-        .invoke_handler(tauri::generate_handler![
+    let command_handler: Box<tauri::ipc::InvokeHandler<tauri::Wry>> =
+        Box::new(tauri::generate_handler![
+            activate_completion_pet,
             agent_halo_mod_path,
             agent_halo_mod_status,
             agy_usage,
@@ -4103,9 +4118,11 @@ pub fn run() {
             codex_usage,
             cursor_usage,
             display_state,
+            drag_completion_pet,
             focus_terminal,
             grok_usage,
             install_agent_halo_mod,
+            hide_completion_pet,
             notch_metrics,
             notification_permission_state,
             open_external_url,
@@ -4114,14 +4131,39 @@ pub fn run() {
             runtime_usage,
             schedule_pomodoro_notification,
             set_keep_awake,
+            set_completion_pet_expanded,
             set_panel_open,
-            select_display
-        ])
+            select_display,
+            show_completion_pet,
+            submit_completion_pet_action,
+            take_completion_pet_action,
+            completion_pet_state
+        ]);
+    let app = tauri::Builder::default()
+        .manage(KeepAwakeState::default())
+        .manage(DisplayPreferenceState::default())
+        .manage(PomodoroNotificationState::default())
+        .manage(CompletionPetWindowState::default())
+        .manage(RuntimeUsageState::default())
+        .invoke_handler(move |invoke| {
+            let from_pet = invoke.message.webview_ref().label() == "pet";
+            if from_pet && !completion_pet_command_allowed(invoke.message.command()) {
+                invoke
+                    .resolver
+                    .reject("The Completion Pet surface cannot access main-window commands");
+                true
+            } else {
+                command_handler(invoke)
+            }
+        })
         .setup(|app| {
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             notification::initialize();
             let preference = read_display_preference(app.handle());
             app.state::<DisplayPreferenceState>().set(preference);
+            let pet_position = pet_window::read_pet_position(app.handle());
+            app.state::<CompletionPetWindowState>()
+                .set_position(pet_position);
 
             if let Some(window) = app.get_webview_window("main") {
                 position_main_window(&window)?;
@@ -4136,6 +4178,22 @@ pub fn run() {
     app.run(|app_handle, event| match event {
         tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
             let _ = app_handle.state::<KeepAwakeState>().set_active(false);
+            pet_window::hide_pet_on_exit(app_handle);
+        }
+        tauri::RunEvent::WindowEvent {
+            label,
+            event: tauri::WindowEvent::Moved(_),
+            ..
+        } if label == "pet" => {
+            pet_window::schedule_pet_position_persist(app_handle);
+        }
+        tauri::RunEvent::WindowEvent {
+            label,
+            event: tauri::WindowEvent::CloseRequested { api, .. },
+            ..
+        } if label == "pet" => {
+            api.prevent_close();
+            pet_window::dismiss_pet(app_handle);
         }
         tauri::RunEvent::WindowEvent {
             label,
@@ -4151,6 +4209,30 @@ pub fn run() {
 #[cfg(test)]
 mod display_selection_tests {
     use super::*;
+
+    #[test]
+    fn completion_pet_surface_cannot_call_main_window_commands() {
+        for command in [
+            "activate_completion_pet",
+            "completion_pet_state",
+            "drag_completion_pet",
+            "hide_completion_pet",
+            "set_completion_pet_expanded",
+            "submit_completion_pet_action",
+        ] {
+            assert!(completion_pet_command_allowed(command));
+        }
+        for command in [
+            "focus_terminal",
+            "install_agent_halo_mod",
+            "schedule_pomodoro_notification",
+            "set_keep_awake",
+            "show_completion_pet",
+            "take_completion_pet_action",
+        ] {
+            assert!(!completion_pet_command_allowed(command));
+        }
+    }
 
     fn display(id: &str, fingerprint: &str) -> DisplayOption {
         DisplayOption {

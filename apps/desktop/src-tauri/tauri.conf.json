@@ -25,6 +25,26 @@
         "shadow": false,
         "center": false,
         "visible": false
+      },
+      {
+        "label": "pet",
+        "title": "Agent Halo Pet",
+        "url": "index.html?surface=pet",
+        "width": 116,
+        "height": 88,
+        "resizable": false,
+        "fullscreen": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "visibleOnAllWorkspaces": true,
+        "skipTaskbar": true,
+        "shadow": false,
+        "center": false,
+        "focus": false,
+        "focusable": false,
+        "acceptFirstMouse": true,
+        "visible": false
       }
     ],
     "security": {

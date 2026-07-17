@@ -54,20 +54,20 @@ test("Long break keeps the completed four-session cycle visible", async ({ page 
   await expect(page.getByText("4 / 4")).toBeVisible();
 });
 
-test("Pomodoro tab starts, pauses, resumes, resets, skips, and persists", async ({ page }) => {
+test("Pomodoro tab starts, pauses, resumes, restarts, skips, and persists", async ({ page }) => {
   await page.goto("/?demo=1&demoScenario=idle");
   await page.getByRole("tab", { name: "Pomodoro" }).click();
   const panel = page.getByRole("tabpanel", { name: "Pomodoro" });
   await expect(panel.getByRole("timer")).toHaveText(/25:00/);
   await expect(panel.getByText("Focus").first()).toBeVisible();
-  await expect(panel.getByRole("button", { name: "Reset" })).toBeDisabled();
+  await expect(panel.getByRole("button", { name: /Repeat/ })).toBeDisabled();
 
   await panel.getByRole("button", { name: "Start" }).click();
   await expect(panel.getByText("Running")).toBeVisible();
   await expect(panel.getByText("Focus").first()).toBeVisible();
   await expect(panel.getByText("Next · Short break")).toBeVisible();
   await expect(panel.getByText("Focus cycle")).toBeVisible();
-  await expect(panel.getByRole("button", { name: "Reset" })).toBeVisible();
+  await expect(panel.getByRole("button", { name: /Repeat/ })).toBeVisible();
   await expect(panel.getByRole("button", { name: "Skip" })).toBeVisible();
   await expect.poll(() => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? "null")?.status, storageKey)).toBe("running");
 
@@ -80,11 +80,33 @@ test("Pomodoro tab starts, pauses, resumes, resets, skips, and persists", async 
   await page.getByRole("tab", { name: "Pomodoro" }).click();
   await expect(page.getByRole("tabpanel", { name: "Pomodoro" }).getByText("Running")).toBeVisible();
 
-  await page.getByRole("button", { name: "Reset" }).click();
+  await page.getByRole("button", { name: /Repeat/ }).click();
   await expect(page.getByRole("timer")).toHaveText(/25:00/);
   await page.getByRole("button", { name: "Skip" }).click();
   await expect(page.getByRole("timer")).toHaveText(/5:00/);
   await expect(page.getByText("Short break").first()).toBeVisible();
+});
+
+test("Reset all returns to a fresh Focus cycle while preserving timer settings", async ({ page }) => {
+  await page.goto("/?demo=1&demoScenario=idle");
+  await page.getByRole("tab", { name: "Pomodoro" }).click();
+  await page.getByRole("button", { name: /Timer settings/ }).click();
+  await page.getByRole("spinbutton", { name: "Focus min" }).fill("40");
+  await page.getByRole("spinbutton", { name: "Focus sessions before long break" }).fill("3");
+  await page.getByRole("button", { name: "Apply" }).click();
+  await page.getByRole("button", { name: "Skip" }).click();
+  await expect(page.getByText("Short break").first()).toBeVisible();
+
+  const resetAll = page.getByRole("button", { name: "Reset all Pomodoro progress" });
+  await expect(resetAll).toBeEnabled();
+  await resetAll.click();
+  await page.getByRole("button", { name: "Confirm reset all Pomodoro progress" }).click();
+
+  await expect(page.getByText("Focus").first()).toBeVisible();
+  await expect(page.getByRole("timer")).toHaveText(/40:00/);
+  await expect(page.getByText("0 / 3")).toBeVisible();
+  await expect.poll(() => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? "null"), storageKey)).toMatchObject({ phase: "focus", status: "idle", completedFocusSessions: 0, lastCompletion: null });
+  await expect.poll(() => page.evaluate(() => JSON.parse(window.localStorage.getItem("agent-halo.pomodoro-settings") ?? "null")?.focusMinutes)).toBe(40);
 });
 
 test("custom durations persist and apply to idle and future phases", async ({ page }) => {
@@ -120,7 +142,7 @@ test("custom durations persist and apply to idle and future phases", async ({ pa
   await expect.poll(() => page.evaluate(() => JSON.parse(window.localStorage.getItem("agent-halo.pomodoro-settings") ?? "null")?.focusMinutes)).toBe(25);
 });
 
-test("custom settings do not change a running or paused timer until Reset", async ({ page }) => {
+test("custom settings do not change a running or paused timer until Restart", async ({ page }) => {
   await page.goto("/?demo=1&demoScenario=idle");
   await page.getByRole("tab", { name: "Pomodoro" }).click();
   await page.getByRole("button", { name: "Start" }).click();
@@ -134,7 +156,7 @@ test("custom settings do not change a running or paused timer until Reset", asyn
   await page.getByRole("button", { name: "Pause" }).click();
   await page.getByRole("button", { name: "Resume" }).click();
   await expect(page.getByRole("timer")).not.toHaveText(/50:00/);
-  await page.getByRole("button", { name: "Reset" }).click();
+  await page.getByRole("button", { name: /Repeat/ }).click();
   await expect(page.getByRole("timer")).toHaveText(/50:00/);
 });
 
@@ -191,20 +213,416 @@ test("completed focus shows a quiet collapsed Done state and prepares the break"
   await expect(page.getByRole("button", { name: "Open Agent Halo" })).toBeVisible();
   await expect(page.locator(".pill-detail")).toHaveText("Done");
   await expect(page.locator(".pomodoro-pill-phase")).toHaveText("Short break ready");
-  const [rightWingBox, phaseBox] = await Promise.all([
+  const [leftWingBox, detailBox, rightWingBox, phaseBox] = await Promise.all([
+    page.locator(".notch-wing-left").boundingBox(),
+    page.locator(".pill-detail").boundingBox(),
     page.locator(".notch-wing-right").boundingBox(),
     page.locator(".pomodoro-pill-phase").boundingBox(),
   ]);
+  expect(leftWingBox).not.toBeNull();
+  expect(detailBox).not.toBeNull();
   expect(rightWingBox).not.toBeNull();
   expect(phaseBox).not.toBeNull();
-  expect(phaseBox!.x - rightWingBox!.x).toBeGreaterThanOrEqual(10);
-  expect(phaseBox!.x - rightWingBox!.x).toBeLessThanOrEqual(14);
+  expect(detailBox!.x - leftWingBox!.x).toBeGreaterThanOrEqual(42);
+  expect(detailBox!.x - leftWingBox!.x).toBeLessThanOrEqual(46);
+  const phaseRightInset = rightWingBox!.x + rightWingBox!.width - phaseBox!.x - phaseBox!.width;
+  expect(phaseRightInset).toBeGreaterThanOrEqual(24);
+  expect(phaseRightInset).toBeLessThanOrEqual(28);
   await expect(page.getByRole("button", { name: "Open Agent Halo — Short break ready" })).toBeVisible();
   await expect.poll(() => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? "null")?.completedFocusSessions, storageKey)).toBe(1);
   await page.getByRole("button", { name: "Open Agent Halo — Short break ready" }).click();
   await page.getByRole("tab", { name: "Pomodoro" }).click();
   await expect(page.getByRole("button", { name: "Start" })).toBeVisible();
   await expect.poll(() => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? "null")?.status, storageKey)).toBe("idle");
+});
+
+test("natural Focus completion summons Pet once and cancels the delayed notification fallback", async ({ page }) => {
+  const endsAt = Date.now() + 350;
+  await page.addInitScript(([key, endsAt]) => {
+    window.localStorage.setItem(key, JSON.stringify({
+      schemaVersion: 2,
+      phase: "focus",
+      status: "running",
+      completedFocusSessions: 0,
+      phaseDurationMs: 60_000,
+      remainingMs: 60_000,
+      endsAt,
+      runId: "pet-natural-focus",
+      notificationScheduled: false,
+      lastCompletion: null,
+    }));
+    const calls: Array<{ command: string; args?: Record<string, unknown> }> = [];
+    (window as typeof window & { __petCompletionCalls: typeof calls }).__petCompletionCalls = calls;
+    (window as typeof window & { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
+      invoke: async (command: string, args?: Record<string, unknown>) => {
+        calls.push({ command, args });
+        if (command === "notification_permission_state") return "authorized";
+        if (command === "show_completion_pet") return true;
+        if (command === "cancel_pomodoro_notification") return true;
+        if (command === "take_completion_pet_action") return null;
+        if (command === "notch_metrics") return [184, 36];
+        if (command === "set_keep_awake") return args?.active === true;
+        if (command === "agent_halo_mod_status") return ["", false];
+        return null;
+      },
+    };
+  }, [storageKey, endsAt] as const);
+
+  await page.goto("/?demo=1&demoScenario=idle");
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { __petCompletionCalls: Array<{ command: string }> }).__petCompletionCalls.filter((call) => call.command === "show_completion_pet").length)).toBe(1);
+  const calls = await page.evaluate(() => (window as typeof window & { __petCompletionCalls: Array<{ command: string; args?: Record<string, unknown> }> }).__petCompletionCalls);
+  const schedule = calls.find((call) => call.command === "schedule_pomodoro_notification");
+  expect(schedule?.args?.deadlineMs).toBe(endsAt + 5_000);
+  const showIndex = calls.findIndex((call) => call.command === "show_completion_pet");
+  const handoffCancel = calls.slice(0, showIndex).findLast((call) => call.command === "cancel_pomodoro_notification");
+  expect(handoffCancel?.args).toMatchObject({ requestId: "agent-halo.pomodoro", handoffDeadlineMs: endsAt + 3_000 });
+  const summon = calls[showIndex]?.args?.summon as Record<string, unknown>;
+  expect(summon).toMatchObject({ id: "pet-natural-focus", pet: "scorpion", nextPhase: "short-break", actionLabel: "Start Short break" });
+  expect(await page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? "null")?.phase, storageKey)).toBe("short-break");
+});
+
+test("disabled Completion Pet keeps the exact-deadline notification path and never summons", async ({ page }) => {
+  const endsAt = Date.now() + 350;
+  await page.addInitScript(([key, endsAt]) => {
+    window.localStorage.setItem("agent-halo.completion-pet-enabled", "false");
+    window.localStorage.setItem(key, JSON.stringify({
+      schemaVersion: 2,
+      phase: "focus",
+      status: "running",
+      completedFocusSessions: 0,
+      phaseDurationMs: 60_000,
+      remainingMs: 60_000,
+      endsAt,
+      runId: "pet-disabled-focus",
+      notificationScheduled: false,
+      lastCompletion: null,
+    }));
+    const calls: Array<{ command: string; args?: Record<string, unknown> }> = [];
+    (window as typeof window & { __petDisabledCalls: typeof calls }).__petDisabledCalls = calls;
+    (window as typeof window & { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
+      invoke: async (command: string, args?: Record<string, unknown>) => {
+        calls.push({ command, args });
+        if (command === "notification_permission_state") return "authorized";
+        if (command === "take_completion_pet_action") return null;
+        if (command === "notch_metrics") return [184, 36];
+        if (command === "set_keep_awake") return args?.active === true;
+        if (command === "agent_halo_mod_status") return ["", false];
+        return null;
+      },
+    };
+  }, [storageKey, endsAt] as const);
+
+  await page.goto("/?demo=1&demoScenario=idle");
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { __petDisabledCalls: Array<{ command: string }> }).__petDisabledCalls.some((call) => call.command === "schedule_pomodoro_notification"))).toBe(true);
+  await expect.poll(() => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? "null")?.phase, storageKey)).toBe("short-break");
+  const calls = await page.evaluate(() => (window as typeof window & { __petDisabledCalls: Array<{ command: string; args?: Record<string, unknown> }> }).__petDisabledCalls);
+  expect(calls.find((call) => call.command === "schedule_pomodoro_notification")?.args?.deadlineMs).toBe(endsAt);
+  expect(calls.some((call) => call.command === "show_completion_pet")).toBe(false);
+});
+
+test("main renderer consumes one Pet action and remains the sole break timer owner", async ({ page }) => {
+  await page.addInitScript((key) => {
+    window.localStorage.setItem(key, JSON.stringify({
+      schemaVersion: 2,
+      phase: "short-break",
+      status: "idle",
+      completedFocusSessions: 1,
+      phaseDurationMs: 5 * 60_000,
+      remainingMs: 5 * 60_000,
+      endsAt: null,
+      runId: null,
+      notificationScheduled: false,
+      lastCompletion: { id: "pet-action-focus", completedAt: Date.now() - 1_000, observedAt: Date.now() - 1_000, completedPhase: "focus", nextPhase: "short-break", notificationScheduled: false },
+    }));
+    let pending = true;
+    (window as typeof window & { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
+      invoke: async (command: string, args?: Record<string, unknown>) => {
+        if (command === "take_completion_pet_action") {
+          if (!pending) return null;
+          pending = false;
+          return { action: "start-break", summonId: "pet-action-focus", nextPhase: "short-break" };
+        }
+        if (command === "notification_permission_state") return "authorized";
+        if (command === "notch_metrics") return [184, 36];
+        if (command === "set_keep_awake") return args?.active === true;
+        if (command === "agent_halo_mod_status") return ["", false];
+        return null;
+      },
+    };
+  }, storageKey);
+
+  await page.goto("/?demo=1&demoScenario=idle");
+  await expect.poll(() => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? "null")?.status, storageKey)).toBe("running");
+  const state = await page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? "null"), storageKey);
+  expect(state.phase).toBe("short-break");
+  expect(state.endsAt).toBeGreaterThan(Date.now());
+});
+
+test("reload inside the delayed fallback window preserves the pending notification without resummoning Pet", async ({ page }) => {
+  const now = Date.now();
+  await page.addInitScript(([key, now]) => {
+    window.localStorage.setItem(key, JSON.stringify({
+      schemaVersion: 2,
+      phase: "short-break",
+      status: "idle",
+      completedFocusSessions: 1,
+      phaseDurationMs: 5 * 60_000,
+      remainingMs: 5 * 60_000,
+      endsAt: null,
+      runId: null,
+      notificationScheduled: false,
+      lastCompletion: { id: "pet-reload-focus", completedAt: now - 500, observedAt: now - 500, completedPhase: "focus", nextPhase: "short-break", notificationScheduled: true },
+    }));
+    const calls: string[] = [];
+    (window as typeof window & { __petReloadCalls: string[] }).__petReloadCalls = calls;
+    (window as typeof window & { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
+      invoke: async (command: string, args?: Record<string, unknown>) => {
+        calls.push(command);
+        if (command === "notification_permission_state") return "authorized";
+        if (command === "take_completion_pet_action") return null;
+        if (command === "notch_metrics") return [184, 36];
+        if (command === "set_keep_awake") return args?.active === true;
+        if (command === "agent_halo_mod_status") return ["", false];
+        return null;
+      },
+    };
+  }, [storageKey, now] as const);
+
+  await page.goto("/?demo=1&demoScenario=idle");
+  await page.waitForTimeout(350);
+  const calls = await page.evaluate(() => (window as typeof window & { __petReloadCalls: string[] }).__petReloadCalls);
+  expect(calls).not.toContain("show_completion_pet");
+  expect(calls).not.toContain("cancel_pomodoro_notification");
+});
+
+test("turning Pet off after the Focus deadline preserves the delayed fallback", async ({ page }) => {
+  const baseNow = Date.now();
+  const endsAt = baseNow + 10_000;
+  await page.addInitScript(([key, baseNow, endsAt]) => {
+    let currentNow = baseNow;
+    Date.now = () => currentNow;
+    (window as typeof window & { __setPetRaceNow: (value: number) => void }).__setPetRaceNow = (value) => { currentNow = value; };
+    window.localStorage.setItem(key, JSON.stringify({
+      schemaVersion: 2,
+      phase: "focus",
+      status: "running",
+      completedFocusSessions: 0,
+      phaseDurationMs: 60_000,
+      remainingMs: 60_000,
+      endsAt,
+      runId: "pet-toggle-deadline",
+      notificationScheduled: false,
+      lastCompletion: null,
+    }));
+    const calls: string[] = [];
+    (window as typeof window & { __petToggleRaceCalls: string[] }).__petToggleRaceCalls = calls;
+    (window as typeof window & { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
+      invoke: async (command: string, args?: Record<string, unknown>) => {
+        calls.push(command);
+        if (command === "notification_permission_state") return "authorized";
+        if (command === "take_completion_pet_action") return null;
+        if (command === "notch_metrics") return [184, 36];
+        if (command === "set_keep_awake") return args?.active === true;
+        if (command === "agent_halo_mod_status") return ["", false];
+        return null;
+      },
+    };
+  }, [storageKey, baseNow, endsAt] as const);
+
+  await page.goto("/?demo=1&demoScenario=idle");
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { __petToggleRaceCalls: string[] }).__petToggleRaceCalls.includes("schedule_pomodoro_notification"))).toBe(true);
+  await page.getByRole("button", { name: "Setup" }).click();
+  await page.getByRole("tab", { name: "Pet" }).click();
+  const toggle = page.getByRole("switch", { name: "Disable completion pet" });
+  await toggle.evaluate((element, deadline) => {
+    (window as typeof window & { __setPetRaceNow: (value: number) => void }).__setPetRaceNow(deadline + 100);
+    (element as HTMLButtonElement).click();
+  }, endsAt);
+  await expect.poll(() => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? "null")?.phase, storageKey)).toBe("short-break");
+  await page.waitForTimeout(250);
+  const calls = await page.evaluate(() => (window as typeof window & { __petToggleRaceCalls: string[] }).__petToggleRaceCalls);
+  expect(calls.filter((command) => command === "cancel_pomodoro_notification")).toHaveLength(0);
+});
+
+test("disabling Pet while native show is pending cannot cancel fallback or resurrect the summon", async ({ page }) => {
+  const endsAt = Date.now() + 350;
+  await page.addInitScript(([key, endsAt]) => {
+    window.localStorage.setItem(key, JSON.stringify({
+      schemaVersion: 2,
+      phase: "focus",
+      status: "running",
+      completedFocusSessions: 0,
+      phaseDurationMs: 60_000,
+      remainingMs: 60_000,
+      endsAt,
+      runId: "pet-disable-show-race",
+      notificationScheduled: false,
+      lastCompletion: null,
+    }));
+    let resolveShow: (() => void) | null = null;
+    let showPromise: Promise<void> | null = null;
+    const calls: string[] = [];
+    (window as typeof window & { __petShowRaceCalls: string[]; __resolvePetShow: () => void }).__petShowRaceCalls = calls;
+    (window as typeof window & { __petShowRaceCalls: string[]; __resolvePetShow: () => void }).__resolvePetShow = () => resolveShow?.();
+    (window as typeof window & { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
+      invoke: async (command: string, args?: Record<string, unknown>) => {
+        calls.push(command);
+        if (command === "notification_permission_state") return "authorized";
+        if (command === "cancel_pomodoro_notification") return true;
+        if (command === "show_completion_pet") {
+          showPromise ??= new Promise<void>((resolve) => { resolveShow = resolve; });
+          await showPromise;
+          return true;
+        }
+        if (command === "take_completion_pet_action") return null;
+        if (command === "notch_metrics") return [184, 36];
+        if (command === "set_keep_awake") return args?.active === true;
+        if (command === "agent_halo_mod_status") return ["", false];
+        return null;
+      },
+    };
+  }, [storageKey, endsAt] as const);
+
+  await page.goto("/?demo=1&demoScenario=idle");
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { __petShowRaceCalls: string[] }).__petShowRaceCalls.includes("show_completion_pet"))).toBe(true);
+  await page.getByRole("button", { name: "Setup" }).click();
+  await page.getByRole("tab", { name: "Pet" }).click();
+  await page.getByRole("switch", { name: "Disable completion pet" }).click();
+  await page.evaluate(() => (window as typeof window & { __resolvePetShow: () => void }).__resolvePetShow());
+  await page.waitForTimeout(250);
+  const calls = await page.evaluate(() => (window as typeof window & { __petShowRaceCalls: string[] }).__petShowRaceCalls);
+  expect(calls.filter((command) => command === "cancel_pomodoro_notification")).toHaveLength(1);
+  expect(calls.filter((command) => command === "schedule_pomodoro_notification")).toHaveLength(2);
+  expect(calls.filter((command) => command === "hide_completion_pet").length).toBeGreaterThanOrEqual(2);
+});
+
+test("Pet handoff that resolves after its safety window hides without cancelling fallback", async ({ page }) => {
+  const baseNow = Date.now();
+  const endsAt = baseNow + 350;
+  await page.addInitScript(([key, baseNow, endsAt]) => {
+    let currentNow = baseNow;
+    Date.now = () => currentNow;
+    (window as typeof window & { __setLatePetNow: (value: number) => void }).__setLatePetNow = (value) => { currentNow = value; };
+    window.localStorage.setItem(key, JSON.stringify({
+      schemaVersion: 2,
+      phase: "focus",
+      status: "running",
+      completedFocusSessions: 0,
+      phaseDurationMs: 60_000,
+      remainingMs: 60_000,
+      endsAt,
+      runId: "pet-late-handoff",
+      notificationScheduled: false,
+      lastCompletion: null,
+    }));
+    let resolveShow: (() => void) | null = null;
+    const calls: string[] = [];
+    (window as typeof window & { __latePetCalls: string[]; __resolveLatePet: () => void }).__latePetCalls = calls;
+    (window as typeof window & { __latePetCalls: string[]; __resolveLatePet: () => void }).__resolveLatePet = () => resolveShow?.();
+    (window as typeof window & { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
+      invoke: async (command: string, args?: Record<string, unknown>) => {
+        calls.push(command);
+        if (command === "notification_permission_state") return "authorized";
+        if (command === "cancel_pomodoro_notification") return true;
+        if (command === "show_completion_pet") {
+          await new Promise<void>((resolve) => { resolveShow = resolve; });
+          return true;
+        }
+        if (command === "take_completion_pet_action") return null;
+        if (command === "notch_metrics") return [184, 36];
+        if (command === "set_keep_awake") return args?.active === true;
+        if (command === "agent_halo_mod_status") return ["", false];
+        return null;
+      },
+    };
+  }, [storageKey, baseNow, endsAt] as const);
+
+  await page.goto("/?demo=1&demoScenario=idle");
+  await page.evaluate((completedNow) => (window as typeof window & { __setLatePetNow: (value: number) => void }).__setLatePetNow(completedNow), endsAt + 100);
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { __latePetCalls: string[] }).__latePetCalls.includes("show_completion_pet"))).toBe(true);
+  await page.evaluate((lateNow) => {
+    (window as typeof window & { __setLatePetNow: (value: number) => void }).__setLatePetNow(lateNow);
+    (window as typeof window & { __resolveLatePet: () => void }).__resolveLatePet();
+  }, endsAt + 3_100);
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { __latePetCalls: string[] }).__latePetCalls.includes("hide_completion_pet"))).toBe(true);
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { __latePetCalls: string[] }).__latePetCalls.filter((command) => command === "schedule_pomodoro_notification").length)).toBe(2);
+  const calls = await page.evaluate(() => (window as typeof window & { __latePetCalls: string[] }).__latePetCalls);
+  expect(calls.filter((command) => command === "cancel_pomodoro_notification")).toHaveLength(1);
+});
+
+test("notification cancellation failure rolls Pet back and preserves fallback state", async ({ page }) => {
+  const endsAt = Date.now() + 350;
+  await page.addInitScript(([key, endsAt]) => {
+    window.localStorage.setItem(key, JSON.stringify({
+      schemaVersion: 2,
+      phase: "focus",
+      status: "running",
+      completedFocusSessions: 0,
+      phaseDurationMs: 60_000,
+      remainingMs: 60_000,
+      endsAt,
+      runId: "pet-cancel-failure",
+      notificationScheduled: false,
+      lastCompletion: null,
+    }));
+    const calls: string[] = [];
+    (window as typeof window & { __petCancelFailureCalls: string[] }).__petCancelFailureCalls = calls;
+    (window as typeof window & { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
+      invoke: async (command: string, args?: Record<string, unknown>) => {
+        calls.push(command);
+        if (command === "notification_permission_state") return "authorized";
+        if (command === "show_completion_pet") return true;
+        if (command === "cancel_pomodoro_notification") throw new Error("simulated cancellation failure");
+        if (command === "take_completion_pet_action") return null;
+        if (command === "notch_metrics") return [184, 36];
+        if (command === "set_keep_awake") return args?.active === true;
+        if (command === "agent_halo_mod_status") return ["", false];
+        return null;
+      },
+    };
+  }, [storageKey, endsAt] as const);
+
+  await page.goto("/?demo=1&demoScenario=idle");
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { __petCancelFailureCalls: string[] }).__petCancelFailureCalls.includes("cancel_pomodoro_notification"))).toBe(true);
+  const calls = await page.evaluate(() => (window as typeof window & { __petCancelFailureCalls: string[] }).__petCancelFailureCalls);
+  expect(calls).not.toContain("show_completion_pet");
+  const state = await page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? "null"), storageKey);
+  expect(state.lastCompletion.notificationScheduled).toBe(true);
+});
+
+test("stale Pet action identity cannot start a different prepared break", async ({ page }) => {
+  await page.addInitScript((key) => {
+    window.localStorage.setItem(key, JSON.stringify({
+      schemaVersion: 2,
+      phase: "short-break",
+      status: "idle",
+      completedFocusSessions: 1,
+      phaseDurationMs: 5 * 60_000,
+      remainingMs: 5 * 60_000,
+      endsAt: null,
+      runId: null,
+      notificationScheduled: false,
+      lastCompletion: { id: "current-focus", completedAt: Date.now() - 1_000, observedAt: Date.now() - 1_000, completedPhase: "focus", nextPhase: "short-break", notificationScheduled: false },
+    }));
+    let pending = true;
+    (window as typeof window & { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
+      invoke: async (command: string, args?: Record<string, unknown>) => {
+        if (command === "take_completion_pet_action" && pending) {
+          pending = false;
+          return { action: "start-break", summonId: "old-focus", nextPhase: "short-break" };
+        }
+        if (command === "notification_permission_state") return "authorized";
+        if (command === "notch_metrics") return [184, 36];
+        if (command === "set_keep_awake") return args?.active === true;
+        if (command === "agent_halo_mod_status") return ["", false];
+        return null;
+      },
+    };
+  }, storageKey);
+
+  await page.goto("/?demo=1&demoScenario=idle");
+  await page.waitForTimeout(450);
+  expect(await page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? "null")?.status, storageKey)).toBe("idle");
 });
 
 test("an elapsed deadline wins atomically over Pause before the next timer tick", async ({ page }) => {
@@ -320,7 +738,7 @@ test("agent attention keeps precedence over an active Pomodoro countdown", async
 
   await page.goto("/?demo=1&demoScenario=attention");
   await expect(page.locator(".pomodoro-pill-icon")).toHaveCount(0);
-  await expect(page.locator('.activity-mascot[data-status="attention"]')).toHaveCount(1);
+  await expect(page.locator('.activity-pet[data-status="attention"]')).toHaveCount(1);
 });
 
 test("active Pomodoro countdown stays visible over ordinary agent work", async ({ page }) => {
@@ -340,7 +758,7 @@ test("active Pomodoro countdown stays visible over ordinary agent work", async (
 
   await page.goto("/?demo=1&demoScenario=long-llm");
   await expect(page.locator(".pomodoro-pill-icon")).toHaveCount(1);
-  await expect(page.locator(".activity-mascot")).toHaveCount(0);
+  await expect(page.locator(".activity-pet")).toHaveCount(0);
   await expect(page.locator(".pill-detail")).toContainText(":");
   await page.locator(".halo-surface").focus();
   await page.keyboard.press("Escape");
@@ -364,7 +782,7 @@ test("recent agent error overrides Pomodoro even while another agent is working"
   }, [storageKey, Date.now()] as const);
   await page.goto("/?demo=1&demoScenario=mixed-working-error");
   await expect(page.locator(".pomodoro-pill-icon")).toHaveCount(0);
-  await expect(page.locator('.activity-mascot[data-status="error"]')).toHaveCount(1);
+  await expect(page.locator('.activity-pet[data-status="error"]')).toHaveCount(1);
 });
 
 test("native Start requests permission, schedules silently, and Pause cancels", async ({ page }) => {
@@ -398,7 +816,7 @@ test("native Start requests permission, schedules silently, and Pause cancels", 
 
   await page.getByRole("button", { name: "Resume" }).click();
   await expect.poll(() => page.evaluate(() => (window as typeof window & { __pomodoroNativeCalls: Array<{ command: string }> }).__pomodoroNativeCalls.filter((call) => call.command === "schedule_pomodoro_notification").length)).toBe(2);
-  await page.getByRole("button", { name: "Reset" }).click();
+  await page.getByRole("button", { name: /Repeat/ }).click();
   await page.getByRole("button", { name: "Start" }).click();
   await expect.poll(() => page.evaluate(() => (window as typeof window & { __pomodoroNativeCalls: Array<{ command: string }> }).__pomodoroNativeCalls.filter((call) => call.command === "schedule_pomodoro_notification").length)).toBe(3);
   await page.getByRole("button", { name: "Skip" }).click();

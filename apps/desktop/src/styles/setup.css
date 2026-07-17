@@ -7,6 +7,82 @@
   padding: 14px 0;
 }
 
+.setup-layout {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  gap: 12px;
+  min-width: 0;
+}
+
+.setup-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding-right: 10px;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.setup-side-tab {
+  min-width: 0;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text-2);
+  background: transparent;
+  cursor: pointer;
+}
+
+.setup-side-tab span {
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.setup-side-tab:hover,
+.setup-side-tab[data-active="true"] {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.setup-side-tab:focus-visible,
+.setup-size-options button:focus-visible {
+  outline: 1px solid rgba(255, 157, 61, 0.72);
+  outline-offset: 2px;
+}
+
+.setup-category-panel {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.setup-section-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-height: 28px;
+  padding: 1px 2px 4px;
+}
+
+.setup-section-heading > span {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.setup-section-heading small {
+  color: var(--text-2);
+  font-size: 9px;
+}
+
 .setup-row {
   display: flex;
   align-items: center;
@@ -39,7 +115,7 @@
 
 .setup-detail {
   overflow: hidden;
-  color: var(--text-3);
+  color: var(--text-2);
   font-size: 10px;
   line-height: 1.2;
   text-overflow: ellipsis;
@@ -50,8 +126,8 @@
   color: var(--accent);
 }
 
-.mascot-current-preview,
-.mascot-option-sprite {
+.pet-current-preview,
+.pet-option-sprite {
   display: block;
   flex: none;
   background-repeat: no-repeat;
@@ -59,15 +135,15 @@
   image-rendering: pixelated;
 }
 
-.mascot-current-preview {
-  width: 36px;
-  height: 27px;
-  background-size: 108px 27px;
+.pet-current-preview {
+  width: 52px;
+  height: 39px;
+  background-size: 156px 39px;
 }
 
-.mascot-picker {
+.pet-picker {
   display: grid;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 5px;
   padding: 7px;
   border: 1px solid var(--hair);
@@ -75,7 +151,53 @@
   background: rgba(255, 255, 255, 0.025);
 }
 
-.mascot-option {
+.setup-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+}
+
+.pet-preview-button.is-stale {
+  color: var(--accent);
+  border-color: rgba(255, 157, 61, 0.58);
+  background: rgba(255, 157, 61, 0.12);
+}
+
+.pet-preview-status[data-state="stale"] {
+  color: var(--accent);
+}
+
+.setup-size-options {
+  display: inline-grid;
+  grid-auto-flow: column;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.setup-size-options button {
+  width: 34px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text-3);
+  background: transparent;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.setup-size-options button[data-active="true"] {
+  color: #111;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.pet-option {
   min-width: 0;
   min-height: 52px;
   display: flex;
@@ -91,29 +213,29 @@
   cursor: pointer;
 }
 
-.mascot-option:hover {
+.pet-option:hover {
   color: var(--text);
   background: rgba(255, 255, 255, 0.055);
 }
 
-.mascot-option[data-selected="true"] {
+.pet-option[data-selected="true"] {
   color: var(--text);
   border-color: rgba(255, 157, 61, 0.62);
   background: rgba(255, 157, 61, 0.1);
 }
 
-.mascot-option:focus-visible {
+.pet-option:focus-visible {
   outline: 1px solid rgba(255, 157, 61, 0.82);
   outline-offset: 1px;
 }
 
-.mascot-option-sprite {
+.pet-option-sprite {
   width: 32px;
   height: 24px;
   background-size: 96px 24px;
 }
 
-.mascot-option > span:last-child {
+.pet-option > span:last-child {
   overflow: hidden;
   max-width: 100%;
   font-size: 9px;
@@ -203,4 +325,28 @@
   font-size: 11px;
   font-weight: 800;
   text-align: right;
+}
+
+@media (max-width: 380px) {
+  .setup-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .setup-sidebar {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    padding: 0 0 8px;
+    border-right: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .setup-side-tab {
+    justify-content: center;
+  }
+
+  .setup-row-actions {
+    flex-direction: column;
+  }
 }

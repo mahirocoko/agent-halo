@@ -309,6 +309,12 @@
   font-weight: 700;
 }
 
+.pomodoro-control.danger {
+  color: #ffb27a;
+  border-color: rgba(255, 122, 72, 0.42);
+  background: rgba(126, 47, 22, 0.24);
+}
+
 .pomodoro-control:focus-visible {
   outline: 1px solid rgba(255, 157, 61, 0.86);
   outline-offset: 2px;
@@ -334,9 +340,18 @@
 }
 
 .notch-wing-right.is-pomodoro {
-  justify-content: flex-start;
+  justify-content: flex-end;
   padding-left: 12px;
-  padding-right: 14px;
+  padding-right: 26px;
+}
+
+.notch-wing-left.is-pomodoro {
+  justify-content: flex-start;
+}
+
+.notch-wing-left.is-pomodoro > * {
+  position: relative;
+  left: 12px;
 }
 
 .pomodoro-pill-icon + .pill-detail {

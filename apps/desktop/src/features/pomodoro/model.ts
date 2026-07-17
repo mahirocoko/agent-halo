@@ -4,6 +4,8 @@ export const POMODORO_STORAGE_KEY = "agent-halo.pomodoro";
 export const POMODORO_SETTINGS_STORAGE_KEY = "agent-halo.pomodoro-settings";
 export const POMODORO_NOTIFICATION_ID = "agent-halo.pomodoro";
 export const POMODORO_COMPLETION_SIGNAL_MS = 10_000;
+export const POMODORO_PET_HANDOFF_WINDOW_MS = 3_000;
+export const POMODORO_PET_FALLBACK_DELAY_MS = 5_000;
 export const POMODORO_LONG_BREAK_EVERY = 4;
 export const DEFAULT_POMODORO_SETTINGS: IPomodoroSettings = {
   schemaVersion: 1,
@@ -87,6 +89,9 @@ export const resetPomodoro = (state: IPomodoroState, settings = DEFAULT_POMODORO
   notificationScheduled: false,
   lastCompletion: null,
 });
+
+export const resetAllPomodoro = (settings = DEFAULT_POMODORO_SETTINGS): IPomodoroState =>
+  createPomodoroState(settings);
 
 export const skipPomodoro = (state: IPomodoroState, settings = DEFAULT_POMODORO_SETTINGS): IPomodoroState => {
   const nextPhase = getPomodoroNextPhase(state.phase, state.completedFocusSessions, false, settings.longBreakEvery);

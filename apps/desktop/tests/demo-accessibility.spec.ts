@@ -87,7 +87,7 @@ test("main section tabs provide roving keyboard navigation and panel relationshi
   await expect(page.getByRole("radio", { checked: true }).first()).toBeFocused();
 });
 
-test("reduced motion disables panel, status, loading, and mascot animation", async ({ page }) => {
+test("reduced motion disables panel, status, loading, and pet animation", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/?demo=1&demoScenario=multi");
 
@@ -95,6 +95,31 @@ test("reduced motion disables panel, status, loading, and mascot animation", asy
   await expect(page.locator(".halo-surface")).toHaveCSS("transition-duration", "0s");
   await expect(page.locator(".sheet-inner")).toHaveCSS("transition-duration", "0s");
   await expect(page.locator(".glyph-pulse").first()).toHaveCSS("animation-name", "none");
-  await expect(page.locator(".halo-mascot-body").first()).toHaveCSS("animation-name", "none");
-  await expect(page.locator(".halo-mascot-signal").first()).toHaveCSS("animation-name", "none");
+  await expect(page.locator(".halo-pet-body").first()).toHaveCSS("animation-name", "none");
+  await expect(page.locator(".halo-pet-signal").first()).toHaveCSS("animation-name", "none");
+});
+
+test("Setup sections use vertical roving tabs and labelled panels", async ({ page }) => {
+  await page.goto("/?demo=1&demoScenario=idle");
+  await page.getByRole("button", { name: "Setup" }).click();
+  const connection = page.getByRole("tab", { name: "Connection" });
+  await connection.focus();
+  await page.keyboard.press("ArrowDown");
+  const pet = page.getByRole("tab", { name: "Pet" });
+  await expect(pet).toBeFocused();
+  await expect(pet).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tabpanel", { name: "Pet" })).toBeVisible();
+  await page.keyboard.press("End");
+  await expect(page.getByRole("tab", { name: "Display" })).toBeFocused();
+});
+
+test("narrow Setup switches to horizontal tab semantics", async ({ page }) => {
+  await page.setViewportSize({ width: 280, height: 440 });
+  await page.goto("/?demo=1&demoScenario=idle");
+  await page.getByRole("button", { name: "Setup" }).click();
+  await expect(page.getByRole("tablist", { name: "Setup sections" })).toHaveAttribute("aria-orientation", "horizontal");
+  const connection = page.getByRole("tab", { name: "Connection" });
+  await connection.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(page.getByRole("tab", { name: "Pet" })).toBeFocused();
 });

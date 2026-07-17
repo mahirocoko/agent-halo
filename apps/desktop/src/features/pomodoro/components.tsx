@@ -6,6 +6,7 @@ import type { IUsePomodoroResult } from "./usePomodoro";
 
 export interface IPomodoroPanelProps {
   pomodoro: IUsePomodoroResult;
+  onResetAll?: () => void;
 }
 
 type PomodoroSettingKey = keyof Omit<IPomodoroSettings, "schemaVersion">;
@@ -25,8 +26,9 @@ const validateSetting = (value: string, minimum: number, maximum: number): strin
   return null;
 };
 
-export const PomodoroPanel = ({ pomodoro }: IPomodoroPanelProps) => {
+export const PomodoroPanel = ({ onResetAll, pomodoro }: IPomodoroPanelProps) => {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [resetAllArmed, setResetAllArmed] = useState(false);
   const [settingsDraft, setSettingsDraft] = useState<PomodoroSettingsDraft>(() => toSettingsDraft(pomodoro.settings));
   const { state } = pomodoro;
   const running = state.status === "running";
@@ -35,6 +37,7 @@ export const PomodoroPanel = ({ pomodoro }: IPomodoroPanelProps) => {
   const notificationAvailable = pomodoro.notificationPermission !== "unsupported" && pomodoro.notificationPermission !== "denied";
   const showNotificationNote = pomodoro.notificationError !== null || ["notDetermined", "denied", "unsupported"].includes(pomodoro.notificationPermission);
   const resetDisabled = state.status === "idle" && pomodoro.remainingMs === pomodoro.durationMs && state.lastCompletion === null;
+  const resetAllDisabled = state.phase === "focus" && state.status === "idle" && state.completedFocusSessions === 0 && pomodoro.remainingMs === pomodoro.durationMs && state.lastCompletion === null;
   const progressStyle = { "--pomodoro-progress": `${pomodoro.progress * 100}%` } as CSSProperties;
   const settingsErrors = {
     focusMinutes: validateSetting(settingsDraft.focusMinutes, 1, 120),
@@ -105,11 +108,14 @@ export const PomodoroPanel = ({ pomodoro }: IPomodoroPanelProps) => {
             <Play size={14} strokeWidth={2.4} />{paused ? "Resume" : "Start"}
           </button>
         )}
-        <button className="pomodoro-control" type="button" onClick={pomodoro.reset} disabled={resetDisabled} data-tauri-drag-region="false">
-          <RotateCcw size={13} strokeWidth={2.3} />Reset
+        <button className="pomodoro-control" type="button" onClick={pomodoro.reset} disabled={resetDisabled} data-tauri-drag-region="false" aria-label={`Repeat ${pomodoro.phaseLabel} from full duration`}>
+          <RotateCcw size={13} strokeWidth={2.3} />Restart
         </button>
         <button className="pomodoro-control" type="button" onClick={pomodoro.skip} data-tauri-drag-region="false">
           <SkipForward size={13} strokeWidth={2.3} />Skip
+        </button>
+        <button className={`pomodoro-control ${resetAllArmed ? "danger" : ""}`} type="button" disabled={resetAllDisabled} onClick={() => { if (!resetAllArmed) { setResetAllArmed(true); return; } (onResetAll ?? pomodoro.resetAll)(); setResetAllArmed(false); }} data-tauri-drag-region="false" aria-label={resetAllArmed ? "Confirm reset all Pomodoro progress" : "Reset all Pomodoro progress"}>
+          <RotateCcw size={13} strokeWidth={2.3} />{resetAllArmed ? "Confirm reset" : "Reset progress"}
         </button>
       </div>
 

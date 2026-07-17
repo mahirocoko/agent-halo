@@ -3,6 +3,7 @@ use std::sync::{
     atomic::{AtomicU64, Ordering},
     Arc, Mutex,
 };
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Default)]
 struct NotificationOperationGate {
@@ -341,7 +342,8 @@ pub async fn schedule_pomodoro_notification(
 pub async fn cancel_pomodoro_notification(
     state: tauri::State<'_, PomodoroNotificationState>,
     request_id: String,
-) -> Result<(), String> {
+    handoff_deadline_ms: Option<u64>,
+) -> Result<bool, String> {
     let (revision, gate) = state.begin_operation();
     run_blocking(move || {
         let _guard = gate
@@ -349,9 +351,19 @@ pub async fn cancel_pomodoro_notification(
             .lock()
             .map_err(|_| "Pomodoro notification operation lock is poisoned".to_string())?;
         if gate.latest_revision.load(Ordering::SeqCst) != revision {
-            return Ok(());
+            return Ok(false);
         }
-        platform::cancel(request_id)
+        if let Some(deadline_ms) = handoff_deadline_ms {
+            let now_ms = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_err(|error| format!("System clock is before the Unix epoch: {error}"))?
+                .as_millis();
+            if now_ms >= u128::from(deadline_ms) {
+                return Ok(false);
+            }
+        }
+        platform::cancel(request_id)?;
+        Ok(true)
     })
     .await
 }

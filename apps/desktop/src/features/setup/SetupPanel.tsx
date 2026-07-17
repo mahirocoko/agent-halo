@@ -1,11 +1,16 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { ArrowRight, Bot, Check, Coffee, Download, Focus, Monitor as MonitorIcon } from "lucide-react";
+import { ArrowRight, Bot, Check, Coffee, Download, Focus, Monitor as MonitorIcon, Play, PlugZap, RefreshCw } from "lucide-react";
 import type { IAgentHaloBridgeCapabilities } from "@agent-halo/protocol";
-import { HALO_MASCOT_ROSTER, type HaloMascotName } from "../session/HaloMascot";
+import { HALO_PET_ROSTER, type HaloPetName } from "../session/HaloPet";
 import { shortenPath } from "../session/activity";
 import { displayResolutionLabel, type IDisplayStateSnapshot } from "./display";
+import type { CompletionPetSize } from "../pet/preferences";
 
-const MASCOT_LABELS: Record<HaloMascotName, string> = {
+type SetupCategory = "connection" | "pet" | "display";
+const SETUP_CATEGORIES: SetupCategory[] = ["connection", "pet", "display"];
+const COMPLETION_PET_SIZES: CompletionPetSize[] = ["small", "medium", "large"];
+
+const PET_LABELS: Record<HaloPetName, string> = {
   pot: "Pot",
   crawler: "Crawler",
   bat: "Bat",
@@ -23,8 +28,8 @@ const MASCOT_LABELS: Record<HaloMascotName, string> = {
   squid: "Squid",
 };
 
-const mascotPreviewStyle = (mascot: HaloMascotName) => ({
-  backgroundImage: `url("/mascots/agent-halo-roster/body/${mascot}/idle.png")`,
+const petPreviewStyle = (pet: HaloPetName) => ({
+  backgroundImage: `url("/mascots/agent-halo-roster/body/${pet}/idle.png")`,
 }) as CSSProperties;
 
 export interface ISetupPanelProps {
@@ -41,19 +46,28 @@ export interface ISetupPanelProps {
   displayState: IDisplayStateSnapshot | null;
   modStatus: { path: string | null; installed: boolean | null };
   nativeAction: { bridgeOnline: boolean | null; message: string | null };
-  mascot: HaloMascotName;
+  pet: HaloPetName;
+  completionPetEnabled: boolean;
+  completionPetSize: CompletionPetSize;
+  petPreviewStatus: string | null;
+  petPreviewState: "idle" | "showing" | "shown" | "stale" | "error";
   onCheckBridge: () => void;
   onInstallMod: () => void;
   onDisplayChange: (displayId: string) => Promise<void>;
   onDisplayRefresh: () => Promise<void>;
   onKeepAwakeChange: (enabled: boolean) => void;
-  onMascotChange: (mascot: HaloMascotName) => void;
+  onPetChange: (pet: HaloPetName) => void;
+  onCompletionPetEnabledChange: (enabled: boolean) => void;
+  onCompletionPetSizeChange: (size: CompletionPetSize) => void;
+  onShowPetPreview: () => Promise<void>;
 }
 
-export const SetupPanel = ({ capabilities, canUseNativeControls, connectionTitle, displayError, displayLoading, displayState, guidance, isConnected, keepAwakeActive, keepAwakeEnabled, keepAwakeError, mascot, modStatus, nativeAction, onCheckBridge, onDisplayChange, onDisplayRefresh, onInstallMod, onKeepAwakeChange, onMascotChange }: ISetupPanelProps) => {
-  const [mascotPickerOpen, setMascotPickerOpen] = useState(false);
+export const SetupPanel = ({ capabilities, canUseNativeControls, completionPetEnabled, completionPetSize, connectionTitle, displayError, displayLoading, displayState, guidance, isConnected, keepAwakeActive, keepAwakeEnabled, keepAwakeError, pet, petPreviewState, petPreviewStatus, modStatus, nativeAction, onCheckBridge, onCompletionPetEnabledChange, onCompletionPetSizeChange, onDisplayChange, onDisplayRefresh, onInstallMod, onKeepAwakeChange, onPetChange, onShowPetPreview }: ISetupPanelProps) => {
+  const [activeCategory, setActiveCategory] = useState<SetupCategory>("connection");
+  const [compactNavigation, setCompactNavigation] = useState(() => window.matchMedia("(max-width: 380px)").matches);
+  const [petPickerOpen, setPetPickerOpen] = useState(false);
   const [displayPickerOpen, setDisplayPickerOpen] = useState(false);
-  const mascotPickerTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const petPickerTriggerRef = useRef<HTMLButtonElement | null>(null);
   const displayPickerTriggerRef = useRef<HTMLButtonElement | null>(null);
   const displayInteractionBusyRef = useRef(false);
   const displays = displayState?.displays ?? [];
@@ -61,13 +75,13 @@ export const SetupPanel = ({ capabilities, canUseNativeControls, connectionTitle
   const displayRadioSelection = displayState?.selectedDisplayId ?? null;
   const displayFocusTarget = displayRadioSelection ?? displayState?.activeDisplayId ?? null;
 
-  const focusMascot = (selection: HaloMascotName): void => {
-    window.requestAnimationFrame(() => document.getElementById(`mascot-option-${selection}`)?.focus());
+  const focusPet = (selection: HaloPetName): void => {
+    window.requestAnimationFrame(() => document.getElementById(`pet-option-${selection}`)?.focus());
   };
 
-  const closeMascotPicker = (): void => {
-    setMascotPickerOpen(false);
-    window.requestAnimationFrame(() => mascotPickerTriggerRef.current?.focus());
+  const closePetPicker = (): void => {
+    setPetPickerOpen(false);
+    window.requestAnimationFrame(() => petPickerTriggerRef.current?.focus());
   };
 
   const closeDisplayPicker = (): void => {
@@ -75,18 +89,18 @@ export const SetupPanel = ({ capabilities, canUseNativeControls, connectionTitle
     window.requestAnimationFrame(() => displayPickerTriggerRef.current?.focus());
   };
 
-  const handleMascotKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, current: HaloMascotName): void => {
+  const handlePetKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, current: HaloPetName): void => {
     if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
-      closeMascotPicker();
+      closePetPicker();
       return;
     }
     if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
     event.stopPropagation();
-    const currentIndex = HALO_MASCOT_ROSTER.indexOf(current);
-    const rowSize = 8;
+    const currentIndex = HALO_PET_ROSTER.indexOf(current);
+    const rowSize = 5;
     const delta = event.key === "ArrowLeft"
       ? -1
       : event.key === "ArrowRight"
@@ -99,11 +113,11 @@ export const SetupPanel = ({ capabilities, canUseNativeControls, connectionTitle
     const nextIndex = event.key === "Home"
       ? 0
       : event.key === "End"
-        ? HALO_MASCOT_ROSTER.length - 1
-        : (currentIndex + delta + HALO_MASCOT_ROSTER.length) % HALO_MASCOT_ROSTER.length;
-    const nextMascot = HALO_MASCOT_ROSTER[nextIndex] ?? mascot;
-    onMascotChange(nextMascot);
-    focusMascot(nextMascot);
+        ? HALO_PET_ROSTER.length - 1
+        : (currentIndex + delta + HALO_PET_ROSTER.length) % HALO_PET_ROSTER.length;
+    const nextPet = HALO_PET_ROSTER[nextIndex] ?? pet;
+    onPetChange(nextPet);
+    focusPet(nextPet);
   };
 
   const handleDisplayKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, currentIndex: number): void => {
@@ -130,9 +144,35 @@ export const SetupPanel = ({ capabilities, canUseNativeControls, connectionTitle
     window.requestAnimationFrame(() => document.getElementById(`display-option-${nextIndex}`)?.focus());
   };
 
+  const selectCategory = (category: SetupCategory): void => {
+    setPetPickerOpen(false);
+    setDisplayPickerOpen(false);
+    setActiveCategory(category);
+  };
+
+  const handleCategoryKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, current: SetupCategory): void => {
+    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const currentIndex = SETUP_CATEGORIES.indexOf(current);
+    const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? SETUP_CATEGORIES.length - 1 : (currentIndex + (["ArrowRight", "ArrowDown"].includes(event.key) ? 1 : -1) + SETUP_CATEGORIES.length) % SETUP_CATEGORIES.length;
+    const next = SETUP_CATEGORIES[nextIndex] ?? "connection";
+    selectCategory(next);
+    window.requestAnimationFrame(() => document.getElementById(`setup-tab-${next}`)?.focus());
+  };
+
+  const handlePetSizeKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, current: CompletionPetSize): void => {
+    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const currentIndex = COMPLETION_PET_SIZES.indexOf(current);
+    const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? COMPLETION_PET_SIZES.length - 1 : (currentIndex + (["ArrowRight", "ArrowDown"].includes(event.key) ? 1 : -1) + COMPLETION_PET_SIZES.length) % COMPLETION_PET_SIZES.length;
+    const next = COMPLETION_PET_SIZES[nextIndex] ?? "large";
+    onCompletionPetSizeChange(next);
+    window.requestAnimationFrame(() => document.getElementById(`completion-pet-size-${next}`)?.focus());
+  };
+
   useEffect(() => {
-    if (mascotPickerOpen) focusMascot(mascot);
-  }, [mascotPickerOpen]);
+    if (petPickerOpen) focusPet(pet);
+  }, [petPickerOpen]);
 
   useEffect(() => {
     if (!displayPickerOpen || displayLoading) return;
@@ -140,37 +180,63 @@ export const SetupPanel = ({ capabilities, canUseNativeControls, connectionTitle
     window.requestAnimationFrame(() => document.getElementById(`display-option-${selectedIndex}`)?.focus());
   }, [displayPickerOpen, displayFocusTarget, displayLoading, displays.length]);
 
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 380px)");
+    const update = () => setCompactNavigation(query.matches);
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+
   return (
     <div className="setup-body">
-      <div className="setup-row"><span className="bridge-dot" data-connected={isConnected} title={connectionTitle} /><span className="setup-copy"><span className="setup-title">Bridge</span><span className="setup-detail">{connectionTitle}</span></span><button className="pill-btn" type="button" onClick={onCheckBridge} data-tauri-drag-region="false"><Check size={12} strokeWidth={2.3} />Check</button></div>
-      <div className="setup-row"><span className="status-slot"><Download className="setup-icon" size={14} strokeWidth={2.3} /></span><span className="setup-copy"><span className="setup-title">Letta mod</span><span className="setup-detail">{modStatus.installed === true ? `Installed · ${shortenPath(modStatus.path)}` : modStatus.installed === false ? `Not installed · ${shortenPath(modStatus.path)}` : canUseNativeControls ? "Checking install state" : "Tauri runtime needed"}</span></span><button className="pill-btn accent" type="button" onClick={onInstallMod} data-tauri-drag-region="false"><Download size={12} strokeWidth={2.3} />{modStatus.installed ? "Reinstall" : "Install"}</button></div>
-      <div className="setup-row passive"><span className="status-slot"><ArrowRight className="setup-icon" size={14} strokeWidth={2.3} /></span><span className="setup-copy"><span className="setup-title">{guidance.title}</span><span className="setup-detail">{guidance.detail}</span></span></div>
-      <div className="setup-row passive"><span className="status-slot"><Focus className="setup-icon" size={14} strokeWidth={2.3} /></span><span className="setup-copy"><span className="setup-title">Session controls</span><span className="setup-detail">{canUseNativeControls ? "Ghostty focus available · end unavailable" : capabilities.sessionActions.focusTerminal || capabilities.sessionActions.endSession ? "Focus/end available from bridge" : "Focus/end unavailable in current bridge"}</span></span></div>
-      <div className="setup-row mascot-setting-row"><span className="mascot-current-preview" style={mascotPreviewStyle(mascot)} aria-hidden="true" /><span className="setup-copy"><span className="setup-title">Mascot</span><span className="setup-detail">{MASCOT_LABELS[mascot]} · used for every session</span></span><button ref={mascotPickerTriggerRef} className="pill-btn" type="button" onClick={() => { if (mascotPickerOpen) closeMascotPicker(); else { setDisplayPickerOpen(false); setMascotPickerOpen(true); } }} data-tauri-drag-region="false" aria-controls="mascot-picker" aria-expanded={mascotPickerOpen}><Bot size={12} strokeWidth={2.3} />{mascotPickerOpen ? "Close" : "Choose"}</button></div>
-      {mascotPickerOpen ? (
-        <div className="mascot-picker" id="mascot-picker" role="radiogroup" aria-label="Mascot">
-          {HALO_MASCOT_ROSTER.map((option) => (
-            <button className="mascot-option" data-selected={option === mascot} id={`mascot-option-${option}`} type="button" role="radio" aria-checked={option === mascot} tabIndex={option === mascot ? 0 : -1} onClick={() => { onMascotChange(option); closeMascotPicker(); }} onKeyDown={(event) => handleMascotKeyDown(event, option)} data-tauri-drag-region="false" key={option} title={MASCOT_LABELS[option]}>
-              <span className="mascot-option-sprite" style={mascotPreviewStyle(option)} aria-hidden="true" />
-              <span>{MASCOT_LABELS[option]}</span>
-            </button>
-          ))}
+      <div className="setup-layout">
+        <div className="setup-sidebar" role="tablist" aria-label="Setup sections" aria-orientation={compactNavigation ? "horizontal" : "vertical"}>
+          <button className="setup-side-tab" id="setup-tab-connection" type="button" role="tab" aria-selected={activeCategory === "connection"} aria-controls="setup-panel-connection" tabIndex={activeCategory === "connection" ? 0 : -1} data-active={activeCategory === "connection"} onClick={() => selectCategory("connection")} onKeyDown={(event) => handleCategoryKeyDown(event, "connection")}><PlugZap size={12} strokeWidth={2.2} /><span>Connection</span></button>
+          <button className="setup-side-tab" id="setup-tab-pet" type="button" role="tab" aria-selected={activeCategory === "pet"} aria-controls="setup-panel-pet" tabIndex={activeCategory === "pet" ? 0 : -1} data-active={activeCategory === "pet"} onClick={() => selectCategory("pet")} onKeyDown={(event) => handleCategoryKeyDown(event, "pet")}><Bot size={12} strokeWidth={2.2} /><span>Pet</span></button>
+          <button className="setup-side-tab" id="setup-tab-display" type="button" role="tab" aria-selected={activeCategory === "display"} aria-controls="setup-panel-display" tabIndex={activeCategory === "display" ? 0 : -1} data-active={activeCategory === "display"} onClick={() => selectCategory("display")} onKeyDown={(event) => handleCategoryKeyDown(event, "display")}><MonitorIcon size={12} strokeWidth={2.2} /><span>Display</span></button>
         </div>
-      ) : null}
-      <div className="setup-row display-setting-row"><span className="status-slot"><MonitorIcon className="setup-icon" size={14} strokeWidth={2.2} /></span><span className="setup-copy"><span className="setup-title">Display</span><span className="setup-detail">{!canUseNativeControls ? "Desktop runtime required" : displayLoading ? "Reading connected displays" : displayError ? displayError : displayState?.fallbackActive ? `${displayState.preferredDisplayName || "Saved display"} unavailable · using ${activeDisplay?.name ?? "Primary"}` : activeDisplay ? `${activeDisplay.name} · ${displayResolutionLabel(activeDisplay)}${activeDisplay.isPrimary ? " · Primary" : ""}` : "No connected display found"}</span></span><button ref={displayPickerTriggerRef} className="pill-btn" type="button" disabled={!canUseNativeControls || displays.length === 0} aria-busy={displayLoading} onClick={() => { if (displayPickerOpen) closeDisplayPicker(); else { setMascotPickerOpen(false); setDisplayPickerOpen(true); void onDisplayRefresh(); } }} data-tauri-drag-region="false" aria-controls="display-picker" aria-expanded={displayPickerOpen}><MonitorIcon size={12} strokeWidth={2.2} />{displayPickerOpen ? "Close" : "Choose"}</button></div>
-      {displayPickerOpen ? (
-        <div className="display-picker" id="display-picker" role="radiogroup" aria-label="Display" aria-busy={displayLoading}>
-          {displays.map((display, index) => (
-            <button className="display-option" data-selected={display.id === displayRadioSelection} disabled={displayLoading} id={`display-option-${index}`} type="button" role="radio" aria-checked={display.id === displayRadioSelection} tabIndex={display.id === displayFocusTarget ? 0 : -1} onClick={() => { if (displayInteractionBusyRef.current) return; displayInteractionBusyRef.current = true; void onDisplayChange(display.id).finally(() => { displayInteractionBusyRef.current = false; }); closeDisplayPicker(); }} onKeyDown={(event) => handleDisplayKeyDown(event, index)} data-tauri-drag-region="false" key={display.id}>
-              <MonitorIcon size={16} strokeWidth={2.1} aria-hidden="true" />
-              <span className="display-option-copy"><span>{display.name}</span><small>{displayResolutionLabel(display)}{display.isPrimary ? " · Primary" : ""}</small></span>
-              <span className="display-option-mark" aria-hidden="true">{display.id === displayRadioSelection ? "✓" : ""}</span>
-            </button>
-          ))}
+
+        <div className="setup-category-panel" id={`setup-panel-${activeCategory}`} role="tabpanel" aria-labelledby={`setup-tab-${activeCategory}`}>
+          {activeCategory === "connection" ? (
+            <>
+              <div className="setup-section-heading"><span>Connection</span><small>Bridge and Letta integration</small></div>
+              <div className="setup-row"><span className="bridge-dot" data-connected={isConnected} title={connectionTitle} /><span className="setup-copy"><span className="setup-title">Bridge</span><span className="setup-detail">{connectionTitle}</span></span><button className="pill-btn" type="button" onClick={onCheckBridge} data-tauri-drag-region="false"><Check size={12} strokeWidth={2.3} />Check</button></div>
+              <div className="setup-row"><span className="status-slot"><Download className="setup-icon" size={14} strokeWidth={2.3} /></span><span className="setup-copy"><span className="setup-title">Letta mod</span><span className="setup-detail">{modStatus.installed === true ? `Installed · ${shortenPath(modStatus.path)}` : modStatus.installed === false ? `Not installed · ${shortenPath(modStatus.path)}` : canUseNativeControls ? "Checking install state" : "Tauri runtime needed"}</span></span><button className="pill-btn accent" type="button" onClick={onInstallMod} data-tauri-drag-region="false"><Download size={12} strokeWidth={2.3} />{modStatus.installed ? "Reinstall" : "Install"}</button></div>
+              <div className="setup-row passive"><span className="status-slot"><ArrowRight className="setup-icon" size={14} strokeWidth={2.3} /></span><span className="setup-copy"><span className="setup-title">{guidance.title}</span><span className="setup-detail">{guidance.detail}</span></span></div>
+              <div className="setup-row passive"><span className="status-slot"><Focus className="setup-icon" size={14} strokeWidth={2.3} /></span><span className="setup-copy"><span className="setup-title">Session controls</span><span className="setup-detail">{canUseNativeControls ? "Ghostty focus available · end unavailable" : capabilities.sessionActions.focusTerminal || capabilities.sessionActions.endSession ? "Focus/end available from bridge" : "Focus/end unavailable in current bridge"}</span></span></div>
+              {nativeAction.message ? <div className="notice-row" data-online={nativeAction.bridgeOnline === true} role="status" aria-live="polite">{nativeAction.message}</div> : null}
+            </>
+          ) : null}
+
+          {activeCategory === "pet" ? (
+            <>
+              <div className="setup-section-heading"><span>Pet</span><small>Companion identity and completion preview</small></div>
+              <div className="setup-row pet-setting-row"><span className="pet-current-preview" style={petPreviewStyle(pet)} aria-hidden="true" /><span className="setup-copy"><span className="setup-title">{PET_LABELS[pet]}</span><span className="setup-detail" id="pet-preview-availability">{canUseNativeControls ? "Used across Agent Halo" : "Desktop runtime required to preview"}</span></span><span className="setup-row-actions"><button ref={petPickerTriggerRef} className="pill-btn" type="button" onClick={() => { if (petPickerOpen) closePetPicker(); else setPetPickerOpen(true); }} data-tauri-drag-region="false" aria-controls="pet-picker" aria-expanded={petPickerOpen}><Bot size={12} strokeWidth={2.3} />{petPickerOpen ? "Close" : "Choose"}</button><button className={`pill-btn accent pet-preview-button ${petPreviewState === "stale" ? "is-stale" : ""}`} type="button" disabled={!canUseNativeControls || petPreviewState === "showing"} onClick={() => void onShowPetPreview()} data-tauri-drag-region="false" aria-label={petPreviewState === "stale" ? "Update Completion Pet preview" : "Show Completion Pet preview"} aria-describedby="pet-preview-availability">{petPreviewState === "stale" ? <RefreshCw size={12} strokeWidth={2.3} /> : petPreviewState === "shown" ? <Check size={12} strokeWidth={2.3} /> : <Play size={12} strokeWidth={2.3} />}{petPreviewState === "showing" ? "Showing…" : petPreviewState === "stale" ? "Update Pet" : petPreviewState === "shown" ? "Show again" : "Show Pet"}</button></span></div>
+              {petPickerOpen ? (
+                <div className="pet-picker" id="pet-picker" role="radiogroup" aria-label="Pet">
+                  {HALO_PET_ROSTER.map((option) => (
+                    <button className="pet-option" data-selected={option === pet} id={`pet-option-${option}`} type="button" role="radio" aria-checked={option === pet} tabIndex={option === pet ? 0 : -1} onClick={() => { onPetChange(option); closePetPicker(); }} onKeyDown={(event) => handlePetKeyDown(event, option)} data-tauri-drag-region="false" key={option} title={PET_LABELS[option]}><span className="pet-option-sprite" style={petPreviewStyle(option)} aria-hidden="true" /><span>{PET_LABELS[option]}</span></button>
+                  ))}
+                </div>
+              ) : null}
+              <div className="setup-row"><span className="status-slot"><Bot className="setup-icon" size={14} strokeWidth={2.3} /></span><span className="setup-copy"><span className="setup-title">Completion Pet size</span><span className="setup-detail">Changes only the floating Pet</span></span><span className="setup-size-options" role="radiogroup" aria-label="Completion Pet size">{COMPLETION_PET_SIZES.map((size) => <button id={`completion-pet-size-${size}`} type="button" role="radio" aria-checked={completionPetSize === size} tabIndex={completionPetSize === size ? 0 : -1} data-active={completionPetSize === size} onClick={() => onCompletionPetSizeChange(size)} onKeyDown={(event) => handlePetSizeKeyDown(event, size)} data-tauri-drag-region="false" key={size}>{size === "small" ? "1×" : size === "medium" ? "1.5×" : "2×"}</button>)}</span></div>
+              <div className="setup-row"><span className="status-slot"><Bot className="setup-icon" size={14} strokeWidth={2.3} /></span><span className="setup-copy"><span className="setup-title">Completion Pet</span><span className="setup-detail">{completionPetEnabled ? "Shows after a completed Focus" : "Off · uses a macOS notification"}</span></span><button className={`pill-btn ${completionPetEnabled ? "accent" : ""}`} type="button" role="switch" aria-checked={completionPetEnabled} onClick={() => onCompletionPetEnabledChange(!completionPetEnabled)} data-tauri-drag-region="false" aria-label={`${completionPetEnabled ? "Disable" : "Enable"} completion pet`}>{completionPetEnabled ? "On" : "Off"}</button></div>
+              {petPreviewStatus ? <div className="notice-row pet-preview-status" data-state={petPreviewState} data-online={petPreviewState === "shown"} role="status" aria-live="polite">{petPreviewStatus}</div> : null}
+            </>
+          ) : null}
+
+          {activeCategory === "display" ? (
+            <>
+              <div className="setup-section-heading"><span>Display</span><small>Screen placement and power behavior</small></div>
+              <div className="setup-row display-setting-row"><span className="status-slot"><MonitorIcon className="setup-icon" size={14} strokeWidth={2.2} /></span><span className="setup-copy"><span className="setup-title">Target display</span><span className="setup-detail">{!canUseNativeControls ? "Desktop runtime required" : displayLoading ? "Reading connected displays" : displayError ? displayError : displayState?.fallbackActive ? `${displayState.preferredDisplayName || "Saved display"} unavailable · using ${activeDisplay?.name ?? "Primary"}` : activeDisplay ? `${activeDisplay.name} · ${displayResolutionLabel(activeDisplay)}${activeDisplay.isPrimary ? " · Primary" : ""}` : "No connected display found"}</span></span><button ref={displayPickerTriggerRef} className="pill-btn" type="button" disabled={!canUseNativeControls || displays.length === 0} aria-busy={displayLoading} onClick={() => { if (displayPickerOpen) closeDisplayPicker(); else { setDisplayPickerOpen(true); void onDisplayRefresh(); } }} data-tauri-drag-region="false" aria-controls="display-picker" aria-expanded={displayPickerOpen}><MonitorIcon size={12} strokeWidth={2.2} />{displayPickerOpen ? "Close" : "Choose"}</button></div>
+              {displayPickerOpen ? (
+                <div className="display-picker" id="display-picker" role="radiogroup" aria-label="Display" aria-busy={displayLoading}>{displays.map((display, index) => <button className="display-option" data-selected={display.id === displayRadioSelection} disabled={displayLoading} id={`display-option-${index}`} type="button" role="radio" aria-checked={display.id === displayRadioSelection} tabIndex={display.id === displayFocusTarget ? 0 : -1} onClick={() => { if (displayInteractionBusyRef.current) return; displayInteractionBusyRef.current = true; void onDisplayChange(display.id).finally(() => { displayInteractionBusyRef.current = false; }); closeDisplayPicker(); }} onKeyDown={(event) => handleDisplayKeyDown(event, index)} data-tauri-drag-region="false" key={display.id}><MonitorIcon size={16} strokeWidth={2.1} aria-hidden="true" /><span className="display-option-copy"><span>{display.name}</span><small>{displayResolutionLabel(display)}{display.isPrimary ? " · Primary" : ""}</small></span><span className="display-option-mark" aria-hidden="true">{display.id === displayRadioSelection ? "✓" : ""}</span></button>)}</div>
+              ) : null}
+              <div className="setup-row"><span className="status-slot"><Coffee className="setup-icon" size={14} strokeWidth={2.3} /></span><span className="setup-copy"><span className="setup-title">Keep display awake</span><span className="setup-detail">{!keepAwakeEnabled ? "Off · display follows macOS idle settings" : !canUseNativeControls ? "Desktop runtime required" : keepAwakeError ? `Unavailable · ${keepAwakeError}` : keepAwakeActive ? "Active · Letta is working" : "On · waiting for active work"}</span></span><button className={`pill-btn ${keepAwakeEnabled ? "accent" : ""}`} type="button" onClick={() => onKeepAwakeChange(!keepAwakeEnabled)} data-tauri-drag-region="false" aria-label={`${keepAwakeEnabled ? "Disable" : "Enable"} keep display awake`}>{keepAwakeEnabled ? "On" : "Off"}</button></div>
+            </>
+          ) : null}
         </div>
-      ) : null}
-      <div className="setup-row"><span className="status-slot"><Coffee className="setup-icon" size={14} strokeWidth={2.3} /></span><span className="setup-copy"><span className="setup-title">Keep display awake</span><span className="setup-detail">{!keepAwakeEnabled ? "Off · display follows macOS idle settings" : !canUseNativeControls ? "Desktop runtime required" : keepAwakeError ? `Unavailable · ${keepAwakeError}` : keepAwakeActive ? "Active · Letta is working" : "On · waiting for active work"}</span></span><button className={`pill-btn ${keepAwakeEnabled ? "accent" : ""}`} type="button" onClick={() => onKeepAwakeChange(!keepAwakeEnabled)} data-tauri-drag-region="false" aria-label={`${keepAwakeEnabled ? "Disable" : "Enable"} keep display awake`}>{keepAwakeEnabled ? "On" : "Off"}</button></div>
-      {nativeAction.message ? <div className="notice-row" data-online={nativeAction.bridgeOnline === true} role="status" aria-live="polite">{nativeAction.message}</div> : null}
+      </div>
     </div>
   );
 };

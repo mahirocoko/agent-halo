@@ -38,7 +38,7 @@ Agent Halo intentionally stays local. It uses the public Letta Code mod surface,
 
 ## Current status
 
-Agent Halo is an early macOS app. The core bridge, desktop overlay, setup flow, workspace grouping, session controls, mascot activity, local Pomodoro timer, and local usage views are active. The project is still evolving quickly; expect the event protocol and native controls to stay conservative until Letta exposes stable public APIs for deeper session/process control.
+Agent Halo is an early macOS app. The core bridge, desktop overlay, setup flow, workspace grouping, session controls, Pet activity, local Pomodoro timer, and local usage views are active. The project is still evolving quickly; expect the event protocol and native controls to stay conservative until Letta exposes stable public APIs for deeper session/process control.
 
 ## Architecture
 
@@ -187,11 +187,11 @@ scripts/install-desktop.mjs     Desktop build/install helper
 
 ## Design direction
 
-Agent Halo should feel like a quiet companion, not a generic AI dashboard. The interface follows a dark hardware-notch direction with compact workspace rows, hairline dividers, restrained orange/green state accents, and small mascot activity. Setup exposes the original robot roster as one global persisted choice; Scorpion is the default and neither mascot identity nor color is randomized per project.
+Agent Halo should feel like a quiet companion, not a generic AI dashboard. The interface follows a dark hardware-notch direction with compact workspace rows, hairline dividers, restrained orange/green state accents, and small Pet activity. Setup exposes the original companion roster as one global persisted Pet choice; Scorpion is the default and neither Pet identity nor color is randomized per project. Phase 1 also provides an optional event-only floating Completion Pet for naturally completed Focus sessions; see `docs/pet.md`.
 
 Design references and parity notes live in [`docs/notchcode-parity.md`](docs/notchcode-parity.md).
 
-Runtime mascot strips live in:
+Runtime Pet strips remain in the legacy asset path:
 
 ```text
 apps/desktop/public/mascots/agent-halo-roster/

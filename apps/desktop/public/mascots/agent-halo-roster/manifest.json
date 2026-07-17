@@ -1,10 +1,11 @@
 {
-  "name": "Agent Halo Project Mascot Roster",
-  "version": 4,
+  "name": "Agent Halo Pet Roster",
+  "version": 5,
   "status": "integration-candidate-bold-signal-v4",
   "humanApproved": true,
   "productionApproved": false,
   "mainMascot": "scorpion",
+  "mainPet": "scorpion",
   "roster": [
     "pot",
     "crawler",
@@ -24,8 +25,9 @@
   ],
   "assignment": {
     "status": "user-selected-global",
-    "strategy": "One persisted mascot selection is used for ambient, session, group, and detail surfaces.",
-    "storageKey": "agent-halo.mascot",
+    "strategy": "One persisted Pet selection is used for ambient, session, group, detail, and Completion Pet surfaces.",
+    "storageKey": "agent-halo.pet",
+    "legacyStorageKey": "agent-halo.mascot",
     "default": "scorpion",
     "fallback": "scorpion",
     "projectHashing": false,
@@ -144,11 +146,11 @@
     "frameDurationMs": 200,
     "doneFinalHoldMs": 600,
     "idleIncluded": false,
-    "semanticModel": "Independent grouped action/status signal; mascot body affect and user selection remain separate.",
+    "semanticModel": "Independent grouped action/status signal; Pet body affect and user selection remain separate.",
     "productionApproved": false,
     "primaryStrokePx": 2
   },
-  "colorStrategy": "One authored cyan robot palette. No project, mascot, or user-randomized hue; only truthful lifecycle state filters may alter the body.",
+  "colorStrategy": "One authored cyan robot palette. No project, Pet, or user-randomized hue; only truthful lifecycle state filters may alter the body.",
   "palette": {
     "base": [
       "#E6FAFF",
@@ -277,6 +279,7 @@
     "signals/visual.png": "105e7cf6234c918006f3dfaef148e269d872967bf8124bdd30098092b55709e8"
   },
   "defaultMascot": "scorpion",
+  "defaultPet": "scorpion",
   "delivery": {
     "ambient": {
       "wrapperSize": [

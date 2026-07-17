@@ -3,7 +3,7 @@ import { Activity, BarChart3, Check, ChevronLeft, Focus, List, Settings, Timer, 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createRoot } from "react-dom/client";
 import type { AgentHaloPresenceStatus } from "@agent-halo/protocol";
-import { ActivityMascot, type HaloMascotName } from "./features/session/HaloMascot";
+import { ActivityPet, type HaloPetName } from "./features/session/HaloPet";
 import { SessionContextSummary, StatusGlyph, WorkspaceSessionGroupItem } from "./features/session/components";
 import {
   formatTime,
@@ -23,7 +23,7 @@ import {
   writeDismissedSessionIds,
   writeSessionEventRegistry,
 } from "./features/session/persistence";
-import { readHaloMascotPreference, writeHaloMascotPreference } from "./features/session/mascotPreference";
+import { readHaloPetPreference, writeHaloPetPreference } from "./features/session/petPreference";
 import {
   buildSessionDetail,
   buildSessionSummaries,
@@ -33,7 +33,11 @@ import {
 import type { ActivityKind, DeletedSessionRegistry, DismissedSessionRegistry, ISessionDetail, ISessionSummary, IWorkspaceSessionGroup } from "./features/session/types";
 import { useAgentHaloPresence } from "./features/presence/useAgentHaloPresence";
 import { PomodoroPanel } from "./features/pomodoro/components";
+import { POMODORO_PET_HANDOFF_WINDOW_MS } from "./features/pomodoro/model";
 import { usePomodoro } from "./features/pomodoro/usePomodoro";
+import { PetApp } from "./features/pet/PetApp";
+import { readCompletionPetEnabled, readCompletionPetSize, writeCompletionPetEnabled, writeCompletionPetSize, type CompletionPetSize } from "./features/pet/preferences";
+import type { ICompletionPetActionRequest, ICompletionPetSummon } from "./features/pet/types";
 import { SetupPanel } from "./features/setup/SetupPanel";
 import type { IDisplayStateSnapshot } from "./features/setup/display";
 import { readUsageSettings, writeUsageSettings } from "./features/usage/adapters";
@@ -49,6 +53,7 @@ const SEARCH_PARAMS = new URLSearchParams(window.location.search);
 const DEMO_MODE = SEARCH_PARAMS.has("demo");
 const DEMO_SCENARIO = SEARCH_PARAMS.get("demoScenario");
 const DEMO_COLLAPSED = SEARCH_PARAMS.has("demoCollapsed");
+const PET_SURFACE = SEARCH_PARAMS.get("surface") === "pet";
 const DEFAULT_CAMERA_NOTCH_WIDTH = 184;
 const DEFAULT_CLOSED_NOTCH_HEIGHT = 36;
 const MIN_LIVE_ACTIVITY_WING_WIDTH = 66;
@@ -147,7 +152,13 @@ const writeKeepAwakeEnabled = (enabled: boolean) => {
 const App = () => {
   const { capabilities, connection, lastLiveEvent, now, presence, recentEvents, refreshCapabilities, sessionEventRegistry, setSessionEventRegistry, view } = useAgentHaloPresence({ demoMode: DEMO_MODE, demoScenario: DEMO_SCENARIO });
   const [usageSettings, setUsageSettings] = useState<IUsageSettings>(readUsageSettings);
-  const [mascot, setMascot] = useState<HaloMascotName>(readHaloMascotPreference);
+  const [pet, setPet] = useState<HaloPetName>(readHaloPetPreference);
+  const [completionPetEnabled, setCompletionPetEnabled] = useState(readCompletionPetEnabled);
+  const [completionPetSize, setCompletionPetSize] = useState<CompletionPetSize>(readCompletionPetSize);
+  const [petPreviewStatus, setPetPreviewStatus] = useState<string | null>(null);
+  const [petPreviewState, setPetPreviewState] = useState<"idle" | "showing" | "shown" | "stale" | "error">("idle");
+  const completionPetEnabledRef = useRef(completionPetEnabled);
+  const completionPetSummonGenerationRef = useRef(0);
   const [displayState, setDisplayState] = useState<IDisplayStateSnapshot | null>(null);
   const [displayLoading, setDisplayLoading] = useState(false);
   const [displayError, setDisplayError] = useState<string | null>(null);
@@ -194,7 +205,80 @@ const App = () => {
       ? ({ ...view, status: "idle", label: "idle" } satisfies IStatusView)
       : view;
   const canUseNativeControls = typeof window.__TAURI_INTERNALS__ !== "undefined";
-  const pomodoro = usePomodoro(canUseNativeControls);
+  const pomodoro = usePomodoro(canUseNativeControls, completionPetEnabled);
+  const pomodoroRef = useRef(pomodoro);
+  const observedCompletionIdRef = useRef(pomodoro.state.lastCompletion?.id ?? null);
+  pomodoroRef.current = pomodoro;
+
+  useEffect(() => {
+    if (!canUseNativeControls) return undefined;
+    let disposed = false;
+    let busy = false;
+    const consumeAction = async () => {
+      if (busy || disposed) return;
+      busy = true;
+      try {
+        const action = await invoke<ICompletionPetActionRequest | null>("take_completion_pet_action");
+        if (disposed || action?.action !== "start-break") return;
+        const current = pomodoroRef.current;
+        if (current.state.status === "idle" && current.state.phase === action.nextPhase && current.state.lastCompletion?.completedPhase === "focus" && current.state.lastCompletion.id === action.summonId) {
+          current.start();
+        }
+      } catch {
+        // The main Pomodoro remains unchanged when no native Pet action is available.
+      } finally {
+        busy = false;
+      }
+    };
+    void consumeAction();
+    const timer = window.setInterval(() => void consumeAction(), 200);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [canUseNativeControls]);
+
+  useEffect(() => {
+    const completion = pomodoro.state.lastCompletion;
+    if (!completion || completion.id === observedCompletionIdRef.current) return;
+    observedCompletionIdRef.current = completion.id;
+    if (!completionPetEnabled || !canUseNativeControls || completion.completedPhase !== "focus") return;
+    if (completion.observedAt - completion.completedAt >= POMODORO_PET_HANDOFF_WINDOW_MS) return;
+    if (completion.nextPhase !== "short-break" && completion.nextPhase !== "long-break") return;
+    const summonGeneration = completionPetSummonGenerationRef.current + 1;
+    completionPetSummonGenerationRef.current = summonGeneration;
+    const summon: ICompletionPetSummon = {
+      schemaVersion: 1,
+      id: completion.id,
+      pet,
+      petSize: completionPetSize,
+      preview: false,
+      nextPhase: completion.nextPhase,
+      title: "Focus complete",
+      actionLabel: completion.nextPhase === "long-break" ? "Start Long break" : "Start Short break",
+    };
+    void (async () => {
+      const handoffDeadlineMs = completion.completedAt + POMODORO_PET_HANDOFF_WINDOW_MS;
+      const claimed = await pomodoroRef.current.resolveCompletionWithPet(handoffDeadlineMs);
+      if (!claimed) return;
+      const restoreFallback = async () => {
+        await pomodoroRef.current.restoreCompletionNotificationFallback(completion.id);
+      };
+      if (!completionPetEnabledRef.current || completionPetSummonGenerationRef.current !== summonGeneration || Date.now() >= handoffDeadlineMs) {
+        await restoreFallback();
+        return;
+      }
+      let shown = false;
+      try {
+        shown = await invoke<boolean>("show_completion_pet", { summon });
+      } catch {
+        shown = false;
+      }
+      if (shown && completionPetEnabledRef.current && completionPetSummonGenerationRef.current === summonGeneration && Date.now() < handoffDeadlineMs) return;
+      if (shown) await invoke("hide_completion_pet").catch(() => undefined);
+      await restoreFallback();
+    })();
+  }, [canUseNativeControls, completionPetEnabled, completionPetSize, pet, pomodoro.state.lastCompletion]);
   const isConnected = connection.status === "connected";
   const connectionTitle = DEMO_MODE ? "Demo mode" : (connection.message ?? connection.status);
   const workspace = shortenPath(presence.cwd);
@@ -845,9 +929,65 @@ const App = () => {
     writeUsageSettings(settings);
   };
 
-  const updateMascot = (selection: HaloMascotName) => {
-    setMascot(selection);
-    writeHaloMascotPreference(selection);
+  const updatePet = (selection: HaloPetName) => {
+    setPet(selection);
+    writeHaloPetPreference(selection);
+    if (petPreviewState === "shown" || petPreviewState === "stale") {
+      setPetPreviewState("stale");
+      setPetPreviewStatus("Settings changed · update preview");
+    }
+  };
+
+  const updateCompletionPetEnabled = (enabled: boolean) => {
+    completionPetEnabledRef.current = enabled;
+    completionPetSummonGenerationRef.current += 1;
+    setCompletionPetEnabled(enabled);
+    writeCompletionPetEnabled(enabled);
+    if (!enabled && canUseNativeControls) void invoke("hide_completion_pet").catch(() => undefined);
+  };
+
+  const updateCompletionPetSize = (size: CompletionPetSize) => {
+    setCompletionPetSize(size);
+    writeCompletionPetSize(size);
+    if (petPreviewState === "shown" || petPreviewState === "stale") {
+      setPetPreviewState("stale");
+      setPetPreviewStatus("Settings changed · update preview");
+    }
+  };
+
+  const resetAllPomodoroCycle = () => {
+    completionPetSummonGenerationRef.current += 1;
+    if (canUseNativeControls) void invoke("hide_completion_pet").catch(() => undefined);
+    pomodoro.resetAll();
+  };
+
+  const showPetPreview = async (): Promise<void> => {
+    if (!canUseNativeControls) {
+      setPetPreviewState("error");
+      setPetPreviewStatus("Desktop runtime required");
+      return;
+    }
+    setPetPreviewState("showing");
+    setPetPreviewStatus("Showing Pet preview…");
+    try {
+      const shown = await invoke<boolean>("show_completion_pet", {
+        summon: {
+          schemaVersion: 1,
+          id: `pet-preview-${Date.now()}`,
+          pet,
+          petSize: completionPetSize,
+          preview: true,
+          nextPhase: "short-break",
+          title: "Pet preview",
+          actionLabel: "",
+        } satisfies ICompletionPetSummon,
+      });
+      setPetPreviewState(shown ? "shown" : "error");
+      setPetPreviewStatus(shown ? "Pet preview shown" : "Pet preview was superseded");
+    } catch (error) {
+      setPetPreviewState("error");
+      setPetPreviewStatus(error instanceof Error ? error.message : "Could not show Pet preview");
+    }
   };
 
   const updateKeepAwakeEnabled = (enabled: boolean) => {
@@ -1090,7 +1230,7 @@ const App = () => {
             <path d={notchShapePath} />
           </svg>
           <div className="surface-pill" aria-hidden={surfaceState === "open"}>
-            <div className="notch-wing notch-wing-left">
+            <div className={`notch-wing notch-wing-left ${showPomodoroActivity ? "is-pomodoro" : ""}`}>
               {hasLiveActivity ? (
                 showPomodoroActivity ? (
                   <>
@@ -1107,7 +1247,7 @@ const App = () => {
             </div>
             <div className="camera-spacer" aria-hidden="true" />
             <div className={`notch-wing notch-wing-right ${showPomodoroActivity ? "is-pomodoro" : ""}`} aria-hidden="true">
-              {showPomodoroActivity ? <span className="pomodoro-pill-phase">{pomodoroPhaseDetail}</span> : hasLiveActivity ? <ActivityMascot activityKind={activityKind} mascot={mascot} status={activityStatus} /> : null}
+              {showPomodoroActivity ? <span className="pomodoro-pill-phase">{pomodoroPhaseDetail}</span> : hasLiveActivity ? <ActivityPet activityKind={activityKind} pet={pet} status={activityStatus} /> : null}
             </div>
           </div>
 
@@ -1178,7 +1318,11 @@ const App = () => {
                   keepAwakeActive={keepAwakeActive}
                   keepAwakeEnabled={keepAwakeEnabled}
                   keepAwakeError={keepAwakeError}
-                  mascot={mascot}
+                  pet={pet}
+                  completionPetEnabled={completionPetEnabled}
+                  completionPetSize={completionPetSize}
+                  petPreviewStatus={petPreviewStatus}
+                  petPreviewState={petPreviewState}
                   modStatus={modStatus}
                   nativeAction={nativeAction}
                   onCheckBridge={() => void checkBridge()}
@@ -1186,11 +1330,14 @@ const App = () => {
                   onDisplayRefresh={loadDisplayState}
                   onInstallMod={() => void installMod()}
                   onKeepAwakeChange={updateKeepAwakeEnabled}
-                  onMascotChange={updateMascot}
+                  onPetChange={updatePet}
+                  onCompletionPetEnabledChange={updateCompletionPetEnabled}
+                  onCompletionPetSizeChange={updateCompletionPetSize}
+                  onShowPetPreview={showPetPreview}
                 />
               ) : selectedSession ? (
                 <div className="detail-body session-context-view" data-status={selectedSession.status}>
-                  <SessionContextSummary mascot={mascot} session={selectedSession} />
+                  <SessionContextSummary pet={pet} session={selectedSession} />
                   <div className="detail-path" title={selectedSession.cwd}>{shortenPath(selectedSession.cwd)}</div>
                   {canUseNativeControls ? (
                     <div className="capability-note">Focus matches Ghostty terminal cwd/title and selects its tab</div>
@@ -1221,7 +1368,7 @@ const App = () => {
                   )}
                 </div>
               ) : activeMainTab === "pomodoro" ? (
-                <PomodoroPanel pomodoro={pomodoro} />
+                <PomodoroPanel pomodoro={pomodoro} onResetAll={resetAllPomodoroCycle} />
               ) : activeMainTab === "usage" ? (
                 <AgentUsageList usages={agentUsages} onRefresh={refreshAgentUsage} settings={usageSettings} onSettingsChange={updateUsageSettings} />
               ) : activeMainTab === "runtime" ? (
@@ -1255,7 +1402,7 @@ const App = () => {
                                 expanded={expandedSessionGroupKeys.has(groupKey)}
                                 group={group}
                                 groupKey={groupKey}
-                                mascot={mascot}
+                                pet={pet}
                                 onClear={dismissSession}
                                 onClearGroup={clearCompletedSessionGroup}
                                 onFocus={(session) => void focusSelectedSession(session)}
@@ -1292,7 +1439,7 @@ const App = () => {
                                 expanded={expandedSessionGroupKeys.has(groupKey)}
                                 group={group}
                                 groupKey={groupKey}
-                                mascot={mascot}
+                                pet={pet}
                                 onClear={dismissSession}
                                 onClearGroup={clearCompletedSessionGroup}
                                 onFocus={(session) => void focusSelectedSession(session)}
@@ -1397,4 +1544,4 @@ declare global {
   }
 }
 
-createRoot(document.getElementById("root")!).render(<App />);
+createRoot(document.getElementById("root")!).render(PET_SURFACE ? <PetApp /> : <App />);
