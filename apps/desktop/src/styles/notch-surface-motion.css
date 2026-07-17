@@ -20,7 +20,7 @@
 
 .notch-wrap.is-open,
 .notch-wrap.is-closing {
-  width: 560px;
+  width: min(var(--panel-width, 560px), 100vw);
 }
 
 .halo-surface {
@@ -57,7 +57,7 @@
 }
 
 .halo-surface[data-state="open"] {
-  width: 560px;
+  width: min(var(--panel-width, 560px), 100vw);
   min-height: 218px;
   max-height: 440px;
   height: var(--panel-height, 218px);

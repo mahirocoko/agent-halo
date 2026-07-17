@@ -23,12 +23,14 @@ use sha2::{Digest, Sha256};
 
 mod keep_awake;
 mod notification;
+mod runtime_usage;
 
 use keep_awake::KeepAwakeState;
 use notification::{
     cancel_pomodoro_notification, notification_permission_state, request_notification_permission,
     schedule_pomodoro_notification, PomodoroNotificationState,
 };
+use runtime_usage::{runtime_usage, RuntimeUsageState};
 
 #[cfg(target_os = "macos")]
 use objc2::{msg_send, rc::Retained, MainThreadMarker};
@@ -4089,6 +4091,7 @@ pub fn run() {
         .manage(KeepAwakeState::default())
         .manage(DisplayPreferenceState::default())
         .manage(PomodoroNotificationState::default())
+        .manage(RuntimeUsageState::default())
         .invoke_handler(tauri::generate_handler![
             agent_halo_mod_path,
             agent_halo_mod_status,
@@ -4107,6 +4110,7 @@ pub fn run() {
             open_external_url,
             reconcile_display,
             request_notification_permission,
+            runtime_usage,
             schedule_pomodoro_notification,
             set_keep_awake,
             set_panel_open,

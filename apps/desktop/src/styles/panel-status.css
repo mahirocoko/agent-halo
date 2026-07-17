@@ -228,3 +228,10 @@
 .sheet-divider.soft {
   margin: 8px 0;
 }
+
+@media (max-width: 360px) {
+  .sheet-header:not(.detail-header) .header-title,
+  .sheet-header:not(.detail-header) .agent-badge {
+    display: none;
+  }
+}

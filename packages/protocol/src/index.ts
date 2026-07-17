@@ -63,6 +63,13 @@ export type AgentHaloEventType =
   | "llm_end"
   | "bridge_error";
 
+export interface IAgentHaloEventRuntime {
+  sourcePid: number;
+  sourcePpid: number | null;
+  sourceStartedAtMs: number;
+  sourceKind: "lettaHost" | "hookRelay" | "unknown" | string;
+}
+
 export interface IAgentHaloBaseEvent {
   version: typeof AGENT_HALO_PROTOCOL_VERSION;
   id: string;
@@ -74,6 +81,7 @@ export interface IAgentHaloBaseEvent {
   cwd?: string | null;
   model?: string | null;
   permissionMode?: string | null;
+  runtime?: IAgentHaloEventRuntime | null;
 }
 
 export interface IAgentHaloBridgeReadyEvent extends IAgentHaloBaseEvent {

@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { BarChart3, Check, ChevronLeft, Focus, List, Settings, Timer, Trash2, X } from "lucide-react";
+import { Activity, BarChart3, Check, ChevronLeft, Focus, List, Settings, Timer, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createRoot } from "react-dom/client";
 import type { AgentHaloPresenceStatus } from "@agent-halo/protocol";
@@ -40,6 +40,8 @@ import { readUsageSettings, writeUsageSettings } from "./features/usage/adapters
 import { AgentUsageList } from "./features/usage/components";
 import type { IUsageSettings } from "./features/usage/types";
 import { useAgentUsageList } from "./features/usage/useAgentUsageList";
+import { RuntimePanel } from "./features/runtime/components";
+import { useRuntimeMonitor } from "./features/runtime/useRuntimeMonitor";
 import "./styles.css";
 
 const KEEP_AWAKE_STORAGE_KEY = "agent-halo.keep-awake-while-working";
@@ -52,6 +54,7 @@ const MIN_LIVE_ACTIVITY_WING_WIDTH = 66;
 const MAX_LIVE_ACTIVITY_WING_WIDTH = 110;
 const LIVE_ACTIVITY_TEXT_WIDTH_BUFFER = 52;
 const PANEL_WINDOW_WIDTH = 560;
+const MIN_PANEL_WINDOW_WIDTH = 280;
 const PANEL_MIN_HEIGHT = 218;
 const PANEL_MAX_HEIGHT = 440;
 const ACTIVITY_COLLAPSE_MS = 220;
@@ -83,7 +86,7 @@ interface INotchMetrics {
   closedHeight: number;
 }
 
-type MainPanelTab = "sessions" | "pomodoro" | "usage";
+type MainPanelTab = "sessions" | "pomodoro" | "usage" | "runtime";
 
 const estimateLiveActivityWingWidth = (label: string): number => {
   const textWidth = Math.ceil(label.length * 5.6);
@@ -112,6 +115,10 @@ const buildNotchShapePath = (width: number, height: number, topRadius: number, b
 const waitForNextPaint = () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
 
 const clampPanelHeight = (value: number): number => Math.min(PANEL_MAX_HEIGHT, Math.max(PANEL_MIN_HEIGHT, Math.ceil(value)));
+const getPanelWindowWidth = (): number => Math.min(
+  PANEL_WINDOW_WIDTH,
+  Math.max(MIN_PANEL_WINDOW_WIDTH, DEMO_MODE ? window.innerWidth : window.screen.availWidth),
+);
 
 interface IStatusView {
   status: AgentHaloPresenceStatus | "stale";
@@ -150,6 +157,7 @@ const App = () => {
   const [panelOpen, setPanelOpen] = useState(DEMO_MODE);
   const [renderPanel, setRenderPanel] = useState(DEMO_MODE);
   const [panelHeight, setPanelHeight] = useState(PANEL_MIN_HEIGHT);
+  const [panelWindowWidth, setPanelWindowWidth] = useState(getPanelWindowWidth);
   const [hoverExpandSuppressed, setHoverExpandSuppressed] = useState(false);
   const [activeMainTab, setActiveMainTab] = useState<MainPanelTab>("sessions");
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
@@ -188,15 +196,22 @@ const App = () => {
   const workspace = shortenPath(presence.cwd);
   const project = projectName(presence.cwd);
   const model = presence.model?.split("/").slice(-1)[0] ?? "Letta Code";
-  const sessions = useMemo(
+  const allSessions = useMemo(
     () =>
       buildSessionSummaries(sessionEventRegistry, presence, now).filter(
         (session) =>
-          !isDeletedAfter(deletedSessionIds, session.conversationId, session.lastActivityAt) &&
-          (!isDismissedAfter(dismissedSessionIds, session.conversationId, session.lastActivityAt) ||
-            (session.conversationId === presence.conversationId && !["idle", "closed"].includes(displayView.status))),
+          !isDeletedAfter(deletedSessionIds, session.conversationId, session.lastActivityAt),
       ),
-    [deletedSessionIds, dismissedSessionIds, displayView.status, now, presence, sessionEventRegistry],
+    [deletedSessionIds, now, presence, sessionEventRegistry],
+  );
+  const sessions = useMemo(
+    () =>
+      allSessions.filter(
+        (session) =>
+          !isDismissedAfter(dismissedSessionIds, session.conversationId, session.lastActivityAt) ||
+          (session.conversationId === presence.conversationId && !["idle", "closed"].includes(displayView.status)),
+      ),
+    [allSessions, dismissedSessionIds, displayView.status, presence.conversationId],
   );
   const selectedSession = useMemo(
     () => buildSessionDetail(selectedSessionId, sessions, sessionEventRegistry, presence),
@@ -214,6 +229,13 @@ const App = () => {
   );
   const completedSessions = useMemo(() => sessions.filter((session) => session.status === "done"), [sessions]);
   const completedSessionGroups = useMemo(() => buildWorkspaceSessionGroups(completedSessions), [completedSessions]);
+  const runtimeMonitor = useRuntimeMonitor({
+    active: activeMainTab === "runtime" && panelOpen && !setupOpen && !selectedSessionId,
+    canUseNativeControls,
+    demoMode: DEMO_MODE,
+    registry: sessionEventRegistry,
+    sessions: allSessions,
+  });
 
   useEffect(() => {
     if (!clearCompletedArmed) return undefined;
@@ -260,6 +282,8 @@ const App = () => {
         ? "Pomodoro"
         : activeMainTab === "usage"
           ? "Usage"
+          : activeMainTab === "runtime"
+            ? "Runtime"
           : sessionGroups.length === 0
           ? "Agent Halo"
           : sessionGroups.length === 1
@@ -378,12 +402,13 @@ const App = () => {
     "--closed-height": `${closedSurfaceHeight}px`,
     "--camera-width": `${Math.round(notchMetrics.cameraWidth)}px`,
     "--panel-height": `${panelHeight}px`,
+    "--panel-width": `${panelWindowWidth}px`,
     "--pill-text-width": `${Math.max(0, liveActivityWingWidth - LIVE_ACTIVITY_TEXT_WIDTH_BUFFER)}px`,
-  } as CSSProperties & Record<"--closed-width" | "--closed-height" | "--camera-width" | "--panel-height" | "--pill-text-width", string>;
+  } as CSSProperties & Record<"--closed-width" | "--closed-height" | "--camera-width" | "--panel-height" | "--panel-width" | "--pill-text-width", string>;
   const shouldAutoOpen = activityStatus === "error";
   const surfaceState = renderPanel ? (panelOpen ? "open" : "closing") : "closed";
   const shapeMetrics = surfaceState === "open"
-    ? { width: PANEL_WINDOW_WIDTH, height: panelHeight, topRadius: OPEN_TOP_SHOULDER_RADIUS, bottomRadius: PANEL_BOTTOM_RADIUS }
+    ? { width: panelWindowWidth, height: panelHeight, topRadius: OPEN_TOP_SHOULDER_RADIUS, bottomRadius: PANEL_BOTTOM_RADIUS }
     : { width: closedSurfaceWidth, height: closedSurfaceHeight, topRadius: CLOSED_TOP_SHOULDER_RADIUS, bottomRadius: CLOSED_BOTTOM_RADIUS };
   const notchShapePath = buildNotchShapePath(shapeMetrics.width, shapeMetrics.height, shapeMetrics.topRadius, shapeMetrics.bottomRadius);
   const setupGuidance = (() => {
@@ -463,6 +488,13 @@ const App = () => {
   }, [canUseNativeControls]);
 
   useEffect(() => {
+    const updatePanelWidth = () => setPanelWindowWidth(getPanelWindowWidth());
+    updatePanelWidth();
+    window.addEventListener("resize", updatePanelWidth);
+    return () => window.removeEventListener("resize", updatePanelWidth);
+  }, []);
+
+  useEffect(() => {
     if (!canUseNativeControls) return undefined;
     let cancelled = false;
     const reconcile = async () => {
@@ -497,7 +529,7 @@ const App = () => {
       return;
     }
 
-    if (activeMainTab === "usage" && !setupOpen && !selectedSessionId) {
+    if ((activeMainTab === "usage" || activeMainTab === "runtime") && !setupOpen && !selectedSessionId) {
       setPanelHeight(PANEL_MAX_HEIGHT);
       return;
     }
@@ -540,7 +572,7 @@ const App = () => {
         try {
           await invoke("set_panel_open", {
             open,
-            width: open ? PANEL_WINDOW_WIDTH : nativeClosedSurfaceWidth,
+            width: open ? panelWindowWidth : nativeClosedSurfaceWidth,
             height: open ? panelHeight : closedSurfaceHeight,
           });
           return true;
@@ -595,7 +627,7 @@ const App = () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [canUseNativeControls, closedSurfaceHeight, nativeClosedSurfaceWidth, panelHeight, panelOpen, renderPanel]);
+  }, [canUseNativeControls, closedSurfaceHeight, nativeClosedSurfaceWidth, panelHeight, panelOpen, panelWindowWidth, renderPanel]);
 
   useEffect(
     () => () => {
@@ -755,7 +787,7 @@ const App = () => {
   const handleMainTabKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, currentTab: MainPanelTab) => {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
-    const tabs: MainPanelTab[] = ["sessions", "pomodoro", "usage"];
+    const tabs: MainPanelTab[] = ["sessions", "pomodoro", "usage", "runtime"];
     const currentIndex = tabs.indexOf(currentTab);
     const nextTab = event.key === "Home"
       ? tabs[0]
@@ -1091,6 +1123,9 @@ const App = () => {
                     <button id="main-tab-usage" className="header-tab" data-active={activeMainTab === "usage"} data-panel-focus-target={activeMainTab === "usage" ? "true" : undefined} type="button" role="tab" aria-label="Usage" aria-selected={activeMainTab === "usage"} aria-controls="main-panel-usage" tabIndex={activeMainTab === "usage" ? 0 : -1} onKeyDown={(event) => handleMainTabKeyDown(event, "usage")} onClick={(event) => { event.stopPropagation(); activateMainTab("usage"); }} data-tauri-drag-region="false" title="Usage">
                       <BarChart3 size={13} strokeWidth={2.3} />
                     </button>
+                    <button id="main-tab-runtime" className="header-tab" data-active={activeMainTab === "runtime"} data-panel-focus-target={activeMainTab === "runtime" ? "true" : undefined} type="button" role="tab" aria-label="Runtime" aria-selected={activeMainTab === "runtime"} aria-controls="main-panel-runtime" tabIndex={activeMainTab === "runtime" ? 0 : -1} onKeyDown={(event) => handleMainTabKeyDown(event, "runtime")} onClick={(event) => { event.stopPropagation(); activateMainTab("runtime"); }} data-tauri-drag-region="false" title="Runtime">
+                      <Activity size={13} strokeWidth={2.3} />
+                    </button>
                   </div>
                   <button className="header-tab" type="button" aria-label="Setup" onClick={(event) => { event.stopPropagation(); openSetup(); }} data-tauri-drag-region="false" title="Setup">
                     <Settings size={13} strokeWidth={2.3} />
@@ -1166,6 +1201,8 @@ const App = () => {
                 <PomodoroPanel pomodoro={pomodoro} />
               ) : activeMainTab === "usage" ? (
                 <AgentUsageList usages={agentUsages} onRefresh={refreshAgentUsage} settings={usageSettings} onSettingsChange={updateUsageSettings} />
+              ) : activeMainTab === "runtime" ? (
+                <RuntimePanel monitor={runtimeMonitor} />
               ) : sessions.length === 0 ? (
                 <div className="empty-state">
                   <div className="empty-glyph">◌</div>

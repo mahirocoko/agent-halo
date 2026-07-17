@@ -1,20 +1,57 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer, request } from "node:http";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 
 const PROTOCOL_VERSION = 2;
 const DEFAULT_PORT = 47621;
 const MOD_DIR = join(homedir(), ".letta", "mods");
 const CONFIG_PATH = join(MOD_DIR, "agent-halo.config.json");
 const DEFAULT_LOG_FILE = join(MOD_DIR, "agent-halo.events.ndjson");
+const INGEST_TOKEN_PATH = join(MOD_DIR, "agent-halo.ingest-token");
+const HOST_STARTED_AT_MS = Math.round(Date.now() - process.uptime() * 1_000);
+const HOST_RUNTIME = Object.freeze({
+  sourcePid: process.pid,
+  sourcePpid: Number.isInteger(process.ppid) && process.ppid > 0 ? process.ppid : null,
+  sourceStartedAtMs: HOST_STARTED_AT_MS,
+  sourceKind: "lettaHost",
+});
+
+function readOrCreateIngestToken() {
+  mkdirSync(MOD_DIR, { recursive: true });
+  const read = () => {
+    try {
+      const value = readFileSync(INGEST_TOKEN_PATH, "utf8").trim();
+      return /^[a-f0-9]{64}$/i.test(value) ? value : null;
+    } catch {
+      return null;
+    }
+  };
+  const existing = read();
+  if (existing) return existing;
+  const token = randomBytes(32).toString("hex");
+  try {
+    writeFileSync(INGEST_TOKEN_PATH, `${token}\n`, { encoding: "utf8", flag: "wx", mode: 0o600 });
+    return token;
+  } catch {
+    return read() ?? token;
+  }
+}
+
+function matchesIngestToken(expected, value) {
+  if (typeof value !== "string") return false;
+  const provided = Buffer.from(value);
+  const trusted = Buffer.from(expected);
+  return provided.length === trusted.length && timingSafeEqual(provided, trusted);
+}
 
 function readConfig() {
   const fallback = {
     port: DEFAULT_PORT,
     host: "127.0.0.1",
     logFile: DEFAULT_LOG_FILE,
+    ingestToken: readOrCreateIngestToken(),
     captureTextPreview: false,
     maxTextPreviewLength: 160,
   };
@@ -29,6 +66,7 @@ function readConfig() {
       port: Number.isInteger(parsed.port) ? parsed.port : fallback.port,
       host: typeof parsed.host === "string" ? parsed.host : fallback.host,
       logFile: typeof parsed.logFile === "string" ? parsed.logFile : fallback.logFile,
+      ingestToken: fallback.ingestToken,
       captureTextPreview: parsed.captureTextPreview === true,
       maxTextPreviewLength: Number.isInteger(parsed.maxTextPreviewLength)
         ? parsed.maxTextPreviewLength
@@ -75,6 +113,7 @@ function baseEvent(type, event, ctx, data = {}) {
     cwd,
     model: modelToString(ctx?.model),
     permissionMode: ctx?.permissionMode ?? null,
+    runtime: HOST_RUNTIME,
     data,
   };
 }
@@ -142,6 +181,7 @@ function postBridgeEvent(config, path, payload) {
       headers: {
         "content-type": "application/json",
         "content-length": Buffer.byteLength(body),
+        ...(path === "/ingest" ? { "x-agent-halo-token": config.ingestToken } : {}),
       },
       timeout: 500,
     },
@@ -222,6 +262,7 @@ function createBridge(letta, config) {
     cwd: null,
     model: null,
     permissionMode: null,
+    runtime: null,
   };
   const activeScopesByConversation = new Map();
   const activeScopesByCwd = new Map();
@@ -233,6 +274,7 @@ function createBridge(letta, config) {
   const legacySignalRetentionMs = 5_000;
   const recentScopeRetentionMs = 15_000;
   const hookIdRetentionMs = 60_000;
+  const activeScopeRetentionMs = 30 * 60_000;
   const cleanupIntervalMs = 1_000;
   let nextRecentCleanupAt = 0;
 
@@ -243,6 +285,7 @@ function createBridge(letta, config) {
     cwd: scope.cwd ?? null,
     model: scope.model ?? null,
     permissionMode: scope.permissionMode ?? null,
+    runtime: scope.runtime && typeof scope.runtime === "object" ? { ...scope.runtime } : null,
   });
 
   const removeActiveScope = (conversationId) => {
@@ -274,6 +317,11 @@ function createBridge(letta, config) {
     for (const [hookId, seenAt] of recentHookIds) {
       if (now - seenAt > hookIdRetentionMs) recentHookIds.delete(hookId);
     }
+    const staleActiveConversationIds = [];
+    for (const [conversationId, record] of activeScopesByConversation) {
+      if (now - record.lastActiveAt > activeScopeRetentionMs) staleActiveConversationIds.push(conversationId);
+    }
+    for (const conversationId of staleActiveConversationIds) removeActiveScope(conversationId);
   };
 
   const isTerminalLlmEvent = (payload) => {
@@ -501,9 +549,11 @@ function createBridge(letta, config) {
     if (req.method === "POST" && req.url === "/ingest") {
       const body = await readJsonBody(req);
       if (body && typeof body === "object" && typeof body.type === "string" && typeof body.id === "string") {
-        emitLocal(body);
+        const runtimeTrusted = matchesIngestToken(config.ingestToken, req.headers["x-agent-halo-token"]);
+        const payload = runtimeTrusted ? body : { ...body, runtime: null };
+        emitLocal(payload);
         res.writeHead(202, { "content-type": "application/json; charset=utf-8", ...corsHeaders });
-        res.end(JSON.stringify({ ok: true, type: body.type }));
+        res.end(JSON.stringify({ ok: true, type: body.type, runtimeTrusted }));
         return;
       }
       res.writeHead(400, { "content-type": "application/json; charset=utf-8", ...corsHeaders });
@@ -579,6 +629,7 @@ function createBridge(letta, config) {
       cwd: null,
       model: null,
       permissionMode: null,
+      runtime: HOST_RUNTIME,
       data: {
         port: config.port,
         logFile: config.logFile,

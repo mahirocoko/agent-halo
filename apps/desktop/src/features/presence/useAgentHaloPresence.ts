@@ -97,6 +97,13 @@ const normalizeCapabilities = (value: unknown): IAgentHaloBridgeCapabilities => 
   };
 };
 
+const demoRuntime = (key: string) => ({
+  sourcePid: 41_000 + [...key].reduce((sum, character) => sum + character.charCodeAt(0), 0) % 1_000,
+  sourcePpid: 1,
+  sourceStartedAtMs: Date.now() - 3_600_000,
+  sourceKind: "lettaHost" as const,
+});
+
 const base = (scenario: string, timestamp: string) => ({
   version: 2 as const,
   id: `demo-scenario-${scenario}-${crypto.randomUUID()}`,
@@ -107,6 +114,7 @@ const base = (scenario: string, timestamp: string) => ({
   cwd: "/Users/mahiro/ghq/github.com/mahirocoko/agent-halo",
   model: "gpt-5.6-sol",
   permissionMode: "unrestricted",
+  runtime: demoRuntime(scenario),
 });
 
 const createScenario = (scenario: string): AgentHaloEvent[] => {
@@ -217,7 +225,7 @@ const createScenario = (scenario: string): AgentHaloEvent[] => {
   if (scenario === "multi") {
     const workspace = common.cwd;
     const other = "/Users/mahiro/ghq/github.com/mahirocoko/paoplew";
-    const item = (conversationId: string, cwd: string) => ({ ...common, conversationId, cwd });
+    const item = (conversationId: string, cwd: string) => ({ ...common, conversationId, cwd, runtime: demoRuntime(conversationId) });
     return [
       {
         ...item("local-conv-demo-active", workspace),
@@ -279,7 +287,7 @@ const createScenario = (scenario: string): AgentHaloEvent[] => {
   }
 
   if (scenario === "mixed-working-error") {
-    const item = (conversationId: string) => ({ ...common, conversationId });
+    const item = (conversationId: string) => ({ ...common, conversationId, runtime: demoRuntime(conversationId) });
     return [
       {
         ...item("local-conv-demo-working"),
@@ -391,6 +399,7 @@ const createDemoEvent = (index: number): AgentHaloEvent => {
     cwd: "/Users/mahiro/ghq/github.com/mahirocoko/agent-halo",
     model: "gpt-5.5",
     permissionMode: "unrestricted",
+    runtime: demoRuntime(`stream-${Math.floor(index / 10) % 3}`),
   };
 
   switch (index % 10) {

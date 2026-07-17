@@ -65,6 +65,15 @@ test("main section tabs provide roving keyboard navigation and panel relationshi
   await expect(usageTab).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("tabpanel", { name: "Usage" })).toBeVisible();
 
+  await page.keyboard.press("ArrowRight");
+
+  const runtimeTab = page.getByRole("tab", { name: "Runtime" });
+  await expect(runtimeTab).toBeFocused();
+  await expect(runtimeTab).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tabpanel", { name: "Runtime" })).toBeVisible();
+
+  await usageTab.click();
+
   const codexTab = page.getByRole("tab", { name: "Codex" });
   await codexTab.focus();
   await page.keyboard.press("ArrowDown");

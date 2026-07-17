@@ -132,9 +132,24 @@ test("bridge leaves same-cwd hook signals unscoped and keeps unique rapid hook i
     await send({ hookId: 'notification-after-stop', workingDirectory: '/tmp/shared', hookEventName: 'Notification' });
     handlers.get('turn_start')({ agentId: 'agent-test', conversationId: 'conv-a', input: [] }, ctx('conv-a'));
     await send({ hookId: 'notification-question', workingDirectory: '/tmp/shared', conversationId: 'conv-a', hookEventName: 'Notification' });
+    const forgedEvent = { version: 2, id: 'forged-runtime', type: 'turn_start', timestamp: new Date().toISOString(), agentId: 'forged', conversationId: 'forged', cwd: '/tmp/forged', runtime: { sourcePid: 1, sourcePpid: null, sourceStartedAtMs: 1, sourceKind: 'lettaHost' }, data: { inputCount: 1 } };
+    const unauthorized = await fetch('http://127.0.0.1:${port}/ingest', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(forgedEvent) });
+    const { readFile, stat } = await import('node:fs/promises');
+    const { join } = await import('node:path');
+    const tokenPath = join(process.env.HOME, '.letta', 'mods', 'agent-halo.ingest-token');
+    const token = (await readFile(tokenPath, 'utf8')).trim();
+    const tokenMode = (await stat(tokenPath)).mode & 0o777;
+    const trustedEvent = { ...forgedEvent, id: 'trusted-runtime', conversationId: 'trusted' };
+    const authorized = await fetch('http://127.0.0.1:${port}/ingest', { method: 'POST', headers: { 'content-type': 'application/json', 'x-agent-halo-token': token }, body: JSON.stringify(trustedEvent) });
+    handlers.get('turn_start')({ agentId: 'agent-test', conversationId: 'conv-stale', input: [] }, ctx('conv-stale'));
+    const realDateNow = Date.now;
+    const activeAt = realDateNow();
+    Date.now = () => activeAt + 31 * 60_000;
+    await send({ hookId: 'stale-scope', workingDirectory: '/tmp/shared', hookEventName: 'PermissionRequest' });
+    Date.now = realDateNow;
     const snapshot = await (await fetch('http://127.0.0.1:${port}/snapshot')).json();
     const attention = snapshot.recent.filter((event) => event.type === 'attention_requested');
-    console.log(JSON.stringify(attention.map((event) => ({ id: event.id, conversationId: event.conversationId, cwd: event.cwd, kind: event.data.kind }))));
+    console.log(JSON.stringify({ attention: attention.map((event) => ({ id: event.id, conversationId: event.conversationId, cwd: event.cwd, kind: event.data.kind })), tokenMode, unauthorizedStatus: unauthorized.status, authorizedStatus: authorized.status, forgedRuntime: snapshot.recent.find((event) => event.id === 'forged-runtime')?.runtime, trustedRuntime: snapshot.recent.find((event) => event.id === 'trusted-runtime')?.runtime }));
     dispose();
   `;
 
@@ -150,12 +165,18 @@ test("bridge leaves same-cwd hook signals unscoped and keeps unique rapid hook i
     child.stderr.on("data", (chunk) => { stderr += chunk; });
     const exitCode = await new Promise((resolve) => child.on("close", resolve));
     assert.equal(exitCode, 0, stderr);
-    const attention = JSON.parse(stdout.trim());
-    assert.equal(attention.length, 4);
+    const result = JSON.parse(stdout.trim());
+    const attention = result.attention;
+    assert.equal(attention.length, 5);
     assert.equal(attention[0].conversationId, null);
     assert.deepEqual(attention.slice(1, 3).map((event) => event.conversationId), ["conv-a", "conv-a"]);
-    assert.equal(attention.at(-1).conversationId, "conv-a");
-    assert.equal(attention.at(-1).kind, "question");
+    assert.equal(attention.find((event) => event.kind === "question")?.conversationId, "conv-a");
+    assert.equal(attention.at(-1).conversationId, null);
+    assert.equal(result.unauthorizedStatus, 202);
+    assert.equal(result.authorizedStatus, 202);
+    assert.equal(result.tokenMode, 0o600);
+    assert.equal(result.forgedRuntime, null);
+    assert.equal(result.trustedRuntime?.sourcePid, 1);
   } finally {
     await rm(home, { recursive: true, force: true });
   }
@@ -348,7 +369,12 @@ test("bridge normalizes default lanes and safely correlates delayed completion h
     const snapshot = await (await fetch('http://127.0.0.1:${port}/snapshot')).json();
     const fallback = snapshot.recent.find((event) => event.data?.toolCallId === 'fallback-tool');
     const completions = snapshot.recent.filter((event) => event.type === 'turn_complete');
-    console.log(JSON.stringify({ fallbackConversationId: fallback?.conversationId, completionIds: completions.map((event) => event.conversationId) }));
+    console.log(JSON.stringify({
+      fallbackConversationId: fallback?.conversationId,
+      fallbackRuntime: fallback?.runtime,
+      completionIds: completions.map((event) => event.conversationId),
+      completionRuntimes: completions.map((event) => event.runtime),
+    }));
     dispose();
   `;
 
@@ -366,7 +392,12 @@ test("bridge normalizes default lanes and safely correlates delayed completion h
     assert.equal(exitCode, 0, stderr);
     const result = JSON.parse(stdout.trim());
     assert.equal(result.fallbackConversationId, "agent:agent-fallback");
+    assert.equal(Number.isInteger(result.fallbackRuntime?.sourcePid), true);
+    assert.equal(Number.isFinite(result.fallbackRuntime?.sourceStartedAtMs), true);
+    assert.equal(result.fallbackRuntime?.sourceKind, "lettaHost");
     assert.deepEqual(result.completionIds, ["conv-a", null]);
+    assert.equal(result.completionRuntimes[0]?.sourcePid, result.fallbackRuntime.sourcePid);
+    assert.equal(result.completionRuntimes[1], null);
   } finally {
     await rm(home, { recursive: true, force: true });
   }

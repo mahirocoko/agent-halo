@@ -46,6 +46,8 @@ Letta Code has richer runtime state than Claude/Codex hook-only flows: persisten
 
 Raw events are normalized into a UI-facing presence model in `packages/protocol/src/presence.ts`. This keeps desktop, terminal, and future menu-bar surfaces aligned on state transitions. See `docs/presence-model.md`.
 
+Optional protocol-v2 runtime identity lets the native desktop map one conversation to its originating Letta host PID. Runtime samples remain a desktop-local read-only concern: the mod and bridge carry PID identity, while macOS `libproc` sampling, CPU deltas, process-tree aggregation, and pressure labels stay outside the event log. See `docs/runtime-monitor.md`.
+
 
 ## Desktop renderer
 
