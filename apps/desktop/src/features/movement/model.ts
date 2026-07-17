@@ -1,5 +1,5 @@
 export const MOVEMENT_TARGET_REPS = 10 as const;
-export const SHOULDER_TARGET_DROP = 0.27;
+export const SHOULDER_TARGET_Y = 0.86;
 
 const CALIBRATION_SAMPLES = 7;
 const BOTTOM_PROGRESS = 0.9;
@@ -46,7 +46,7 @@ export class ShoulderSquatCounter {
 
   get count(): number { return this.reps; }
   get shoulderBaselineY(): number | null { return this.standingShoulderY; }
-  get targetLineY(): number | null { return this.standingShoulderY === null ? null : Math.min(0.88, this.standingShoulderY + SHOULDER_TARGET_DROP); }
+  get targetLineY(): number { return SHOULDER_TARGET_Y; }
   get depthProgress(): number { return this.currentProgress; }
 
   get guidance(): string {
@@ -73,8 +73,7 @@ export class ShoulderSquatCounter {
       return { type: "none" };
     }
 
-    const target = this.targetLineY ?? this.standingShoulderY + SHOULDER_TARGET_DROP;
-    this.currentProgress = Math.max(0, Math.min(1, (measurement.shoulderY - this.standingShoulderY) / Math.max(0.12, target - this.standingShoulderY)));
+    this.currentProgress = Math.max(0, Math.min(1, (measurement.shoulderY - this.standingShoulderY) / Math.max(0.05, SHOULDER_TARGET_Y - this.standingShoulderY)));
     if (this.phase === "ready" && this.currentProgress < 0.12) {
       this.standingShoulderY = this.standingShoulderY * 0.96 + measurement.shoulderY * 0.04;
     }

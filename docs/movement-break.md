@@ -28,7 +28,7 @@ The packaged app must include a truthful `NSCameraUsageDescription`. Browser dem
 
 ## Pose and count contract
 
-Phase 1 deliberately uses only the visible midpoint of the two shoulders. After a short standing calibration, a white line follows the shoulders and a green line marks the required drop. The right-side bar reports white-to-green progress. It does not judge knee form or provide medical, injury-prevention, or form-quality advice.
+Phase 1 deliberately uses only the visible midpoint of the two shoulders. After a short standing calibration, a white line follows the shoulders while the green target stays fixed at 86% of the camera frame; the user adjusts camera framing rather than letting the target drift. The right-side bar reports white-to-green progress. It does not judge knee form or provide medical, injury-prevention, or form-quality advice.
 
 A repetition counts only after:
 

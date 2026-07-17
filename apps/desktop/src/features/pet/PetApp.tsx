@@ -34,7 +34,7 @@ const INITIAL_MOVEMENT_SNAPSHOT: IMovementPoseSnapshot = {
   permission: "notDetermined",
   sessionId: null,
   shoulderLineY: null,
-  targetLineY: null,
+  targetLineY: 0.86,
   depthProgress: 0,
   error: null,
 };
@@ -181,7 +181,7 @@ export const PetApp = () => {
       setExpanded(false);
       setBusy(false);
       if (SEARCH_PARAMS.has("demoMovementCompleted")) {
-        setMovementSnapshot({ ...INITIAL_MOVEMENT_SNAPSHOT, status: "completed", repCount: 10, sessionId: `${summon.id}:${movementAttempt}`, guidance: "10 squats complete" });
+        setMovementSnapshot({ ...INITIAL_MOVEMENT_SNAPSHOT, status: "completed", repCount: 10, sessionId: `${summon.id}:${movementAttempt}`, guidance: "10 squats complete", depthProgress: 1 });
       } else if (SEARCH_PARAMS.has("demoCameraOff")) {
         setMovementSnapshot({ ...INITIAL_MOVEMENT_SNAPSHOT, status: "tracking", permission: "authorized", sessionId: `${summon.id}:${movementAttempt}`, guidance: "Stand tall to arm the counter" });
       }
@@ -225,7 +225,7 @@ export const PetApp = () => {
   useEffect(() => {
     if (!movementActive || movementSnapshot.status !== "completed" || movementCompletionSubmittedRef.current) return undefined;
     movementCompletionSubmittedRef.current = true;
-    const timer = window.setTimeout(() => void submit("movement-complete"), 1_200);
+    const timer = window.setTimeout(() => void submit("movement-complete"), 1_600);
     return () => window.clearTimeout(timer);
   }, [movementActive, movementSnapshot.status]);
 

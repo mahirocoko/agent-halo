@@ -182,6 +182,8 @@ test("native Movement Break queues one completion result without mounting Pomodo
   await expect.poll(() => page.evaluate(() => (window as typeof window & { __movementNativeCalls: Array<{ command: string }> }).__movementNativeCalls.some((call) => call.command === "completion_pet_state"))).toBe(true);
   await page.getByRole("button", { name: "Focus complete. Open break actions" }).click();
   await page.getByRole("button", { name: "Start 10 Squats movement break" }).click();
+  await expect(page.getByRole("img", { name: "Celebration" })).toBeVisible();
+  await expect(page.locator(".movement-shoulder-line, .movement-target-line")).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => (window as typeof window & { __movementNativeCalls: Array<{ command: string; args?: Record<string, unknown> }> }).__movementNativeCalls.some((call) => call.command === "set_completion_pet_movement" && call.args?.active === true && call.args?.summonId === "movement-focus"))).toBe(true);
   await expect.poll(() => page.evaluate(() => (window as typeof window & { __movementNativeCalls: Array<{ command: string; args?: Record<string, unknown> }> }).__movementNativeCalls.filter((call) => call.command === "submit_completion_pet_action" && call.args?.action === "movement-complete").length)).toBe(1);
   expect(await page.evaluate(() => window.localStorage.getItem("agent-halo.pomodoro"))).toBeNull();
@@ -212,7 +214,7 @@ test("Movement attempt remains cancellable and clears its native attempt token",
   await expect.poll(() => page.evaluate(() => (window as typeof window & { __movementCancelCalls: Array<{ command: string; args?: Record<string, unknown> }> }).__movementCancelCalls.filter((call) => call.command === "set_completion_pet_movement" && call.args?.active === false && call.args?.summonId === "movement-permission").length)).toBe(1);
 });
 
-test("authorized Movement Break shows a live preview with body guides and stops its stream", async ({ page }) => {
+test("authorized Movement Break shows a live preview with fixed target and stops its stream", async ({ page }) => {
   await page.addInitScript(() => {
     const controlled = window as typeof window & { __previewStops: number; __TAURI_INTERNALS__: unknown };
     controlled.__previewStops = 0;
@@ -242,6 +244,10 @@ test("authorized Movement Break shows a live preview with body guides and stops 
   await expect(page.locator('video[aria-label="Live mirrored Movement Break camera"]')).toBeVisible();
   await expect(page.locator(".movement-shoulder-line")).toHaveCount(1);
   await expect(page.locator(".movement-target-line")).toHaveCount(1);
+  await expect(page.locator(".movement-target-line")).toHaveAttribute("style", "top: 86%;");
+  await page.locator(".movement-shoulder-line").evaluate((line) => { line.style.top = "70%"; });
+  await expect(page.locator(".movement-shoulder-line")).toHaveAttribute("style", "top: 70%;");
+  await expect(page.locator(".movement-target-line")).toHaveAttribute("style", "top: 86%;");
   await expect(page.getByText("48% to target")).toBeVisible();
   await page.getByRole("button", { name: "Close movement break" }).click();
   await expect.poll(() => page.evaluate(() => (window as typeof window & { __previewStops: number }).__previewStops)).toBe(1);
@@ -253,12 +259,13 @@ test("shoulder-line counter counts white-to-green then standing traversal", asyn
     const { ShoulderSquatCounter } = await import("/src/features/movement/model.ts");
     const counter = new ShoulderSquatCounter();
     const standing = { shoulderY: 0.3, confidence: 0.95 };
-    const bottom = { shoulderY: 0.57, confidence: 0.95 };
+    const bottom = { shoulderY: 0.86, confidence: 0.95 };
+    const targetBeforeCalibration = counter.targetLineY;
     const events = [0, 80, 160, 240, 320, 400, 480].map((time) => counter.update(time, standing));
     events.push(counter.update(600, bottom), counter.update(800, bottom), counter.update(1_000, standing), counter.update(1_200, standing));
-    return { count: counter.count, final: events.at(-1)?.type };
+    return { count: counter.count, final: events.at(-1)?.type, targetBeforeCalibration, targetAfterMovement: counter.targetLineY };
   });
-  expect(result).toEqual({ count: 1, final: "rep" });
+  expect(result).toEqual({ count: 1, final: "rep", targetBeforeCalibration: 0.86, targetAfterMovement: 0.86 });
 });
 
 test("bundled pose runtime initializes without a remote model request", async ({ page }) => {

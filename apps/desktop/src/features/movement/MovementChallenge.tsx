@@ -1,6 +1,6 @@
-import { Camera, CameraOff, Check, Dumbbell, Play, RotateCcw, X } from "lucide-react";
+import { Camera, CameraOff, Dumbbell, Play, RotateCcw, X } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { measureShoulderLine, MOVEMENT_TARGET_REPS, ShoulderSquatCounter } from "./model";
+import { measureShoulderLine, MOVEMENT_TARGET_REPS, SHOULDER_TARGET_Y, ShoulderSquatCounter } from "./model";
 import { createLocalPoseLandmarker } from "./runtime";
 import type { IMovementPoseSnapshot } from "./types";
 import "../../styles/movement.css";
@@ -82,7 +82,7 @@ export const MovementChallenge = ({ busy, cameraPreviewEnabled, demoPoseEnabled,
         if (disposed) return;
         setPreviewStatus("active");
         if (demoPoseEnabled) {
-          onSnapshot({ ...snapshot, status: "tracking", permission: "authorized", guidance: "Squat down · move white to green", shoulderLineY: 0.31, targetLineY: 0.58, depthProgress: 0.48 });
+          onSnapshot({ ...snapshot, status: "tracking", permission: "authorized", guidance: "Squat down · move white to green", shoulderLineY: 0.31, targetLineY: SHOULDER_TARGET_Y, depthProgress: 0.48 });
           return;
         }
         onSnapshot({ ...snapshot, status: "requesting", permission: "authorized", guidance: "Loading local shoulder tracker…", error: null });
@@ -112,7 +112,7 @@ export const MovementChallenge = ({ busy, cameraPreviewEnabled, demoPoseEnabled,
                 sessionId: snapshot.sessionId,
                 shoulderLineY: measurement?.shoulderY ?? null,
                 targetLineY: counter.targetLineY,
-                depthProgress: counter.depthProgress,
+                depthProgress: completed ? 1 : counter.depthProgress,
                 error: null,
               });
               if (completed && !completionSent) {
@@ -167,17 +167,22 @@ export const MovementChallenge = ({ busy, cameraPreviewEnabled, demoPoseEnabled,
       <div className="movement-body">
         <div className="movement-pose-stage" aria-label={cameraActive ? "Live shoulder tracking camera" : "Movement camera status"}>
           {cameraPreviewEnabled ? <video ref={videoRef} className="movement-camera-preview" autoPlay muted playsInline aria-label="Live mirrored Movement Break camera" /> : null}
-          {shoulderLineY === null ? null : <span className="movement-shoulder-line" style={{ top: `${shoulderLineY}%` }} aria-hidden="true" />}
-          {targetLineY === null ? null : <span className="movement-target-line" style={{ top: `${targetLineY}%` }} aria-hidden="true" />}
+          {!complete && shoulderLineY !== null ? <span className="movement-shoulder-line" style={{ top: `${shoulderLineY}%` }} aria-hidden="true" /> : null}
+          {!complete && targetLineY !== null ? <span className="movement-target-line" style={{ top: `${targetLineY}%` }} aria-hidden="true" /> : null}
           {complete ? (
-            <span className="movement-stage-icon is-complete"><Check size={42} strokeWidth={2.4} /></span>
+            <div className="movement-success">
+              <span className="movement-success-spark is-left" aria-hidden="true">✨</span>
+              <span className="movement-success-emoji" role="img" aria-label="Celebration">🎉</span>
+              <span className="movement-success-spark is-right" aria-hidden="true">✨</span>
+              <span>Movement complete</span>
+            </div>
           ) : terminalFailure ? (
             <span className="movement-stage-icon"><CameraOff size={38} strokeWidth={1.8} /></span>
           ) : previewStatus !== "active" ? (
             <span className="movement-stage-icon"><Camera size={38} strokeWidth={1.8} /></span>
           ) : null}
-          <span className="movement-preview-state">{previewStatus === "active" ? "LIVE · shoulder" : previewStatus === "unavailable" ? "Preview unavailable" : "Preparing preview"}</span>
-          <span className="movement-privacy">Live view only · no video or audio saved</span>
+          {!complete ? <span className="movement-preview-state">{previewStatus === "active" ? "LIVE · shoulder" : previewStatus === "unavailable" ? "Preview unavailable" : "Preparing preview"}</span> : null}
+          {!complete ? <span className="movement-privacy">Live view only · no video or audio saved</span> : null}
         </div>
 
         <div className="movement-progress-copy">
@@ -185,7 +190,7 @@ export const MovementChallenge = ({ busy, cameraPreviewEnabled, demoPoseEnabled,
           <div className="movement-depth-progress" role="progressbar" aria-label="Squat depth" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(snapshot.depthProgress * 100)}>
             <span style={{ width: `${Math.round(snapshot.depthProgress * 100)}%` }} />
           </div>
-          <span className="movement-depth-label">{Math.round(snapshot.depthProgress * 100)}% to target</span>
+          <span className="movement-depth-label">{complete ? "Complete" : `${Math.round(snapshot.depthProgress * 100)}% to target`}</span>
           <span className="movement-guidance">{snapshot.guidance}</span>
           {snapshot.error ? <span className="movement-error">{snapshot.error}</span> : null}
         </div>
