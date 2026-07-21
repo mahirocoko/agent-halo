@@ -232,7 +232,7 @@ scripts/install-desktop.mjs     Desktop build/install helper
 
 ## Design direction
 
-Agent Halo should feel like a quiet companion, not a generic AI dashboard. The interface follows a dark hardware-notch direction with compact workspace rows, hairline dividers, restrained orange/green state accents, and small Pet activity. Setup exposes the original companion roster as one global persisted Pet choice; Scorpion is the default and neither Pet identity nor color is randomized per project.
+Agent Halo should feel like a quiet companion, not a generic AI dashboard. The interface follows a dark hardware-notch direction with compact workspace rows, hairline dividers, restrained orange/green state accents, and small Pet activity. Setup exposes Ember Starling plus the original companion roster as one global persisted Pet choice. Fresh installs default to Ember Starling, valid existing selections remain intact, and neither Pet identity nor color is randomized per project.
 
 Natural Focus completion can summon a separate floating Pet without opening or focusing the full notch panel. The Pet owns presentation only; the main renderer remains the sole Pomodoro owner. If Movement Break is enabled, its camera surface follows the same compact black/green language with a white shoulder line, fixed green target, and short success celebration. See [`docs/pet.md`](docs/pet.md) and [`docs/movement-break.md`](docs/movement-break.md).
 

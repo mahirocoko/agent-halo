@@ -17,6 +17,8 @@ const PET_COLLAPSED_WIDTH: f64 = 116.0;
 const PET_COLLAPSED_HEIGHT: f64 = 88.0;
 const PET_EXPANDED_WIDTH: f64 = 260.0;
 const PET_EXPANDED_HEIGHT: f64 = 230.0;
+const EMBER_PREVIEW_EXPANDED_WIDTH: f64 = 260.0;
+const EMBER_PREVIEW_EXPANDED_HEIGHT: f64 = 270.0;
 const PET_MOVEMENT_WIDTH: f64 = 600.0;
 const PET_MOVEMENT_HEIGHT: f64 = 420.0;
 const PET_DEFAULT_INSET: f64 = 20.0;
@@ -29,6 +31,13 @@ enum CompletionPetSurfaceMode {
     Movement = 2,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum EmberPreviewSize {
+    Small,
+    Medium,
+    Large,
+}
+
 impl CompletionPetSurfaceMode {
     fn from_raw(value: u8) -> Self {
         match value {
@@ -38,16 +47,28 @@ impl CompletionPetSurfaceMode {
         }
     }
 
-    fn dimensions(self) -> (f64, f64) {
+    fn dimensions(self, ember_preview_size: Option<EmberPreviewSize>) -> (f64, f64) {
         match self {
+            Self::Collapsed if ember_preview_size == Some(EmberPreviewSize::Small) => (56.0, 66.0),
+            Self::Collapsed if ember_preview_size == Some(EmberPreviewSize::Medium) => (78.0, 93.0),
+            Self::Collapsed if ember_preview_size == Some(EmberPreviewSize::Large) => {
+                (100.0, 120.0)
+            }
+            Self::Expanded if ember_preview_size.is_some() => {
+                (EMBER_PREVIEW_EXPANDED_WIDTH, EMBER_PREVIEW_EXPANDED_HEIGHT)
+            }
             Self::Collapsed => (PET_COLLAPSED_WIDTH, PET_COLLAPSED_HEIGHT),
             Self::Expanded => (PET_EXPANDED_WIDTH, PET_EXPANDED_HEIGHT),
             Self::Movement => (PET_MOVEMENT_WIDTH, PET_MOVEMENT_HEIGHT),
         }
     }
 
-    fn anchor_offsets(self) -> (f64, f64) {
+    fn anchor_offsets(self, ember_preview_size: Option<EmberPreviewSize>) -> (f64, f64) {
         match self {
+            Self::Collapsed if ember_preview_size == Some(EmberPreviewSize::Small) => (28.0, 33.0),
+            Self::Collapsed if ember_preview_size == Some(EmberPreviewSize::Medium) => (39.0, 46.5),
+            Self::Collapsed if ember_preview_size == Some(EmberPreviewSize::Large) => (50.0, 60.0),
+            Self::Expanded if ember_preview_size.is_some() => (130.0, 120.0),
             Self::Collapsed => (58.0, 44.0),
             Self::Expanded => (130.0, 114.0),
             Self::Movement => (PET_MOVEMENT_WIDTH / 2.0, PET_MOVEMENT_HEIGHT / 2.0),
@@ -71,6 +92,7 @@ const PET_NAMES: &[&str] = &[
     "giraffe",
     "scorpion",
     "squid",
+    "ember-starling",
 ];
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -80,6 +102,8 @@ pub struct CompletionPetSummon {
     id: String,
     pet: String,
     pet_size: String,
+    #[serde(default)]
+    visual: Option<String>,
     preview: bool,
     #[serde(default)]
     movement_break_enabled: bool,
@@ -101,6 +125,19 @@ impl CompletionPetSummon {
         }
         if !matches!(self.pet_size.as_str(), "small" | "medium" | "large") {
             return Err("Completion Pet size is invalid".to_string());
+        }
+        if self
+            .visual
+            .as_deref()
+            .is_some_and(|visual| visual != "ember-starling")
+        {
+            return Err("Completion Pet visual is invalid".to_string());
+        }
+        if self.visual.as_deref() == Some("ember-starling") && self.pet != "ember-starling" {
+            return Err("Ember Starling visual requires the matching global Pet".to_string());
+        }
+        if self.pet == "ember-starling" && self.visual.as_deref() != Some("ember-starling") {
+            return Err("Ember Starling requires its Completion Pet visual".to_string());
         }
         if self.preview {
             if self.title != "Pet preview"
@@ -183,7 +220,25 @@ impl CompletionPetWindowState {
         }
     }
 
+    fn ember_preview_size(&self) -> Option<EmberPreviewSize> {
+        self.summon
+            .lock()
+            .ok()
+            .and_then(|summon| match summon.as_ref() {
+                Some(value) if value.visual.as_deref() == Some("ember-starling") => {
+                    Some(match value.pet_size.as_str() {
+                        "small" => EmberPreviewSize::Small,
+                        "medium" => EmberPreviewSize::Medium,
+                        _ => EmberPreviewSize::Large,
+                    })
+                }
+                _ => None,
+            })
+    }
+
     fn begin_operation(&self) -> u64 {
+        self.persist_user_move.store(false, Ordering::SeqCst);
+        self.move_revision.fetch_add(1, Ordering::SeqCst);
         self.revision.fetch_add(1, Ordering::SeqCst) + 1
     }
 
@@ -258,6 +313,10 @@ impl CompletionPetWindowState {
         }
         self.persist_user_move.store(false, Ordering::SeqCst);
         true
+    }
+
+    fn is_move_revision_current(&self, revision: u64) -> bool {
+        self.move_revision.load(Ordering::SeqCst) == revision
     }
 }
 
@@ -389,8 +448,8 @@ mod platform {
             return false;
         };
         let visible = screen.visibleFrame();
-        let width = PET_COLLAPSED_WIDTH;
-        let height = PET_COLLAPSED_HEIGHT;
+        let (width, height) =
+            CompletionPetSurfaceMode::Collapsed.dimensions(state.ember_preview_size());
         let available_x = (visible.size.width - width).max(0.0);
         let available_y = (visible.size.height - height).max(0.0);
         let (x, y) = if let Some(saved) = saved.as_ref() {
@@ -430,6 +489,7 @@ mod platform {
         window: &WebviewWindow,
         target_mode: CompletionPetSurfaceMode,
         current_mode: CompletionPetSurfaceMode,
+        ember_preview_size: Option<EmberPreviewSize>,
     ) -> bool {
         let Some(mtm) = MainThreadMarker::new() else {
             return false;
@@ -446,11 +506,12 @@ mod platform {
                 return false;
             };
             let visible = screen.visibleFrame();
-            let (width, height) = target_mode.dimensions();
-            let (current_center_x, current_center_y) = current_mode.anchor_offsets();
+            let (width, height) = target_mode.dimensions(ember_preview_size);
+            let (current_center_x, current_center_y) =
+                current_mode.anchor_offsets(ember_preview_size);
             let pet_x = frame.origin.x + current_center_x;
             let pet_y = frame.origin.y + current_center_y;
-            let (target_center_x, target_center_y) = target_mode.anchor_offsets();
+            let (target_center_x, target_center_y) = target_mode.anchor_offsets(ember_preview_size);
             let x = clamp(
                 pet_x - target_center_x,
                 visible.origin.x + PET_VISIBLE_MARGIN,
@@ -470,7 +531,10 @@ mod platform {
         true
     }
 
-    fn capture_position_on_main_thread(window: &WebviewWindow) -> Option<PetPositionPreference> {
+    fn capture_position_on_main_thread(
+        window: &WebviewWindow,
+        ember_preview_size: Option<EmberPreviewSize>,
+    ) -> Option<PetPositionPreference> {
         let mtm = MainThreadMarker::new()?;
         let pointer = window.ns_window().ok()?;
         let screens = NSScreen::screens(mtm);
@@ -481,18 +545,22 @@ mod platform {
             let screen = screen_for_frame(&screens, frame)?;
             let visible = screen.visibleFrame();
             let display = appkit_display_option(&screen, None)?;
-            let current_mode = if frame.size.width > PET_EXPANDED_WIDTH + 1.0 {
+            let (collapsed_width, collapsed_height) =
+                CompletionPetSurfaceMode::Collapsed.dimensions(ember_preview_size);
+            let (expanded_width, _) =
+                CompletionPetSurfaceMode::Expanded.dimensions(ember_preview_size);
+            let current_mode = if frame.size.width > expanded_width + 1.0 {
                 CompletionPetSurfaceMode::Movement
-            } else if frame.size.width > PET_COLLAPSED_WIDTH + 1.0 {
+            } else if frame.size.width > collapsed_width + 1.0 {
                 CompletionPetSurfaceMode::Expanded
             } else {
                 CompletionPetSurfaceMode::Collapsed
             };
-            let (center_x, center_y) = current_mode.anchor_offsets();
-            let anchor_x = frame.origin.x + center_x - PET_COLLAPSED_WIDTH / 2.0;
-            let anchor_y = frame.origin.y + center_y - PET_COLLAPSED_HEIGHT / 2.0;
-            let available_x = (visible.size.width - PET_COLLAPSED_WIDTH).max(1.0);
-            let available_y = (visible.size.height - PET_COLLAPSED_HEIGHT).max(1.0);
+            let (center_x, center_y) = current_mode.anchor_offsets(ember_preview_size);
+            let anchor_x = frame.origin.x + center_x - collapsed_width / 2.0;
+            let anchor_y = frame.origin.y + center_y - collapsed_height / 2.0;
+            let available_x = (visible.size.width - collapsed_width).max(1.0);
+            let available_y = (visible.size.height - collapsed_height).max(1.0);
             Some(PetPositionPreference {
                 schema_version: 2,
                 display_id: display.id,
@@ -531,10 +599,12 @@ mod platform {
 
     pub fn resize(
         window: &WebviewWindow,
+        state: &CompletionPetWindowState,
         target_mode: CompletionPetSurfaceMode,
         current_mode: CompletionPetSurfaceMode,
     ) -> Result<(), String> {
-        if resize_on_main_thread(window, target_mode, current_mode) {
+        let ember_preview_size = state.ember_preview_size();
+        if resize_on_main_thread(window, target_mode, current_mode, ember_preview_size) {
             return Ok(());
         }
         let (sender, receiver) = mpsc::channel();
@@ -545,6 +615,7 @@ mod platform {
                     &scheduled_window,
                     target_mode,
                     current_mode,
+                    ember_preview_size,
                 ));
             })
             .map_err(|error| format!("Could not schedule Completion Pet resize: {error}"))?;
@@ -558,15 +629,22 @@ mod platform {
         }
     }
 
-    pub fn capture_position(window: &WebviewWindow) -> Option<PetPositionPreference> {
-        if let Some(position) = capture_position_on_main_thread(window) {
+    pub fn capture_position(
+        window: &WebviewWindow,
+        state: &CompletionPetWindowState,
+    ) -> Option<PetPositionPreference> {
+        let ember_preview_size = state.ember_preview_size();
+        if let Some(position) = capture_position_on_main_thread(window, ember_preview_size) {
             return Some(position);
         }
         let (sender, receiver) = mpsc::channel();
         let scheduled_window = window.clone();
         window
             .run_on_main_thread(move || {
-                let _ = sender.send(capture_position_on_main_thread(&scheduled_window));
+                let _ = sender.send(capture_position_on_main_thread(
+                    &scheduled_window,
+                    ember_preview_size,
+                ));
             })
             .ok()?;
         receiver.recv_timeout(Duration::from_millis(500)).ok()?
@@ -581,23 +659,22 @@ mod platform {
 
     pub fn position_for_show(
         window: &WebviewWindow,
-        _state: &CompletionPetWindowState,
+        state: &CompletionPetWindowState,
     ) -> Result<(), String> {
+        let (width, height) =
+            CompletionPetSurfaceMode::Collapsed.dimensions(state.ember_preview_size());
         window
-            .set_size(Size::Logical(LogicalSize::new(
-                PET_COLLAPSED_WIDTH,
-                PET_COLLAPSED_HEIGHT,
-            )))
+            .set_size(Size::Logical(LogicalSize::new(width, height)))
             .map_err(|error| format!("Could not size Completion Pet: {error}"))?;
         if let Some(monitor) = window.primary_monitor().ok().flatten() {
             let scale = monitor.scale_factor();
             let x = f64::from(monitor.position().x) / scale
                 + f64::from(monitor.size().width) / scale
-                - PET_COLLAPSED_WIDTH
+                - width
                 - PET_DEFAULT_INSET;
             let y = f64::from(monitor.position().y) / scale
                 + f64::from(monitor.size().height) / scale
-                - PET_COLLAPSED_HEIGHT
+                - height
                 - PET_DEFAULT_INSET;
             window
                 .set_position(Position::Logical(LogicalPosition::new(x, y)))
@@ -608,17 +685,21 @@ mod platform {
 
     pub fn resize(
         window: &WebviewWindow,
+        state: &CompletionPetWindowState,
         target_mode: CompletionPetSurfaceMode,
         _current_mode: CompletionPetSurfaceMode,
     ) -> Result<(), String> {
-        let (width, height) = target_mode.dimensions();
+        let (width, height) = target_mode.dimensions(state.ember_preview_size());
         window
             .set_size(Size::Logical(LogicalSize::new(width, height)))
             .map_err(|error| format!("Could not resize Completion Pet: {error}"))?;
         Ok(())
     }
 
-    pub fn capture_position(_window: &WebviewWindow) -> Option<PetPositionPreference> {
+    pub fn capture_position(
+        _window: &WebviewWindow,
+        _state: &CompletionPetWindowState,
+    ) -> Option<PetPositionPreference> {
         None
     }
 }
@@ -705,7 +786,7 @@ pub fn set_completion_pet_expanded(
     let result = if target == CompletionPetSurfaceMode::Collapsed {
         platform::position_for_show(&window, &state)
     } else {
-        platform::resize(&window, target, previous)
+        platform::resize(&window, &state, target, previous)
     };
     if let Err(error) = result {
         return Err(error);
@@ -732,7 +813,7 @@ pub fn set_completion_pet_movement(
         CompletionPetSurfaceMode::Expanded
     };
     let previous = state.surface_mode();
-    if let Err(error) = platform::resize(&window, target, previous) {
+    if let Err(error) = platform::resize(&window, &state, target, previous) {
         return Err(error);
     }
     state.set_surface_mode(target);
@@ -844,14 +925,18 @@ pub fn take_completion_pet_action(
     Ok(pending.take())
 }
 
-pub fn persist_pet_position(app: &AppHandle) -> Result<(), String> {
+pub fn persist_pet_position(app: &AppHandle, move_revision: u64) -> Result<(), String> {
     let Some(window) = app.get_webview_window("pet") else {
         return Ok(());
     };
-    let Some(position) = platform::capture_position(&window) else {
+    let state = app.state::<CompletionPetWindowState>();
+    let _surface_guard = state.lock_surface()?;
+    if !state.is_move_revision_current(move_revision) {
+        return Ok(());
+    }
+    let Some(position) = platform::capture_position(&window, &state) else {
         return Ok(());
     };
-    let state = app.state::<CompletionPetWindowState>();
     state.set_position(Some(position.clone()));
     write_pet_position(app, &position)
 }
@@ -868,7 +953,7 @@ pub fn schedule_pet_position_persist(app: &AppHandle) {
         if !state.finish_user_move(revision) {
             return;
         }
-        let _ = persist_pet_position(&scheduled_app);
+        let _ = persist_pet_position(&scheduled_app, revision);
     });
 }
 
@@ -902,12 +987,57 @@ mod tests {
     use super::*;
 
     #[test]
+    fn ember_preview_uses_isolated_geometry_for_every_size() {
+        assert_eq!(
+            CompletionPetSurfaceMode::Collapsed.dimensions(None),
+            (116.0, 88.0)
+        );
+        assert_eq!(
+            CompletionPetSurfaceMode::Expanded.dimensions(None),
+            (260.0, 230.0)
+        );
+        assert_eq!(
+            CompletionPetSurfaceMode::Collapsed.dimensions(Some(EmberPreviewSize::Small)),
+            (56.0, 66.0)
+        );
+        assert_eq!(
+            CompletionPetSurfaceMode::Collapsed.dimensions(Some(EmberPreviewSize::Medium)),
+            (78.0, 93.0)
+        );
+        assert_eq!(
+            CompletionPetSurfaceMode::Collapsed.dimensions(Some(EmberPreviewSize::Large)),
+            (100.0, 120.0)
+        );
+        assert_eq!(
+            CompletionPetSurfaceMode::Expanded.dimensions(Some(EmberPreviewSize::Small)),
+            (260.0, 270.0)
+        );
+        assert_eq!(
+            CompletionPetSurfaceMode::Collapsed.anchor_offsets(Some(EmberPreviewSize::Small)),
+            (28.0, 33.0)
+        );
+        assert_eq!(
+            CompletionPetSurfaceMode::Collapsed.anchor_offsets(Some(EmberPreviewSize::Medium)),
+            (39.0, 46.5)
+        );
+        assert_eq!(
+            CompletionPetSurfaceMode::Collapsed.anchor_offsets(Some(EmberPreviewSize::Large)),
+            (50.0, 60.0)
+        );
+        assert_eq!(
+            CompletionPetSurfaceMode::Expanded.anchor_offsets(Some(EmberPreviewSize::Large)),
+            (130.0, 120.0)
+        );
+    }
+
+    #[test]
     fn summon_validation_accepts_only_known_pet_and_break_copy() {
         let valid = CompletionPetSummon {
             schema_version: 1,
             id: "focus-1".to_string(),
             pet: "scorpion".to_string(),
             pet_size: "large".to_string(),
+            visual: None,
             preview: false,
             movement_break_enabled: false,
             next_phase: "short-break".to_string(),
@@ -934,6 +1064,45 @@ mod tests {
         .validate()
         .is_ok());
         assert!(CompletionPetSummon {
+            pet: "ember-starling".to_string(),
+            visual: Some("ember-starling".to_string()),
+            ..valid.clone()
+        }
+        .validate()
+        .is_ok());
+        assert!(CompletionPetSummon {
+            pet: "ember-starling".to_string(),
+            visual: Some("ember-starling".to_string()),
+            preview: true,
+            title: "Pet preview".to_string(),
+            action_label: String::new(),
+            ..valid.clone()
+        }
+        .validate()
+        .is_ok());
+        assert!(CompletionPetSummon {
+            visual: Some("ember-starling".to_string()),
+            ..valid.clone()
+        }
+        .validate()
+        .is_err());
+        assert!(CompletionPetSummon {
+            pet: "ember-starling".to_string(),
+            visual: None,
+            ..valid.clone()
+        }
+        .validate()
+        .is_err());
+        assert!(CompletionPetSummon {
+            visual: Some("unknown".to_string()),
+            preview: true,
+            title: "Pet preview".to_string(),
+            action_label: String::new(),
+            ..valid.clone()
+        }
+        .validate()
+        .is_err());
+        assert!(CompletionPetSummon {
             preview: true,
             movement_break_enabled: true,
             title: "Pet preview".to_string(),
@@ -945,6 +1114,25 @@ mod tests {
     }
 
     #[test]
+    fn a_new_surface_operation_cancels_pending_drag_persistence() {
+        let state = CompletionPetWindowState::default();
+        let drag_revision = state.begin_user_drag();
+        state.begin_operation();
+        assert!(!state.finish_user_move(drag_revision));
+        assert!(state.schedule_user_move().is_none());
+    }
+
+    #[test]
+    fn a_surface_operation_after_debounce_still_invalidates_drag_capture() {
+        let state = CompletionPetWindowState::default();
+        state.begin_user_drag();
+        let scheduled_revision = state.schedule_user_move().expect("drag should schedule");
+        assert!(state.finish_user_move(scheduled_revision));
+        state.begin_operation();
+        assert!(!state.is_move_revision_current(scheduled_revision));
+    }
+
+    #[test]
     fn movement_session_must_match_the_active_enabled_summon() {
         let state = CompletionPetWindowState::default();
         state.set_summon(Some(CompletionPetSummon {
@@ -952,6 +1140,7 @@ mod tests {
             id: "focus-movement".to_string(),
             pet: "scorpion".to_string(),
             pet_size: "large".to_string(),
+            visual: None,
             preview: false,
             movement_break_enabled: true,
             next_phase: "short-break".to_string(),

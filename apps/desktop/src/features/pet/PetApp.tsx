@@ -3,12 +3,21 @@ import { Clock3, Dumbbell, Play, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import type { IMovementPoseSnapshot } from "../movement/types";
 import { HaloPet } from "../session/HaloPet";
+import type { CompletionPetSize } from "./preferences";
 import type { CompletionPetAction, ICompletionPetNativeState, ICompletionPetSummon } from "./types";
 
 const POLL_MS = 200;
 const DRAG_THRESHOLD_PX = 4;
 const SEARCH_PARAMS = new URLSearchParams(window.location.search);
-const DEMO_PET = SEARCH_PARAMS.has("demoPet");
+const DEMO_EMBER_PREVIEW = SEARCH_PARAMS.has("demoEmberPet");
+const DEMO_EMBER_PET = DEMO_EMBER_PREVIEW || SEARCH_PARAMS.has("demoEmberCompletion");
+const DEMO_PET = SEARCH_PARAMS.has("demoPet") || DEMO_EMBER_PET;
+const DEMO_PET_SIZE = ((value: string | null): CompletionPetSize => value === "small" || value === "medium" ? value : "large")(SEARCH_PARAMS.get("demoPetSize"));
+const EMBER_PREVIEW_GEOMETRY: Record<CompletionPetSize, { collapsed: { width: number; height: number }; visual: { width: number; height: number }; expanded: { left: number; top: number } }> = {
+  small: { collapsed: { width: 56, height: 66 }, visual: { width: 44, height: 54 }, expanded: { left: 102, top: 87 } },
+  medium: { collapsed: { width: 78, height: 93 }, visual: { width: 66, height: 81 }, expanded: { left: 91, top: 73.5 } },
+  large: { collapsed: { width: 100, height: 120 }, visual: { width: 88, height: 108 }, expanded: { left: 80, top: 60 } },
+};
 const MovementChallenge = lazy(async () => {
   const module = await import("../movement/MovementChallenge");
   return { default: module.MovementChallenge };
@@ -17,13 +26,14 @@ const MovementChallenge = lazy(async () => {
 const DEMO_SUMMON: ICompletionPetSummon = {
   schemaVersion: 1,
   id: "demo-focus-complete",
-  pet: "scorpion",
-  petSize: "large",
-  preview: false,
-  movementBreakEnabled: true,
+  pet: DEMO_EMBER_PET ? "ember-starling" : "scorpion",
+  petSize: DEMO_PET_SIZE,
+  visual: DEMO_EMBER_PET ? "ember-starling" : undefined,
+  preview: DEMO_EMBER_PREVIEW,
+  movementBreakEnabled: !DEMO_EMBER_PREVIEW,
   nextPhase: "short-break",
-  title: "Focus complete",
-  actionLabel: "Start Short break",
+  title: DEMO_EMBER_PREVIEW ? "Pet preview" : "Focus complete",
+  actionLabel: DEMO_EMBER_PREVIEW ? "" : "Start Short break",
 };
 
 const INITIAL_MOVEMENT_SNAPSHOT: IMovementPoseSnapshot = {
@@ -101,10 +111,16 @@ export const PetApp = () => {
 
   const setBubbleOpen = async (open: boolean, focusAction = false): Promise<void> => {
     let beforePetPosition: { x: number; y: number } | null = null;
+    const emberPreview = summon?.visual === "ember-starling";
+    const emberGeometry = emberPreview && summon ? EMBER_PREVIEW_GEOMETRY[summon.petSize] : null;
+    const collapsedCenter = emberGeometry ? { x: emberGeometry.collapsed.width / 2, y: emberGeometry.collapsed.height / 2 } : { x: 58, y: 44 };
     if (isNative()) {
       try {
         if (open) {
-          beforePetPosition = { x: window.screenX + 58, y: window.screenY + 44 };
+          beforePetPosition = {
+            x: window.screenX + collapsedCenter.x,
+            y: window.screenY + collapsedCenter.y,
+          };
           await invoke("activate_completion_pet");
         }
         await invoke("set_completion_pet_expanded", { expanded: open });
@@ -116,7 +132,7 @@ export const PetApp = () => {
     if (open && beforePetPosition) {
       setRebaseOffset({
         x: beforePetPosition.x - (window.screenX + 130),
-        y: beforePetPosition.y - (window.screenY + 116),
+        y: beforePetPosition.y - (window.screenY + (emberPreview ? 120 : 116)),
       });
       if (rebaseTimerRef.current !== null) window.clearTimeout(rebaseTimerRef.current);
       rebaseTimerRef.current = window.setTimeout(() => {
@@ -273,39 +289,42 @@ export const PetApp = () => {
     );
   }
 
+  const emberGeometry = summon.visual === "ember-starling" ? EMBER_PREVIEW_GEOMETRY[summon.petSize] : null;
+  const emberOptionStyle = emberGeometry ? { zIndex: 4, border: "1px solid rgba(255, 255, 255, 0.2)" } : undefined;
+
   return (
-    <main className="completion-pet-root" data-visible="true" data-expanded={expanded ? "true" : "false"} data-rebasing={rebaseOffset ? "true" : "false"} data-pet-size={summon.petSize} data-preview={summon.preview ? "true" : "false"} data-movement-option={summon.movementBreakEnabled ? "true" : "false"} style={rebaseOffset ? { "--pet-rebase-x": `${rebaseOffset.x}px`, "--pet-rebase-y": `${rebaseOffset.y}px` } as CSSProperties : undefined} onKeyDown={(event) => {
+    <main className="completion-pet-root" data-visible="true" data-expanded={expanded ? "true" : "false"} data-rebasing={rebaseOffset ? "true" : "false"} data-pet-size={summon.petSize} data-preview={summon.preview ? "true" : "false"} data-visual={summon.visual ?? "roster"} data-movement-option={summon.movementBreakEnabled ? "true" : "false"} style={rebaseOffset ? { "--pet-rebase-x": `${rebaseOffset.x}px`, "--pet-rebase-y": `${rebaseOffset.y}px` } as CSSProperties : undefined} onKeyDown={(event) => {
       if (!expanded || event.key !== "Escape") return;
       event.preventDefault();
       void setBubbleOpen(false, true);
     }}>
-      <span className="sr-only" role="status" aria-live="polite">{summon.preview ? "Pet preview." : `Focus complete. ${summon.nextPhase === "long-break" ? "Long break" : "Short break"} ready.`}</span>
+      <span className="sr-only" role="status" aria-live="polite">{summon.preview ? summon.visual === "ember-starling" ? "Ember Starling preview." : "Pet preview." : `Focus complete. ${summon.nextPhase === "long-break" ? "Long break" : "Short break"} ready.`}</span>
       {expanded ? (
-        <section className="completion-pet-radial" role="dialog" aria-label={summon.preview ? "Pet preview controls" : "Focus complete actions"} id="completion-pet-actions">
-          <span className="completion-pet-orbit" aria-hidden="true" />
+        <section className="completion-pet-radial" role="dialog" aria-label={summon.preview ? summon.visual === "ember-starling" ? "Ember Starling preview controls" : "Pet preview controls" : "Focus complete actions"} id="completion-pet-actions">
+          {summon.visual === "ember-starling" ? null : <span className="completion-pet-orbit" aria-hidden="true" />}
           {summon.preview ? null : (
             <>
-              <button ref={startActionRef} className="completion-pet-option completion-pet-start" type="button" disabled={busy} onClick={() => void submit("start-break")} aria-label={summon.actionLabel}>
+              <button ref={startActionRef} className="completion-pet-option completion-pet-start" style={emberOptionStyle} type="button" disabled={busy} onClick={() => void submit("start-break")} aria-label={summon.actionLabel}>
                 <Play size={21} strokeWidth={2.4} />
-                <span>{busy ? "…" : "Break"}</span>
+                <span>{busy ? "…" : <>{summon.nextPhase === "long-break" ? "Long" : "Short"}<br />break</>}</span>
               </button>
               {summon.movementBreakEnabled ? (
-                <button ref={movementActionRef} className="completion-pet-option completion-pet-movement" type="button" disabled={busy} onClick={() => void startMovement()} aria-label="Start 10 Squats movement break">
+                <button ref={movementActionRef} className="completion-pet-option completion-pet-movement" style={emberGeometry ? { ...emberOptionStyle, top: 178, left: 102, width: 56, height: 56 } : undefined} type="button" disabled={busy} onClick={() => void startMovement()} aria-label="Start 10 Squats movement break">
                   <Dumbbell size={20} strokeWidth={2.3} />
-                  <span>10 Squats</span>
+                  <span>10×<br />Squats</span>
                 </button>
               ) : null}
-              <button className="completion-pet-option completion-pet-later" type="button" disabled={busy} onClick={() => void hide()} aria-label="Not now">
+              <button className="completion-pet-option completion-pet-later" style={emberOptionStyle} type="button" disabled={busy} onClick={() => void hide()} aria-label="Not now">
                 <Clock3 size={20} strokeWidth={2.2} />
                 <span>Later</span>
               </button>
             </>
           )}
-          <button ref={closeActionRef} className="completion-pet-option completion-pet-close" type="button" disabled={busy} onClick={() => void hide()} aria-label="Hide completion pet">
+          <button ref={closeActionRef} className="completion-pet-option completion-pet-close" style={emberOptionStyle} type="button" disabled={busy} onClick={() => void hide()} aria-label={summon.preview && summon.visual === "ember-starling" ? "Hide Ember Starling preview" : "Hide completion pet"}>
             <X size={20} strokeWidth={2.25} />
             <span>Close</span>
           </button>
-          <span className="completion-pet-context">{summon.title}</span>
+          {summon.visual === "ember-starling" && summon.preview ? null : <span className="completion-pet-context" style={emberGeometry ? { right: "auto", bottom: 8, left: "50%", width: "max-content", padding: "3px 7px", border: "1px solid rgba(255, 255, 255, 0.2)", borderRadius: 6, color: "#fff", background: "#000", transform: "translateX(-50%)" } : undefined}>{emberGeometry ? `${summon.nextPhase === "long-break" ? "Long" : "Short"} break ready` : summon.title}</span>}
         </section>
       ) : null}
 
@@ -313,8 +332,9 @@ export const PetApp = () => {
         <button
           ref={companionRef}
           className="completion-pet-companion"
+          style={emberGeometry ? { width: emberGeometry.collapsed.width, height: emberGeometry.collapsed.height, ...(expanded ? emberGeometry.expanded : {}) } : undefined}
           type="button"
-          aria-label={summon.preview ? "Pet preview. Open controls" : "Focus complete. Open break actions"}
+          aria-label={summon.preview ? summon.visual === "ember-starling" ? "Ember Starling preview. Open controls" : "Pet preview. Open controls" : "Focus complete. Open break actions"}
           aria-expanded={expanded}
           aria-controls="completion-pet-actions"
           onClick={() => {
@@ -333,7 +353,7 @@ export const PetApp = () => {
           onPointerCancel={endPointer}
           data-tauri-drag-region="false"
         >
-          <HaloPet className="completion-pet-visual" pet={summon.pet} status="working" activityKind="session" />
+          {emberGeometry ? <span className="completion-pet-ember-starling" style={emberGeometry.visual} aria-hidden="true" /> : <HaloPet className="completion-pet-visual" pet={summon.pet} status="working" activityKind="session" />}
         </button>
       </div>
     </main>

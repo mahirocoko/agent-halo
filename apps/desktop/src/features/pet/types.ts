@@ -8,6 +8,7 @@ export interface ICompletionPetSummon {
   id: string;
   pet: HaloPetName;
   petSize: CompletionPetSize;
+  visual?: "ember-starling";
   preview: boolean;
   movementBreakEnabled?: boolean;
   nextPhase: CompletionPetBreakPhase;

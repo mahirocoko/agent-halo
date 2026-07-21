@@ -10,6 +10,8 @@ type SetupCategory = "connection" | "pet" | "display";
 const SETUP_CATEGORIES: SetupCategory[] = ["connection", "pet", "display"];
 const COMPLETION_PET_SIZES: CompletionPetSize[] = ["small", "medium", "large"];
 
+const completionPetSizeLabel = (size: CompletionPetSize): string => size === "small" ? "1×" : size === "medium" ? "1.5×" : "2×";
+
 const PET_LABELS: Record<HaloPetName, string> = {
   pot: "Pot",
   crawler: "Crawler",
@@ -26,10 +28,15 @@ const PET_LABELS: Record<HaloPetName, string> = {
   giraffe: "Giraffe",
   scorpion: "Scorpion",
   squid: "Squid",
+  "ember-starling": "Ember Starling",
 };
 
-const petPreviewStyle = (pet: HaloPetName) => ({
-  backgroundImage: `url("/mascots/agent-halo-roster/body/${pet}/idle.png")`,
+const petPreviewStyle = (pet: HaloPetName, compact = false) => ({
+  backgroundImage: `url("/mascots/agent-halo-roster/body/${pet}/idle.${pet === "ember-starling" ? "webp" : "png"}")`,
+  ...(pet === "ember-starling" ? compact
+    ? { height: 32, backgroundSize: "96px 32px", backgroundPosition: "0 0", imageRendering: "auto" }
+    : { height: 52, backgroundSize: "156px 52px", imageRendering: "auto" }
+    : {}),
 }) as CSSProperties;
 
 export interface ISetupPanelProps {
@@ -102,7 +109,7 @@ export const SetupPanel = ({ capabilities, canUseNativeControls, completionPetEn
     event.preventDefault();
     event.stopPropagation();
     const currentIndex = HALO_PET_ROSTER.indexOf(current);
-    const rowSize = 5;
+    const rowSize = 4;
     const delta = event.key === "ArrowLeft"
       ? -1
       : event.key === "ArrowRight"
@@ -213,15 +220,15 @@ export const SetupPanel = ({ capabilities, canUseNativeControls, completionPetEn
           {activeCategory === "pet" ? (
             <>
               <div className="setup-section-heading"><span>Pet</span><small>Companion identity and completion preview</small></div>
-              <div className="setup-row pet-setting-row"><span className="pet-current-preview" style={petPreviewStyle(pet)} aria-hidden="true" /><span className="setup-copy"><span className="setup-title">{PET_LABELS[pet]}</span><span className="setup-detail" id="pet-preview-availability">{canUseNativeControls ? "Used across Agent Halo" : "Desktop runtime required to preview"}</span></span><span className="setup-row-actions"><button ref={petPickerTriggerRef} className="pill-btn" type="button" onClick={() => { if (petPickerOpen) closePetPicker(); else setPetPickerOpen(true); }} data-tauri-drag-region="false" aria-controls="pet-picker" aria-expanded={petPickerOpen}><Bot size={12} strokeWidth={2.3} />{petPickerOpen ? "Close" : "Choose"}</button><button className={`pill-btn accent pet-preview-button ${petPreviewState === "stale" ? "is-stale" : ""}`} type="button" disabled={!canUseNativeControls || petPreviewState === "showing"} onClick={() => void onShowPetPreview()} data-tauri-drag-region="false" aria-label={petPreviewState === "stale" ? "Update Completion Pet preview" : "Show Completion Pet preview"} aria-describedby="pet-preview-availability">{petPreviewState === "stale" ? <RefreshCw size={12} strokeWidth={2.3} /> : petPreviewState === "shown" ? <Check size={12} strokeWidth={2.3} /> : <Play size={12} strokeWidth={2.3} />}{petPreviewState === "showing" ? "Showing…" : petPreviewState === "stale" ? "Update Pet" : petPreviewState === "shown" ? "Show again" : "Show Pet"}</button></span></div>
+              <div className="setup-row pet-setting-row"><span className="pet-current-preview" data-pet={pet} style={petPreviewStyle(pet)} aria-hidden="true" /><span className="setup-copy"><span className="setup-title">{PET_LABELS[pet]}</span><span className="setup-detail" id="pet-preview-availability">{canUseNativeControls ? "Used across Agent Halo" : "Desktop runtime required to preview"}</span></span><span className="setup-row-actions"><button ref={petPickerTriggerRef} className="pill-btn" type="button" onClick={() => { if (petPickerOpen) closePetPicker(); else setPetPickerOpen(true); }} data-tauri-drag-region="false" aria-controls="pet-picker" aria-expanded={petPickerOpen}><Bot size={12} strokeWidth={2.3} />{petPickerOpen ? "Close" : "Choose"}</button><button className={`pill-btn accent pet-preview-button ${petPreviewState === "stale" ? "is-stale" : ""}`} type="button" disabled={!canUseNativeControls || petPreviewState === "showing"} onClick={() => void onShowPetPreview()} data-tauri-drag-region="false" aria-label={petPreviewState === "stale" ? "Update Completion Pet preview" : "Show Completion Pet preview"} aria-describedby="pet-preview-availability">{petPreviewState === "stale" ? <RefreshCw size={12} strokeWidth={2.3} /> : petPreviewState === "shown" ? <Check size={12} strokeWidth={2.3} /> : <Play size={12} strokeWidth={2.3} />}{petPreviewState === "showing" ? "Showing…" : petPreviewState === "stale" ? "Update Pet" : petPreviewState === "shown" ? "Show again" : "Show Pet"}</button></span></div>
               {petPickerOpen ? (
                 <div className="pet-picker" id="pet-picker" role="radiogroup" aria-label="Pet">
                   {HALO_PET_ROSTER.map((option) => (
-                    <button className="pet-option" data-selected={option === pet} id={`pet-option-${option}`} type="button" role="radio" aria-checked={option === pet} tabIndex={option === pet ? 0 : -1} onClick={() => { onPetChange(option); closePetPicker(); }} onKeyDown={(event) => handlePetKeyDown(event, option)} data-tauri-drag-region="false" key={option} title={PET_LABELS[option]}><span className="pet-option-sprite" style={petPreviewStyle(option)} aria-hidden="true" /><span>{PET_LABELS[option]}</span></button>
+                    <button className="pet-option" data-selected={option === pet} id={`pet-option-${option}`} type="button" role="radio" aria-checked={option === pet} tabIndex={option === pet ? 0 : -1} onClick={() => { onPetChange(option); closePetPicker(); }} onKeyDown={(event) => handlePetKeyDown(event, option)} data-tauri-drag-region="false" key={option} title={PET_LABELS[option]}><span className="pet-option-sprite" data-pet={option} style={petPreviewStyle(option, true)} aria-hidden="true" /><span>{PET_LABELS[option]}</span></button>
                   ))}
                 </div>
               ) : null}
-              <div className="setup-row"><span className="status-slot"><Bot className="setup-icon" size={14} strokeWidth={2.3} /></span><span className="setup-copy"><span className="setup-title">Completion Pet size</span><span className="setup-detail">Changes only the floating Pet</span></span><span className="setup-size-options" role="radiogroup" aria-label="Completion Pet size">{COMPLETION_PET_SIZES.map((size) => <button id={`completion-pet-size-${size}`} type="button" role="radio" aria-checked={completionPetSize === size} tabIndex={completionPetSize === size ? 0 : -1} data-active={completionPetSize === size} onClick={() => onCompletionPetSizeChange(size)} onKeyDown={(event) => handlePetSizeKeyDown(event, size)} data-tauri-drag-region="false" key={size}>{size === "small" ? "1×" : size === "medium" ? "1.5×" : "2×"}</button>)}</span></div>
+              <div className="setup-row"><span className="status-slot"><Bot className="setup-icon" size={14} strokeWidth={2.3} /></span><span className="setup-copy"><span className="setup-title">Completion Pet size</span><span className="setup-detail">Changes only the floating Pet</span></span><span className="setup-size-options" role="radiogroup" aria-label="Completion Pet size">{COMPLETION_PET_SIZES.map((size) => <button id={`completion-pet-size-${size}`} type="button" role="radio" aria-checked={completionPetSize === size} tabIndex={completionPetSize === size ? 0 : -1} data-active={completionPetSize === size} onClick={() => onCompletionPetSizeChange(size)} onKeyDown={(event) => handlePetSizeKeyDown(event, size)} data-tauri-drag-region="false" key={size}>{completionPetSizeLabel(size)}</button>)}</span></div>
               <div className="setup-row"><span className="status-slot"><Bot className="setup-icon" size={14} strokeWidth={2.3} /></span><span className="setup-copy"><span className="setup-title">Completion Pet</span><span className="setup-detail">{completionPetEnabled ? "Shows after a completed Focus" : "Off · uses a macOS notification"}</span></span><button className={`pill-btn ${completionPetEnabled ? "accent" : ""}`} type="button" role="switch" aria-checked={completionPetEnabled} onClick={() => onCompletionPetEnabledChange(!completionPetEnabled)} data-tauri-drag-region="false" aria-label={`${completionPetEnabled ? "Disable" : "Enable"} completion pet`}>{completionPetEnabled ? "On" : "Off"}</button></div>
               <div className="setup-row"><span className="status-slot"><Dumbbell className="setup-icon" size={14} strokeWidth={2.3} /></span><span className="setup-copy"><span className="setup-title">Movement break</span><span className="setup-detail">{movementBreakEnabled ? "10 squats · camera only after you choose it" : "Off · hidden from future completions"}</span></span><button className={`pill-btn ${movementBreakEnabled ? "accent" : ""}`} type="button" role="switch" aria-checked={movementBreakEnabled} onClick={() => onMovementBreakEnabledChange(!movementBreakEnabled)} data-tauri-drag-region="false" aria-label={`${movementBreakEnabled ? "Disable" : "Enable"} movement break`}>{movementBreakEnabled ? "On" : "Off"}</button></div>
               {movementBreakEnabled ? <div className="notice-row movement-privacy-note" role="note">Camera opens only after 10 Squats is clicked. Pose analysis stays on this Mac; no video or audio is saved.</div> : null}

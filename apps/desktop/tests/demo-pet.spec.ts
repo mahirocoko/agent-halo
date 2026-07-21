@@ -4,20 +4,20 @@ test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => window.localStorage.clear());
 });
 
-test("every surface uses the Scorpion default with no random palette", async ({ page }) => {
+test("every surface uses the Ember Starling default with no random palette", async ({ page }) => {
   await page.goto("/?demo=1&demoScenario=long-llm");
 
   const pet = page.locator('.session-row .halo-pet[data-state="working"][data-signal="thinking-model"]');
   await expect(pet).toHaveCount(1);
   const initialPet = await pet.getAttribute("data-pet");
-  const roster = ["pot", "crawler", "bat", "jelly", "cat", "crt", "cactus", "nautilus", "turtle", "lantern", "kettle", "dragonfly", "giraffe", "scorpion", "squid"];
+  const roster = ["pot", "crawler", "bat", "jelly", "cat", "crt", "cactus", "nautilus", "turtle", "lantern", "kettle", "dragonfly", "giraffe", "scorpion", "squid", "ember-starling"];
   expect(roster).toContain(initialPet);
-  expect(initialPet).toBe("scorpion");
+  expect(initialPet).toBe("ember-starling");
   expect(await pet.getAttribute("data-palette")).toBeNull();
-  await expect(pet.locator(".halo-pet-body")).toHaveCSS("background-size", "132px 33px");
+  await expect(pet.locator(".halo-pet-body")).toHaveCSS("background-size", "108px 36px");
   const signal = pet.locator(".halo-pet-signal");
   await expect(signal).toHaveCSS("background-size", "80px 20px");
-  await expect(signal).toHaveCSS("left", "46px");
+  await expect(signal).toHaveCSS("left", "40px");
   await expect(signal).toHaveCSS("top", "8px");
   await expect(signal).toHaveCSS("width", "20px");
   await expect(signal).toHaveCSS("height", "20px");
@@ -32,22 +32,22 @@ test("every surface uses the Scorpion default with no random palette", async ({ 
     };
     return { body: await read(body), signal: await read(signal) };
   });
-  expect(dimensions).toEqual({ body: [72, 18], signal: [80, 20] });
+  expect(dimensions).toEqual({ body: [432, 144], signal: [80, 20] });
 
   const ambientPet = page.locator(".activity-pet.halo-pet");
   await expect(ambientPet).toHaveCSS("width", "58px");
   await expect(ambientPet).toHaveCSS("height", "30px");
-  await expect(ambientPet.locator(".halo-pet-body")).toHaveCSS("width", "36px");
-  await expect(ambientPet.locator(".halo-pet-body")).toHaveCSS("height", "27px");
-  await expect(ambientPet.locator(".halo-pet-body")).toHaveCSS("top", "3px");
-  await expect(ambientPet.locator(".halo-pet-signal")).toHaveCSS("left", "38px");
+  await expect(ambientPet.locator(".halo-pet-body")).toHaveCSS("width", "30px");
+  await expect(ambientPet.locator(".halo-pet-body")).toHaveCSS("height", "30px");
+  await expect(ambientPet.locator(".halo-pet-body")).toHaveCSS("top", "0px");
+  await expect(ambientPet.locator(".halo-pet-signal")).toHaveCSS("left", "34px");
   await expect(ambientPet.locator(".halo-pet-signal")).toHaveCSS("top", "5px");
 
   await page.reload();
   await expect(page.locator(".session-row .halo-pet")).toHaveAttribute("data-pet", initialPet ?? "");
 });
 
-test("pet normalization defaults invalid or missing values to Scorpion", async ({ page }) => {
+test("pet normalization defaults invalid or missing values to Ember Starling", async ({ page }) => {
   await page.goto("/?demo=1&demoScenario=idle");
   const result = await page.evaluate(async () => {
     const { getHaloPetName, HALO_PET_ROSTER } = await import("/src/features/session/HaloPet.tsx");
@@ -58,10 +58,10 @@ test("pet normalization defaults invalid or missing values to Scorpion", async (
       roster: [...HALO_PET_ROSTER],
     };
   });
-  expect(result.fallback).toBe("scorpion");
-  expect(result.invalid).toBe("scorpion");
+  expect(result.fallback).toBe("ember-starling");
+  expect(result.invalid).toBe("ember-starling");
   expect(result.selected).toBe("crt");
-  expect(result.roster).toHaveLength(15);
+  expect(result.roster).toHaveLength(16);
 });
 
 test("legacy mascot preference migrates once into the Pet key", async ({ page }) => {
@@ -71,9 +71,16 @@ test("legacy mascot preference migrates once into the Pet key", async ({ page })
   expect(await page.evaluate(() => window.localStorage.getItem("agent-halo.pet"))).toBe("crt");
 });
 
+test("an existing explicit Scorpion selection remains intact", async ({ page }) => {
+  await page.addInitScript(() => window.localStorage.setItem("agent-halo.pet", "scorpion"));
+  await page.goto("/?demo=1&demoScenario=idle");
+  await expect(page.locator(".session-row .halo-pet")).toHaveAttribute("data-pet", "scorpion");
+  expect(await page.evaluate(() => window.localStorage.getItem("agent-halo.pet"))).toBe("scorpion");
+});
+
 test("setup selects one global pet and persists the preference", async ({ page }) => {
   await page.goto("/?demo=1&demoScenario=long-llm");
-  await expect(page.locator(".session-row .halo-pet")).toHaveAttribute("data-pet", "scorpion");
+  await expect(page.locator(".session-row .halo-pet")).toHaveAttribute("data-pet", "ember-starling");
 
   await page.getByRole("button", { name: "Setup" }).click();
   await page.getByRole("tab", { name: "Pet" }).click();
@@ -81,17 +88,17 @@ test("setup selects one global pet and persists the preference", async ({ page }
   await petRow.getByRole("button", { name: /Choose/ }).click();
   const picker = page.getByRole("radiogroup", { name: "Pet", exact: true });
   const radios = picker.getByRole("radio");
-  await expect(radios).toHaveCount(15);
-  const scorpionOption = picker.getByRole("radio", { name: "Scorpion" });
-  await expect(scorpionOption).toHaveAttribute("aria-checked", "true");
-  await expect(scorpionOption).toBeFocused();
+  await expect(radios).toHaveCount(16);
+  const emberOption = picker.getByRole("radio", { name: "Ember Starling" });
+  await expect(emberOption).toHaveAttribute("aria-checked", "true");
+  await expect(emberOption).toBeFocused();
   expect(await radios.evaluateAll((options) => options.filter((option) => option.tabIndex === 0).length)).toBe(1);
 
-  await scorpionOption.press("ArrowRight");
-  const squidOption = picker.getByRole("radio", { name: "Squid" });
-  await expect(squidOption).toHaveAttribute("aria-checked", "true");
-  await expect(squidOption).toBeFocused();
-  await squidOption.press("Escape");
+  await emberOption.press("ArrowRight");
+  const potOption = picker.getByRole("radio", { name: "Pot" });
+  await expect(potOption).toHaveAttribute("aria-checked", "true");
+  await expect(potOption).toBeFocused();
+  await potOption.press("Escape");
   await expect(petRow.getByRole("button", { name: /Choose/ })).toBeFocused();
 
   await petRow.getByRole("button", { name: /Choose/ }).click();
@@ -193,7 +200,7 @@ test("Pet Setup persists floating size and shows an isolated native preview", as
   await expect(page.getByText("Pet preview shown")).toBeVisible();
   await expect(page.getByRole("button", { name: "Show Completion Pet preview" })).toHaveText(/Show again/);
   const show = await page.evaluate(() => (window as typeof window & { __petPreviewCalls: Array<{ command: string; args?: Record<string, unknown> }> }).__petPreviewCalls.find((call) => call.command === "show_completion_pet"));
-  expect(show?.args?.summon).toMatchObject({ pet: "scorpion", petSize: "medium", preview: true, title: "Pet preview", actionLabel: "" });
+  expect(show?.args?.summon).toMatchObject({ pet: "ember-starling", petSize: "medium", visual: "ember-starling", preview: true, title: "Pet preview", actionLabel: "" });
   await sizes.getByRole("radio", { name: "2×" }).click();
   await expect(page.getByText("Settings changed · update preview")).toBeVisible();
   const update = page.getByRole("button", { name: "Update Completion Pet preview" });
@@ -201,6 +208,13 @@ test("Pet Setup persists floating size and shows an isolated native preview", as
   await update.click();
   await expect(page.getByRole("button", { name: "Show Completion Pet preview" })).toHaveText(/Show again/);
   await expect.poll(() => page.evaluate(() => (window as typeof window & { __petPreviewCalls: Array<{ command: string }> }).__petPreviewCalls.filter((call) => call.command === "show_completion_pet").length)).toBe(2);
+  await sizes.getByRole("radio", { name: "1×" }).click();
+  await expect(page.getByText("Settings changed · update preview")).toBeVisible();
+  const updateEmber = page.getByRole("button", { name: "Update Completion Pet preview" });
+  await expect(updateEmber).toHaveText(/Update Pet/);
+  await updateEmber.click();
+  const updatedEmberShow = await page.evaluate(() => (window as typeof window & { __petPreviewCalls: Array<{ command: string; args?: Record<string, unknown> }> }).__petPreviewCalls.filter((call) => call.command === "show_completion_pet").pop());
+  expect(updatedEmberShow?.args?.summon).toMatchObject({ petSize: "small", visual: "ember-starling", preview: true });
 });
 
 test("every ActivityKind maps to one bounded signal group", async ({ page }) => {
@@ -296,14 +310,14 @@ test("production roster manifest preserves every body and shared signal hash", a
   });
   expect(result.humanApproved).toBe(true);
   expect(result.productionApproved).toBe(false);
-  expect(result.mainMascot).toBe("scorpion");
-  expect(result.mainPet).toBe("scorpion");
-  expect(result.defaultMascot).toBe("scorpion");
-  expect(result.defaultPet).toBe("scorpion");
+  expect(result.mainMascot).toBe("ember-starling");
+  expect(result.mainPet).toBe("ember-starling");
+  expect(result.defaultMascot).toBe("ember-starling");
+  expect(result.defaultPet).toBe("ember-starling");
   expect(result.assignment).toMatchObject({ status: "user-selected-global", storageKey: "agent-halo.pet", projectHashing: false, colorRandomization: false });
   expect(result.signalStatus).toBe("integration-candidate-gemini-v4-bold");
   expect(result.idleIncluded).toBe(false);
-  expect(result.files).toHaveLength(85);
+  expect(result.files).toHaveLength(90);
   expect(result.files.every((file) => file.hashMatches)).toBe(true);
   expect(result.files.filter((file) => file.path.startsWith("signals/") && ["thinking-model", "attention-asking", "done"].some((name) => file.path.endsWith(`${name}.png`))).every((file) => file.size[0] === 80 && file.size[1] === 20)).toBe(true);
   expect(result.files.filter((file) => file.path.startsWith("signals/") && !["thinking-model", "attention-asking", "done"].some((name) => file.path.endsWith(`${name}.png`))).every((file) => file.size[0] === 60 && file.size[1] === 20)).toBe(true);
@@ -336,9 +350,9 @@ test("project pet maps attention, done, and error to distinct truthful states", 
     const pet = page.locator(`.session-context-summary .halo-pet[data-state="${scenario}"]`);
     await expect(pet).toBeVisible();
     const selectedPet = await pet.getAttribute("data-pet");
-    await expect(pet.locator(".halo-pet-body")).toHaveCSS("background-image", new RegExp(`/agent-halo-roster/body/${selectedPet}/${scenario}\\.png`));
+    await expect(pet.locator(".halo-pet-body")).toHaveCSS("background-image", new RegExp(`/agent-halo-roster/body/${selectedPet}/${scenario}\\.webp`));
     if (scenario === "attention" || scenario === "error") {
-      await expect(pet.locator(".halo-pet-body")).toHaveCSS("background-size", "132px 33px");
+      await expect(pet.locator(".halo-pet-body")).toHaveCSS("background-size", "108px 36px");
       await expect(pet.locator(".halo-pet-body")).toHaveCSS("animation-name", `halo-pet-${scenario}`);
     }
     const signal = scenario === "attention" ? "attention-asking" : scenario;
@@ -354,7 +368,7 @@ test("done settles on the final frame while reduced motion stays static", async 
   await page.goto("/?demo=1&demoScenario=done");
   await page.locator(".session-row-main").click();
   const donePet = page.locator('.session-context-summary .halo-pet[data-state="done"]');
-  await expect(donePet.locator(".halo-pet-body")).toHaveCSS("background-position", "-132px 0px");
+  await expect(donePet.locator(".halo-pet-body")).toHaveCSS("background-position", "-108px 0px");
   await expect(donePet.locator(".halo-pet-signal")).toHaveCSS("background-position", "-60px 0px");
 
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -362,7 +376,7 @@ test("done settles on the final frame while reduced motion stays static", async 
   await page.locator(".session-row-main").click();
   const reducedDonePet = page.locator('.session-context-summary .halo-pet[data-state="done"]');
   await expect(reducedDonePet.locator(".halo-pet-body")).toHaveCSS("animation-name", "none");
-  await expect(reducedDonePet.locator(".halo-pet-body")).toHaveCSS("background-position", "-132px 0px");
+  await expect(reducedDonePet.locator(".halo-pet-body")).toHaveCSS("background-position", "-108px 0px");
   await expect(reducedDonePet.locator(".halo-pet-signal")).toHaveCSS("animation-name", "none");
   await expect(reducedDonePet.locator(".halo-pet-signal")).toHaveCSS("background-position", "-60px 0px");
 

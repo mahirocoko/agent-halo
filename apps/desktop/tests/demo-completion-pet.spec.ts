@@ -145,6 +145,102 @@ test("manual Pet preview is dismiss-only and never exposes a Pomodoro action", a
   await expect(page.getByRole("status")).toHaveText("Pet preview.");
 });
 
+test("global Ember Starling completion exposes the prepared break actions", async ({ page }) => {
+  await page.addInitScript(() => {
+    (window as typeof window & { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
+      invoke: async (command: string) => {
+        if (command === "completion_pet_state") return {
+          summon: { schemaVersion: 1, id: "ember-focus", pet: "ember-starling", petSize: "large", visual: "ember-starling", preview: false, movementBreakEnabled: false, nextPhase: "short-break", title: "Focus complete", actionLabel: "Start Short break" },
+        };
+        return null;
+      },
+    };
+  });
+  await page.setViewportSize({ width: 260, height: 270 });
+  await page.goto("/?surface=pet");
+  const root = page.locator(".completion-pet-root");
+  const companion = page.getByRole("button", { name: "Focus complete. Open break actions" });
+  await expect(root).toHaveAttribute("data-visual", "ember-starling");
+  await expect(page.getByRole("status")).toHaveText("Focus complete. Short break ready.");
+  await companion.click();
+  const dialog = page.getByRole("dialog", { name: "Focus complete actions" });
+  await expect(dialog.getByRole("button", { name: "Start Short break" })).toBeFocused();
+  await expect(dialog.getByRole("button", { name: "Start Short break" })).toHaveCSS("z-index", "4");
+  await expect(dialog.getByRole("button", { name: "Start Short break" })).toHaveText(/Short\s*break/);
+  await expect(dialog.getByText("Short break ready")).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Not now" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Hide completion pet" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Start 10 Squats movement break" })).toHaveCount(0);
+  await page.keyboard.press("Tab");
+  await expect(dialog.getByRole("button", { name: "Not now" })).toBeFocused();
+  await expect(dialog.getByRole("button", { name: "Not now" })).toHaveCSS("outline-width", "2px");
+});
+
+test("global Ember Starling preview uses its isolated large dismiss-only surface", async ({ page }) => {
+  await page.setViewportSize({ width: 100, height: 120 });
+  await page.goto("/?surface=pet&demoEmberPet=1");
+  const root = page.locator(".completion-pet-root");
+  const companion = page.getByRole("button", { name: "Ember Starling preview. Open controls" });
+  const visual = page.locator(".completion-pet-ember-starling");
+  await expect(root).toHaveAttribute("data-visual", "ember-starling");
+  await expect(root).toHaveAttribute("data-preview", "true");
+  await expect(companion).toHaveCSS("width", "100px");
+  await expect(companion).toHaveCSS("height", "120px");
+  await expect(visual).toHaveCSS("width", "88px");
+  await expect(visual).toHaveCSS("height", "108px");
+  await expect(visual).toHaveCSS("background-size", "400% 100%");
+  await expect(visual).toHaveCSS("animation-name", "ember-starling-working");
+  await expect(page.locator(".completion-pet-visual")).toHaveCount(0);
+  await expect(page.getByRole("status")).toHaveText("Ember Starling preview.");
+  await companion.focus();
+  await expect(visual).toHaveCSS("filter", /drop-shadow/);
+
+  await page.setViewportSize({ width: 260, height: 270 });
+  await companion.click();
+  const dialog = page.getByRole("dialog", { name: "Ember Starling preview controls" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("button", { name: /Start .*break/ })).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: "Not now" })).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: "Start 10 Squats movement break" })).toHaveCount(0);
+  const close = dialog.getByRole("button", { name: "Hide Ember Starling preview" });
+  await expect(close).toBeFocused();
+  await expect(close).toHaveCSS("z-index", "4");
+  await expect(page.locator(".completion-pet-context")).toHaveCount(0);
+  await expect(companion).toHaveCSS("left", "80px");
+  await expect(companion).toHaveCSS("top", "60px");
+});
+
+test("reduced motion holds Ember Starling on its first frame", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 100, height: 120 });
+  await page.goto("/?surface=pet&demoEmberPet=1");
+  await expect(page.locator(".completion-pet-ember-starling")).toHaveCSS("animation-name", "none");
+  await expect(page.locator(".completion-pet-ember-starling")).toHaveCSS("background-position", "0px 0px");
+});
+
+test("Ember Starling keeps tight native geometry at 1× and 1.5×", async ({ page }) => {
+  const cases = [
+    { size: "small", viewport: [56, 66], companion: [56, 66], visual: [44, 54], expanded: [102, 87] },
+    { size: "medium", viewport: [78, 93], companion: [78, 93], visual: [66, 81], expanded: [91, 73.5] },
+  ] as const;
+  for (const candidate of cases) {
+    await page.setViewportSize({ width: candidate.viewport[0], height: candidate.viewport[1] });
+    await page.goto(`/?surface=pet&demoEmberPet=1&demoPetSize=${candidate.size}`);
+    const root = page.locator(".completion-pet-root");
+    const companion = page.getByRole("button", { name: "Ember Starling preview. Open controls" });
+    const visual = page.locator(".completion-pet-ember-starling");
+    await expect(root).toHaveAttribute("data-pet-size", candidate.size);
+    await expect(companion).toHaveCSS("width", `${candidate.companion[0]}px`);
+    await expect(companion).toHaveCSS("height", `${candidate.companion[1]}px`);
+    await expect(visual).toHaveCSS("width", `${candidate.visual[0]}px`);
+    await expect(visual).toHaveCSS("height", `${candidate.visual[1]}px`);
+    await page.setViewportSize({ width: 260, height: 270 });
+    await companion.click();
+    await expect(companion).toHaveCSS("left", `${candidate.expanded[0]}px`);
+    await expect(companion).toHaveCSS("top", `${candidate.expanded[1]}px`);
+  }
+});
+
 test("Movement Break starts camera tracking only after the explicit 10 Squats action", async ({ page }) => {
   await page.setViewportSize({ width: 600, height: 420 });
   await page.goto("/?surface=pet&demoPet=1");

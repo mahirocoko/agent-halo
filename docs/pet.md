@@ -2,7 +2,7 @@
 
 ## Phase 1 contract
 
-Agent Halo uses **Pet** as the product-facing companion concept. Phase 1 reuses the approved 15-companion roster and Scorpion default; it does not add new artwork or a persistent desktop-pet simulation.
+Agent Halo uses **Pet** as the product-facing companion concept. The global roster now contains the original 15 pixel companions plus **Ember Starling**, the default global Pet. It remains an event/state projection rather than a persistent desktop-pet simulation.
 
 The Completion Pet is event-only:
 
@@ -45,8 +45,9 @@ This keeps the OS-owned fallback available when the renderer/app is unavailable 
 
 ## Window and interaction
 
-- Companion-only frame: `116 × 88` logical px. The default `2×` presentation is a centered continuously animated `104 × 78` Pet body; smaller Setup choices remain centered inside the same bounded native surface.
-- Radial-menu frame: `260 × 230` logical px. Three circular actions orbit the Pet on a transparent surface; the dashed orbit and circular controls make the deliberate interaction area visible even without a backing card.
+- Original-roster companion frame: `116 × 88` logical px. The default `2×` presentation is a centered continuously animated `104 × 78` Pet body; smaller Setup choices remain centered inside the same bounded native surface.
+- Ember Starling follows the existing floating-size choice with a tight surface per scale: `1×` uses `56 × 66`, `1.5×` uses `78 × 93`, and `2×` uses `100 × 120`; its radial surface is `260 × 270` so real break actions and their visible state label remain clear of the body.
+- Original-roster radial-menu frame: `260 × 230` logical px. Three circular actions orbit the Pet on a transparent surface; the dashed orbit and circular controls make the deliberate interaction area visible even without a backing card.
 - The frame remains tight because transparent WebViews still have rectangular native hitboxes.
 - Default position: 20px from the selected display's visible bottom-right corner.
 - Dragging persists a normalized companion anchor per display id/fingerprint and clamps to the current visible frame.
@@ -59,7 +60,17 @@ This keeps the OS-owned fallback available when the renderer/app is unavailable 
 
 ## Preference migration
 
-The new preference key is `agent-halo.pet`. When absent, Agent Halo reads the legacy `agent-halo.mascot` value and writes the normalized Pet preference. Asset paths may remain under the legacy `/mascots/agent-halo-roster/` directory in Phase 1 because the pixel source contract is unchanged; product UI, accessibility copy, types, and settings use **Pet**.
+The preference key is `agent-halo.pet`. When absent, Agent Halo reads the legacy `agent-halo.mascot` value and writes the normalized Pet preference. Fresh installs default to Ember Starling; every existing valid selection, including Scorpion, remains intact until the user changes it in Setup. Product UI, accessibility copy, types, and settings use **Pet**.
+
+## Global Ember Starling
+
+Ember Starling is one global identity across ambient, session, group, detail, Setup, and real Completion Pet surfaces:
+
+- compact surfaces use a Mahiro-selected `144 × 144` smooth cut-paper source family delivered at `30 × 30` ambient and `36 × 36` session/detail sizes;
+- Idle, Working, Attention, Done, and Error have separately generated body strips; Signal V4 remains the independent semantic icon layer;
+- the floating Completion form uses the larger four-frame body and the existing `1×` / `1.5×` / `2×` setting;
+- Setup **Show Pet** remains preview-only, but a naturally completed Focus now summons Ember with the real Start break, optional Movement, Later, and Close actions;
+- original pixel companions remain selectable and continue using their existing compact and Completion body families.
 
 ## Verification
 

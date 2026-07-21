@@ -1,11 +1,11 @@
 {
   "name": "Agent Halo Pet Roster",
-  "version": 5,
-  "status": "integration-candidate-bold-signal-v4",
+  "version": 6,
+  "status": "integration-candidate-mini-ember-global",
   "humanApproved": true,
   "productionApproved": false,
-  "mainMascot": "scorpion",
-  "mainPet": "scorpion",
+  "mainMascot": "ember-starling",
+  "mainPet": "ember-starling",
   "roster": [
     "pot",
     "crawler",
@@ -21,15 +21,16 @@
     "dragonfly",
     "giraffe",
     "scorpion",
-    "squid"
+    "squid",
+    "ember-starling"
   ],
   "assignment": {
     "status": "user-selected-global",
     "strategy": "One persisted Pet selection is used for ambient, session, group, detail, and Completion Pet surfaces.",
     "storageKey": "agent-halo.pet",
     "legacyStorageKey": "agent-halo.mascot",
-    "default": "scorpion",
-    "fallback": "scorpion",
+    "default": "ember-starling",
+    "fallback": "ember-starling",
     "projectHashing": false,
     "colorRandomization": false
   },
@@ -110,6 +111,23 @@
         "durationMs": 630,
         "playback": "loop"
       }
+    },
+    "perPetOverrides": {
+      "ember-starling": {
+        "sourceFrame": [144, 144],
+        "sessionDisplay": [36, 36],
+        "ambientDisplay": [30, 30],
+        "encoding": "WebP q50 alpha-q85 method6",
+        "style": "smooth hand-painted layered cut-paper",
+        "stateSelections": {
+          "idle": "B",
+          "working": "B",
+          "attention": "A",
+          "done": "A normalized",
+          "error": "B"
+        },
+        "signalLayer": "shared Signal V4"
+      }
     }
   },
   "signal": {
@@ -150,7 +168,7 @@
     "productionApproved": false,
     "primaryStrokePx": 2
   },
-  "colorStrategy": "One authored cyan robot palette. No project, Pet, or user-randomized hue; only truthful lifecycle state filters may alter the body.",
+  "colorStrategy": "Per-Pet authored palettes with no project or random hue. Ember Starling preserves charcoal and ember-orange; the original roster preserves its cyan robot palette.",
   "palette": {
     "base": [
       "#E6FAFF",
@@ -163,7 +181,7 @@
   },
   "provenance": {
     "selectedBy": "Mahiro",
-    "selectedMain": "scorpion",
+    "selectedMain": "ember-starling",
     "humanDecisionSha256": "bca53dae9936f40ce49b27f37f338312df16a7afa9a34b64143480d6fef386ce",
     "acceptedVisualSource": "finalists-15-motion-audition-v1",
     "acceptedStates": [
@@ -172,7 +190,8 @@
       "done"
     ],
     "attentionErrorSource": "finalists-15-state-proof-v1",
-    "selectionEvidence": "Mahiro reviewed repaired animated previews, retained all fifteen finalists, selected Scorpion as main, and later requested deterministic random project assignment without random colors.",
+    "selectionEvidence": "Mahiro retained all fifteen original finalists and selected Scorpion as their historical main. On 2026-07-21 Mahiro selected Ember Starling as the new global default while preserving every original Pet as an explicit selectable identity.",
+    "globalEmberEvidence": "Mahiro selected compact master B, requested complete chroma cleanup, and approved continuing through generated Idle/Working/Attention/Done/Error families before runtime integration.",
     "redesignPolicy": "Freeze accepted audition appearances and motion. Gemini v1/v2 redraws and partial imagegen A/B are non-selected experiments.",
     "signalEvidence": "Existing Candidate C semantic signal family was already human-approved and remains visually unchanged.",
     "nativeApproval": {
@@ -187,7 +206,7 @@
       "sourceProductionManifestSha256": "44e678f42170d9688af8848daa40b3823a3db82ff434f3007407c352a572a118",
       "evidence": "Mahiro reviewed the 15-identity Attention/Error animation gallery and responded \u0e1c\u0e48\u0e32\u0e19\u0e19\u0e30."
     },
-    "selectionDecision": "Mahiro returned to the original robot roster, chose Scorpion as the default/main mascot, disabled project assignment, and requested explicit user selection.",
+    "historicalSelectionDecision": "On 2026-07-16 Mahiro returned to the original robot roster, chose Scorpion as that roster's main mascot, disabled project assignment, and requested explicit user selection. Ember Starling superseded only the fresh/default identity on 2026-07-21.",
     "signalDecision": "Mahiro directed Signal V3 semantic corrections and requested a larger 16x16 delivery alongside the original robot bodies.",
     "signalReviewSource": "20260716-halo-semantic-signals-gemini-v2/v3-correction"
   },
@@ -267,6 +286,11 @@
     "body/turtle/error.png": "9e415254295b3c93d744c259a08ac6e8092618407c56c860dad1949ca9869f42",
     "body/turtle/idle.png": "bb5da656d148e1ec17d26a3172786feaf33f944f777ec654bb760d742790ff20",
     "body/turtle/working.png": "07da8c09ad5531fb3120499e2c3727b77ecf2737818009449a9a650780d90994",
+    "body/ember-starling/attention.webp": "f6cc82b8abd9c9d65e4965f8c875bfbfa3d17a1a9292b431941e77a9b035655c",
+    "body/ember-starling/done.webp": "ba34f32d9322026e97389d63100576d2d0f3d870a62f97d2b1eb902da3387828",
+    "body/ember-starling/error.webp": "e41b8075cec0f822c40c0514038c0aacb38e9504e5672e7d43341b8ed7cb1669",
+    "body/ember-starling/idle.webp": "290323a82cb81bd149535889464acd554d6d56430e3eef27fa7c309210186c63",
+    "body/ember-starling/working.webp": "5558c9e0d72abf3669d4e59632d5d8db90f9a8c988d760bf814be4db1d6e5b2b",
     "signals/attention-asking.png": "afaa0883d0c78347af8e5563b7c3b0cebdfd343c3e1b7fefdf15a7af57172fb4",
     "signals/delegating.png": "a03a5d9f07a0dde71a341b74a6bed70c2bd8c83bb8133dc0b877dceb08b82244",
     "signals/done.png": "241bba5f40874531273c9e8a641e3abf0dc4b13e96e77cc120508af589809882",
@@ -278,8 +302,8 @@
     "signals/thinking-model.png": "8402b4e8dd6ce6752908a2c45a6bc0bb4be7d110b6e7b2f4e204cfe290ae9079",
     "signals/visual.png": "105e7cf6234c918006f3dfaef148e269d872967bf8124bdd30098092b55709e8"
   },
-  "defaultMascot": "scorpion",
-  "defaultPet": "scorpion",
+  "defaultMascot": "ember-starling",
+  "defaultPet": "ember-starling",
   "delivery": {
     "ambient": {
       "wrapperSize": [

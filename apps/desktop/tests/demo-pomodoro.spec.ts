@@ -277,7 +277,7 @@ test("natural Focus completion summons Pet once and cancels the delayed notifica
   const handoffCancel = calls.slice(0, showIndex).findLast((call) => call.command === "cancel_pomodoro_notification");
   expect(handoffCancel?.args).toMatchObject({ requestId: "agent-halo.pomodoro", handoffDeadlineMs: endsAt + 3_000 });
   const summon = calls[showIndex]?.args?.summon as Record<string, unknown>;
-  expect(summon).toMatchObject({ id: "pet-natural-focus", pet: "scorpion", nextPhase: "short-break", actionLabel: "Start Short break" });
+  expect(summon).toMatchObject({ id: "pet-natural-focus", pet: "ember-starling", visual: "ember-starling", nextPhase: "short-break", actionLabel: "Start Short break" });
   expect(await page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? "null")?.phase, storageKey)).toBe("short-break");
 });
 

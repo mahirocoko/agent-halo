@@ -115,6 +115,14 @@
   left: 32px;
 }
 
+.completion-pet-ember-starling {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  background: url("/pets/ember-starling/completion-working@2x.webp") 0 0 / 400% 100% no-repeat;
+  animation: ember-starling-working 960ms steps(4, end) infinite;
+}
+
 .completion-pet-radial {
   position: absolute;
   inset: 0;
@@ -275,21 +283,26 @@
 }
 
 .completion-pet-option:focus-visible {
-  outline: none;
-  box-shadow: none;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .completion-pet-companion:focus-visible {
   outline: none;
 }
 
-.completion-pet-companion:focus-visible .completion-pet-visual {
+.completion-pet-companion:focus-visible :is(.completion-pet-visual, .completion-pet-ember-starling) {
   filter: drop-shadow(0 0 5px rgba(255, 157, 61, 0.96));
 }
 
 @keyframes completion-pet-float {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-2px); }
+}
+
+@keyframes ember-starling-working {
+  from { background-position-x: 0; }
+  to { background-position-x: 133.333%; }
 }
 
 @keyframes completion-pet-liquid-in {
@@ -344,6 +357,7 @@
   }
 
   .completion-pet-visual,
+  .completion-pet-ember-starling,
   .completion-pet-option,
   .completion-pet-orbit,
   .completion-pet-context {
