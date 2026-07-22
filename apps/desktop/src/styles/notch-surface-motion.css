@@ -207,6 +207,32 @@
   height: 36px;
 }
 
+.activity-pet.halo-pet[data-pet="halo-bot"] {
+  --halo-pet-frame-width: 30px;
+  --halo-pet-frame-height: 30px;
+  --halo-pet-three-frame-width: 90px;
+  --halo-pet-done-width: 120px;
+  --halo-pet-frame-1-x: -30px;
+  --halo-pet-frame-2-x: -60px;
+  --halo-pet-frame-3-x: -90px;
+  --halo-pet-signal-left: 34px;
+}
+
+.session-pet.halo-pet[data-pet="halo-bot"] {
+  --halo-pet-frame-width: 36px;
+  --halo-pet-frame-height: 36px;
+  --halo-pet-three-frame-width: 108px;
+  --halo-pet-done-width: 144px;
+  --halo-pet-frame-1-x: -36px;
+  --halo-pet-frame-2-x: -72px;
+  --halo-pet-frame-3-x: -108px;
+  --halo-pet-signal-left: 40px;
+}
+
+:is(.activity-pet, .session-pet).halo-pet[data-pet="halo-bot"] .halo-pet-body {
+  top: 0;
+}
+
 .halo-pet-body,
 .halo-pet-signal {
   position: absolute;

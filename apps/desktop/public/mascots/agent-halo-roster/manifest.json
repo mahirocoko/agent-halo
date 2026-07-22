@@ -1,12 +1,13 @@
 {
   "name": "Agent Halo Pet Roster",
-  "version": 6,
-  "status": "integration-candidate-mini-ember-global",
+  "version": 7,
+  "status": "integration-candidate-halo-bot-main",
   "humanApproved": true,
   "productionApproved": false,
-  "mainMascot": "ember-starling",
-  "mainPet": "ember-starling",
+  "mainMascot": "halo-bot",
+  "mainPet": "halo-bot",
   "roster": [
+    "halo-bot",
     "pot",
     "crawler",
     "bat",
@@ -29,10 +30,31 @@
     "strategy": "One persisted Pet selection is used for ambient, session, group, detail, and Completion Pet surfaces.",
     "storageKey": "agent-halo.pet",
     "legacyStorageKey": "agent-halo.mascot",
-    "default": "ember-starling",
-    "fallback": "ember-starling",
+    "default": "halo-bot",
+    "fallback": "halo-bot",
     "projectHashing": false,
-    "colorRandomization": false
+    "colorRandomization": false,
+    "loadout": {
+      "pet": "halo-bot",
+      "storageKey": "agent-halo.halo-bot-loadout",
+      "default": "3051",
+      "allowlist": [
+        "3051",
+        "1462",
+        "5324",
+        "c160",
+        "2515",
+        "4232",
+        "d351",
+        "6124",
+        "9132",
+        "f061"
+      ],
+      "projectHashing": false,
+      "randomization": false,
+      "automaticActivitySwap": false,
+      "strategy": "A separately persisted Halo Bot loadout is user-selected only; it does not change Pet assignment, hash by project, randomize, or swap for activity."
+    }
   },
   "body": {
     "frame": {
@@ -114,9 +136,18 @@
     },
     "perPetOverrides": {
       "ember-starling": {
-        "sourceFrame": [144, 144],
-        "sessionDisplay": [36, 36],
-        "ambientDisplay": [30, 30],
+        "sourceFrame": [
+          144,
+          144
+        ],
+        "sessionDisplay": [
+          36,
+          36
+        ],
+        "ambientDisplay": [
+          30,
+          30
+        ],
         "encoding": "WebP q50 alpha-q85 method6",
         "style": "smooth hand-painted layered cut-paper",
         "stateSelections": {
@@ -126,6 +157,23 @@
           "done": "A normalized",
           "error": "B"
         },
+        "signalLayer": "shared Signal V4"
+      },
+      "halo-bot": {
+        "sourceFrame": [
+          36,
+          36
+        ],
+        "sessionDisplay": [
+          36,
+          36
+        ],
+        "ambientDisplay": [
+          30,
+          30
+        ],
+        "encoding": "PNG binary alpha",
+        "style": "exact layered Pixabots pixel art",
         "signalLayer": "shared Signal V4"
       }
     }
@@ -168,7 +216,7 @@
     "productionApproved": false,
     "primaryStrokePx": 2
   },
-  "colorStrategy": "Per-Pet authored palettes with no project or random hue. Ember Starling preserves charcoal and ember-orange; the original roster preserves its cyan robot palette.",
+  "colorStrategy": "Per-Pet authored palettes with no project or random hue. Ember Starling preserves charcoal and ember-orange; original roster preserves its cyan robot palette; Halo Bot preserves each selected Pixabots loadout palette.",
   "palette": {
     "base": [
       "#E6FAFF",
@@ -181,7 +229,7 @@
   },
   "provenance": {
     "selectedBy": "Mahiro",
-    "selectedMain": "ember-starling",
+    "selectedMain": "halo-bot",
     "humanDecisionSha256": "bca53dae9936f40ce49b27f37f338312df16a7afa9a34b64143480d6fef386ce",
     "acceptedVisualSource": "finalists-15-motion-audition-v1",
     "acceptedStates": [
@@ -190,7 +238,7 @@
       "done"
     ],
     "attentionErrorSource": "finalists-15-state-proof-v1",
-    "selectionEvidence": "Mahiro retained all fifteen original finalists and selected Scorpion as their historical main. On 2026-07-21 Mahiro selected Ember Starling as the new global default while preserving every original Pet as an explicit selectable identity.",
+    "selectionEvidence": "Mahiro retained all fifteen original finalists and selected Scorpion as their historical main. On 2026-07-21 Mahiro selected Ember Starling as the then-new global default while preserving every original Pet as an explicit selectable identity. On 2026-07-22 Mahiro explicitly promoted Halo Bot as the fresh/default main Pet; Ember and every valid existing selection remain historical or selectable identities.",
     "globalEmberEvidence": "Mahiro selected compact master B, requested complete chroma cleanup, and approved continuing through generated Idle/Working/Attention/Done/Error families before runtime integration.",
     "redesignPolicy": "Freeze accepted audition appearances and motion. Gemini v1/v2 redraws and partial imagegen A/B are non-selected experiments.",
     "signalEvidence": "Existing Candidate C semantic signal family was already human-approved and remains visually unchanged.",
@@ -208,7 +256,33 @@
     },
     "historicalSelectionDecision": "On 2026-07-16 Mahiro returned to the original robot roster, chose Scorpion as that roster's main mascot, disabled project assignment, and requested explicit user selection. Ember Starling superseded only the fresh/default identity on 2026-07-21.",
     "signalDecision": "Mahiro directed Signal V3 semantic corrections and requested a larger 16x16 delivery alongside the original robot bodies.",
-    "signalReviewSource": "20260716-halo-semantic-signals-gemini-v2/v3-correction"
+    "signalReviewSource": "20260716-halo-semantic-signals-gemini-v2/v3-correction",
+    "haloBotPromotion": {
+      "approvedBy": "Mahiro",
+      "approvedAt": "2026-07-22T23:06:00+07:00",
+      "evidence": "Mahiro explicitly approved: \u201cpromote \u0e40\u0e02\u0e49\u0e32 pet \u0e2b\u0e25\u0e31\u0e01\u0e44\u0e14\u0e49\u0e40\u0e25\u0e22\u201d.",
+      "source": "pixabots-loadout-motion-v1",
+      "sourcePath": "apps/desktop/assets/mascots/agent-halo-roster/source/pixabots-loadout-motion-v1/",
+      "sourceRepository": "https://github.com/pablostanley/pixabots",
+      "sourceRevision": "b384de38a1ac34bdde443e375bb1782841507a75",
+      "license": "MIT",
+      "runtimeIdentity": "halo-bot",
+      "defaultLoadout": "3051",
+      "loadoutAllowlist": [
+        "3051",
+        "1462",
+        "5324",
+        "c160",
+        "2515",
+        "4232",
+        "d351",
+        "6124",
+        "9132",
+        "f061"
+      ],
+      "assetPromotion": "humanApproved/runtime-integration-candidate",
+      "productionApproved": false
+    }
   },
   "files": {
     "body/bat/attention.png": "a0ad12799723f4893db93cda09ea359539d37cab8ebf54b5d60e32376b0f3f59",
@@ -300,10 +374,60 @@
     "signals/planning-goal.png": "7992c77633b12b1a9d2430209d7fc2da745e6c5dab55c032239a6bbb7c867b1d",
     "signals/shell-tool-skill.png": "7ae5d4668b28d422a8df726800e3c6c5a3c6268f0f10f703bdb02dd00a504fd2",
     "signals/thinking-model.png": "8402b4e8dd6ce6752908a2c45a6bc0bb4be7d110b6e7b2f4e204cfe290ae9079",
-    "signals/visual.png": "105e7cf6234c918006f3dfaef148e269d872967bf8124bdd30098092b55709e8"
+    "signals/visual.png": "105e7cf6234c918006f3dfaef148e269d872967bf8124bdd30098092b55709e8",
+    "body/halo-bot/3051/idle.png": "623eadb230ac9302c4eeb9b3428bd0317083a42b6ccf3206a1b1f939dc82c7d8",
+    "body/halo-bot/3051/working.png": "baf7da46cd3523039f7f7cc7539f0c2da6ea2318344f98f7c8f4a714076d8c4f",
+    "body/halo-bot/3051/attention.png": "ff8808a2104234cd1647a082f6da4811979f62c14c77d8c47608fc13612a6578",
+    "body/halo-bot/3051/done.png": "25db460be11719592c2fc8f4fcee9db5715ae5508bca7bb3fcb727d6eac49c66",
+    "body/halo-bot/3051/error.png": "4473ba565a25351df3de964ca7e34c1b62583c9e7cbc6c7a29ea997b0ac3080b",
+    "body/halo-bot/1462/idle.png": "35751ec354d254237513744ed17e244d1f791d33e84e13f79521d84eed5de633",
+    "body/halo-bot/1462/working.png": "be864e9bfc006450043927903147d851dbaa9b9915ed321130e5a066fbe82602",
+    "body/halo-bot/1462/attention.png": "86d2294c3db4dc501fcb2f5fd549dd6aeef58458999f8339e41bfd88fd602303",
+    "body/halo-bot/1462/done.png": "ddfb30b14589ea097215309d894d64f4279776c8a611f70e34f3ff99559690a2",
+    "body/halo-bot/1462/error.png": "082761bce80b8b41f1d7e8c2f3cc169471bf46ecc812f734854bfc94e812726a",
+    "body/halo-bot/5324/idle.png": "6d664d912a7eae32f29954f6945510c62ab7c0159f9f7b3bec14a478294fd0f7",
+    "body/halo-bot/5324/working.png": "79705e004e4f9ebdfac44cbc4efe503d6d814e20e0ecc5965895257e6db7c56f",
+    "body/halo-bot/5324/attention.png": "44345f3ec501b3eb5eaba8151f21275b15a199a930b23ab4d365af7c89924708",
+    "body/halo-bot/5324/done.png": "5db674aa04cc398f8c2cc3b304fe61b9d339ea64183bfc7cc0f7dbf389d30b91",
+    "body/halo-bot/5324/error.png": "29b5a438854001d94100119533df60560dddd35ea238b362b4514516d6d536ad",
+    "body/halo-bot/c160/idle.png": "cf517e91c2e59eca2f767ee38dd4caf7ba07a7faf522732925d3bb39513fb9aa",
+    "body/halo-bot/c160/working.png": "51e7d165ce2819ab56e23a45fe34dc0f096c7c057ef16c61db0e92fb63253a2e",
+    "body/halo-bot/c160/attention.png": "8ff007d376a522a6ddb1c83d6669e176d260b5faea8a0d9d9c05e5fd245d6d7e",
+    "body/halo-bot/c160/done.png": "6ea80ff571dbbf6c198e5a37120d4bc3a7d453b5cd031f845af0ff2364973605",
+    "body/halo-bot/c160/error.png": "c7d6a004c97604cc04c267de7f8189d19f47ab77ce18d8865a3b91aa3507cfe4",
+    "body/halo-bot/2515/idle.png": "410fdfc445f71bad35e58ae2d2dbb7762ceaf4bb6d06b007cd9ccfa76d629aa9",
+    "body/halo-bot/2515/working.png": "389057d96417c26c13d8da875b5794751fe16061c8740eba874a352b0227b852",
+    "body/halo-bot/2515/attention.png": "bc4805cd6c5d9a9e98816094658e08fbe2105e2ccc060685de9987bdd87096d2",
+    "body/halo-bot/2515/done.png": "7bd43a987b62bb2467a0ecc92993286ec5528eb20ceb00e15ccf51525e9147b1",
+    "body/halo-bot/2515/error.png": "ec6b06cb699b9dd58107e2cd8d51ae77a76938c699d1319530a560e0171d6d34",
+    "body/halo-bot/4232/idle.png": "f876a78a8de4e87ea0d4f98052d391134f4b13ff359475ac9fdaaf9815f1fa6a",
+    "body/halo-bot/4232/working.png": "7b512dc88ce3dac37e880a0195c7caa8ea360672345df81d76c330872294d5e5",
+    "body/halo-bot/4232/attention.png": "ca9536c7a3d161a4c93381415562b5b790a4091503cba833a7b37aca18ef00a3",
+    "body/halo-bot/4232/done.png": "fc655ab690ff975c17b25cb707cc5e00d4b151acf15ce9553499690ca07c2804",
+    "body/halo-bot/4232/error.png": "e9ec4b76e6022c166f83e8c0033dc0945c9c52dd8585696062147d9157b15b77",
+    "body/halo-bot/d351/idle.png": "fab571d8485b7526fbb76e618409091858b266f9fbfdaabc53feaf0ae34a2526",
+    "body/halo-bot/d351/working.png": "214d784d3096c0fd77193d697995ef4e2689fcd1028273b98f97b4693f50e0f0",
+    "body/halo-bot/d351/attention.png": "8db3eb08222d8c7fd96a7a64543cbbf8b68a675d3811c96c0b1ca6eb75abb5d5",
+    "body/halo-bot/d351/done.png": "d28f874456d92f433c1965a3311ea7cbb09286ad577cb02bf1d854223c178ee1",
+    "body/halo-bot/d351/error.png": "039b9011489b23fa5b5414a2c7aa53a81646eee54f16354a32247d3ebfaafeab",
+    "body/halo-bot/6124/idle.png": "c1898ba2cf483f78119b17f96daa1dab4e8951e71d133e743f4819f0ce0801d5",
+    "body/halo-bot/6124/working.png": "0a08dfe3740cbd8f8ca85aa40ab6d7aff7fe83d8cbec6d031747e813453e82b3",
+    "body/halo-bot/6124/attention.png": "c2c90ab0583d3aa3cde084c77bd500c59018cca0d79034be7bf3baa4df97d061",
+    "body/halo-bot/6124/done.png": "0f5a2ecd3a1e2139e3385a0929a1130b3fa22304b4a876b56d1f265bd98605eb",
+    "body/halo-bot/6124/error.png": "322b8fe09d9769675cb0c124b11c649b1874f751821939d31a5213f75c7ffae0",
+    "body/halo-bot/9132/idle.png": "83a17681b30eb70cc52be1aa47d6df65866e170d279d07206eff87c2d618d3dd",
+    "body/halo-bot/9132/working.png": "4e885bb9814f7ea2700862d111b6810380e833446a032bf9870bfbc38d018451",
+    "body/halo-bot/9132/attention.png": "47a13e4c3611450f097d24f8f5becaa9cb1dc9815ed215667761d252be810fd1",
+    "body/halo-bot/9132/done.png": "4fc5d8fd648432964c30f036b2180edf95a9813ae737f5c6e90f325a9a6f966c",
+    "body/halo-bot/9132/error.png": "f5de669ca76fe2d065e9ddbc6e843def50d8a88c7733a1ddbc39b7e21be143df",
+    "body/halo-bot/f061/idle.png": "4f204d528dec3805a9422ad837122df3b3d9544694828bae077e0dd54b3216d4",
+    "body/halo-bot/f061/working.png": "64f5dbe148b2300aec9e6a577a6f2ac3512da12fa2edc4be7f57875d5aad89d2",
+    "body/halo-bot/f061/attention.png": "92bbde2fa87c1998e8eee996c309aeda632c5a2d5404e5ab056530d0cacb9341",
+    "body/halo-bot/f061/done.png": "3a9e68c940ad9df62c123a5e7f605c76ba1b7ef3a9493ce9f4c1bcaa31ff965a",
+    "body/halo-bot/f061/error.png": "243b846716456cb2487f51b133c513b14dc3828b360ce6e2d3cb5018c53f7e56"
   },
-  "defaultMascot": "ember-starling",
-  "defaultPet": "ember-starling",
+  "defaultMascot": "halo-bot",
+  "defaultPet": "halo-bot",
   "delivery": {
     "ambient": {
       "wrapperSize": [

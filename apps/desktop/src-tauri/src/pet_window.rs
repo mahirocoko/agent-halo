@@ -77,6 +77,7 @@ impl CompletionPetSurfaceMode {
 }
 
 const PET_NAMES: &[&str] = &[
+    "halo-bot",
     "pot",
     "crawler",
     "bat",
@@ -95,12 +96,18 @@ const PET_NAMES: &[&str] = &[
     "ember-starling",
 ];
 
+const HALO_BOT_LOADOUTS: &[&str] = &[
+    "3051", "1462", "5324", "c160", "2515", "4232", "d351", "6124", "9132", "f061",
+];
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CompletionPetSummon {
     schema_version: u8,
     id: String,
     pet: String,
+    #[serde(default)]
+    loadout: Option<String>,
     pet_size: String,
     #[serde(default)]
     visual: Option<String>,
@@ -122,6 +129,17 @@ impl CompletionPetSummon {
         }
         if !PET_NAMES.contains(&self.pet.as_str()) {
             return Err("Completion Pet selection is invalid".to_string());
+        }
+        if self.pet == "halo-bot" {
+            if !self
+                .loadout
+                .as_deref()
+                .is_some_and(|loadout| HALO_BOT_LOADOUTS.contains(&loadout))
+            {
+                return Err("Halo Bot loadout is invalid".to_string());
+            }
+        } else if self.loadout.is_some() {
+            return Err("Only Halo Bot accepts a loadout".to_string());
         }
         if !matches!(self.pet_size.as_str(), "small" | "medium" | "large") {
             return Err("Completion Pet size is invalid".to_string());
@@ -1036,6 +1054,7 @@ mod tests {
             schema_version: 1,
             id: "focus-1".to_string(),
             pet: "scorpion".to_string(),
+            loadout: None,
             pet_size: "large".to_string(),
             visual: None,
             preview: false,
@@ -1045,6 +1064,26 @@ mod tests {
             action_label: "Start Short break".to_string(),
         };
         assert!(valid.clone().validate().is_ok());
+        assert!(CompletionPetSummon {
+            pet: "halo-bot".to_string(),
+            loadout: Some("3051".to_string()),
+            ..valid.clone()
+        }
+        .validate()
+        .is_ok());
+        assert!(CompletionPetSummon {
+            pet: "halo-bot".to_string(),
+            loadout: Some("unknown".to_string()),
+            ..valid.clone()
+        }
+        .validate()
+        .is_err());
+        assert!(CompletionPetSummon {
+            loadout: Some("3051".to_string()),
+            ..valid.clone()
+        }
+        .validate()
+        .is_err());
         assert!(CompletionPetSummon {
             pet: "unknown".to_string(),
             ..valid.clone()
@@ -1139,6 +1178,7 @@ mod tests {
             schema_version: 1,
             id: "focus-movement".to_string(),
             pet: "scorpion".to_string(),
+            loadout: None,
             pet_size: "large".to_string(),
             visual: None,
             preview: false,

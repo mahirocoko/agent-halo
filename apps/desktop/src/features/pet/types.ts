@@ -1,4 +1,5 @@
 import type { HaloPetName } from "../session/HaloPet";
+import type { HaloBotLoadout } from "../session/haloBot";
 import type { CompletionPetSize } from "./preferences";
 
 export type CompletionPetBreakPhase = "short-break" | "long-break";
@@ -7,6 +8,7 @@ export interface ICompletionPetSummon {
   schemaVersion: 1;
   id: string;
   pet: HaloPetName;
+  loadout?: HaloBotLoadout;
   petSize: CompletionPetSize;
   visual?: "ember-starling";
   preview: boolean;

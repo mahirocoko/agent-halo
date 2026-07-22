@@ -1,0 +1,791 @@
+{
+  "schemaVersion": 1,
+  "asset": "halo-bot",
+  "runtimeIdentity": "halo-bot",
+  "defaultLoadout": "3051",
+  "loadoutAllowlist": [
+    "3051",
+    "1462",
+    "5324",
+    "c160",
+    "2515",
+    "4232",
+    "d351",
+    "6124",
+    "9132",
+    "f061"
+  ],
+  "sourceJob": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1",
+  "sourceRootManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/outbox/manifest.json",
+  "sourceRootManifestSha256": "29f6b3b4d333ca4a67ce4bd7eceb802f8caedc176174e67e7ecd183463a99fce",
+  "sourceRepository": "https://github.com/pablostanley/pixabots",
+  "sourceRevision": "b384de38a1ac34bdde443e375bb1782841507a75",
+  "license": "MIT",
+  "sourceMethod": "deterministic-layered-compositor",
+  "imagegen": false,
+  "humanApproval": {
+    "approvedBy": "Mahiro",
+    "approvedAt": "2026-07-22T23:06:00+07:00",
+    "evidence": "Mahiro explicitly approved: \u201cpromote \u0e40\u0e02\u0e49\u0e32 pet \u0e2b\u0e25\u0e31\u0e01\u0e44\u0e14\u0e49\u0e40\u0e25\u0e22\u201d."
+  },
+  "assetPromotion": {
+    "humanApproved": true,
+    "state": "runtime-integration-candidate"
+  },
+  "runtimeIntegration": {
+    "productionApproved": false,
+    "status": "integration-candidate"
+  },
+  "slots": [
+    {
+      "loadout": "3051",
+      "state": "idle",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/idle/3051/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/idle/3051/outbox/idle-3051-strip.png",
+      "sourceManifestSha256": "281665b287a2bcc8b159ebfa6a951947d72b515d6d104ec98d3e5498b2bf1b3a",
+      "stripSha256": "623eadb230ac9302c4eeb9b3428bd0317083a42b6ccf3206a1b1f939dc82c7d8",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/3051/idle.png"
+    },
+    {
+      "loadout": "3051",
+      "state": "working",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/working/3051/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/working/3051/outbox/working-3051-strip.png",
+      "sourceManifestSha256": "cb50a6c5893caafc8c7af3b956113922e9633996590db22eb44e5cd98f18da40",
+      "stripSha256": "baf7da46cd3523039f7f7cc7539f0c2da6ea2318344f98f7c8f4a714076d8c4f",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/3051/working.png"
+    },
+    {
+      "loadout": "3051",
+      "state": "attention",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/attention/3051/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/attention/3051/outbox/attention-3051-strip.png",
+      "sourceManifestSha256": "1ceb3e46e047dde0af75fb20e9dee0921b2b803883b792ed9ab29db48a30d6d5",
+      "stripSha256": "ff8808a2104234cd1647a082f6da4811979f62c14c77d8c47608fc13612a6578",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/3051/attention.png"
+    },
+    {
+      "loadout": "3051",
+      "state": "done",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/done/3051/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/done/3051/outbox/done-3051-strip.png",
+      "sourceManifestSha256": "1c97bce2308a5bddad9e03a232e996e4e5a49c028dccd9d5bff5a2ccf1f7994b",
+      "stripSha256": "25db460be11719592c2fc8f4fcee9db5715ae5508bca7bb3fcb727d6eac49c66",
+      "dimensions": [
+        144,
+        36
+      ],
+      "frameCount": 4,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/3051/done.png"
+    },
+    {
+      "loadout": "3051",
+      "state": "error",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/error/3051/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/error/3051/outbox/error-3051-strip.png",
+      "sourceManifestSha256": "54c2e823586cde2a8aa6fe795d18755a05586d3da87ab0eb89db91134aace2d1",
+      "stripSha256": "4473ba565a25351df3de964ca7e34c1b62583c9e7cbc6c7a29ea997b0ac3080b",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/3051/error.png"
+    },
+    {
+      "loadout": "1462",
+      "state": "idle",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/idle/1462/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/idle/1462/outbox/idle-1462-strip.png",
+      "sourceManifestSha256": "548c13ecdb90d33399ddf2b0807257d26c7f22b74ca8fc89e6bb1ffa5b24c7ce",
+      "stripSha256": "35751ec354d254237513744ed17e244d1f791d33e84e13f79521d84eed5de633",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/1462/idle.png"
+    },
+    {
+      "loadout": "1462",
+      "state": "working",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/working/1462/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/working/1462/outbox/working-1462-strip.png",
+      "sourceManifestSha256": "a3ebd9df69e1bc06044f64c1f75f99fec4c04d1b5cc6102de75af9ae12597dcb",
+      "stripSha256": "be864e9bfc006450043927903147d851dbaa9b9915ed321130e5a066fbe82602",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/1462/working.png"
+    },
+    {
+      "loadout": "1462",
+      "state": "attention",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/attention/1462/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/attention/1462/outbox/attention-1462-strip.png",
+      "sourceManifestSha256": "8a3f98788dc7d5b36f96cce8c969a266d6a5a03a339cc23ef109ea2a51c66716",
+      "stripSha256": "86d2294c3db4dc501fcb2f5fd549dd6aeef58458999f8339e41bfd88fd602303",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/1462/attention.png"
+    },
+    {
+      "loadout": "1462",
+      "state": "done",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/done/1462/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/done/1462/outbox/done-1462-strip.png",
+      "sourceManifestSha256": "8e70e826ddd2475d107247acaf5f243b80c291474868a09975166f9a620f74ad",
+      "stripSha256": "ddfb30b14589ea097215309d894d64f4279776c8a611f70e34f3ff99559690a2",
+      "dimensions": [
+        144,
+        36
+      ],
+      "frameCount": 4,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/1462/done.png"
+    },
+    {
+      "loadout": "1462",
+      "state": "error",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/error/1462/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/error/1462/outbox/error-1462-strip.png",
+      "sourceManifestSha256": "8167c87353f3f36b1ca6ad1b74c783545c32db93d624913dd0c91574f48ad209",
+      "stripSha256": "082761bce80b8b41f1d7e8c2f3cc169471bf46ecc812f734854bfc94e812726a",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/1462/error.png"
+    },
+    {
+      "loadout": "5324",
+      "state": "idle",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/idle/5324/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/idle/5324/outbox/idle-5324-strip.png",
+      "sourceManifestSha256": "47e977c81a71dfaaad5820b1f4498701fd2a3c82aaec7839eafba738e8ea0e30",
+      "stripSha256": "6d664d912a7eae32f29954f6945510c62ab7c0159f9f7b3bec14a478294fd0f7",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/5324/idle.png"
+    },
+    {
+      "loadout": "5324",
+      "state": "working",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/working/5324/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/working/5324/outbox/working-5324-strip.png",
+      "sourceManifestSha256": "0964cbcfcad5be0d0197a51a3cd2e7aea301e1abe59129ffbdc46f7d6b43b0ad",
+      "stripSha256": "79705e004e4f9ebdfac44cbc4efe503d6d814e20e0ecc5965895257e6db7c56f",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/5324/working.png"
+    },
+    {
+      "loadout": "5324",
+      "state": "attention",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/attention/5324/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/attention/5324/outbox/attention-5324-strip.png",
+      "sourceManifestSha256": "63cb9895c5794efbcdae4373742b297650ba278ac7f15b0b141eb903c858c78f",
+      "stripSha256": "44345f3ec501b3eb5eaba8151f21275b15a199a930b23ab4d365af7c89924708",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/5324/attention.png"
+    },
+    {
+      "loadout": "5324",
+      "state": "done",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/done/5324/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/done/5324/outbox/done-5324-strip.png",
+      "sourceManifestSha256": "ff17526fe4f1d1d47760c797a884bb9f9641be99552df860c17d59ecd416dc6b",
+      "stripSha256": "5db674aa04cc398f8c2cc3b304fe61b9d339ea64183bfc7cc0f7dbf389d30b91",
+      "dimensions": [
+        144,
+        36
+      ],
+      "frameCount": 4,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/5324/done.png"
+    },
+    {
+      "loadout": "5324",
+      "state": "error",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/error/5324/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/error/5324/outbox/error-5324-strip.png",
+      "sourceManifestSha256": "cd297b182be752fd3f545997ed877e2c5dde3ec68f6aeec1a298ace3bf4e92d8",
+      "stripSha256": "29b5a438854001d94100119533df60560dddd35ea238b362b4514516d6d536ad",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/5324/error.png"
+    },
+    {
+      "loadout": "c160",
+      "state": "idle",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/idle/c160/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/idle/c160/outbox/idle-c160-strip.png",
+      "sourceManifestSha256": "6af4c1aa404820b2304b7b19bbd67d94f91682cc53820159107eb192a5128bc6",
+      "stripSha256": "cf517e91c2e59eca2f767ee38dd4caf7ba07a7faf522732925d3bb39513fb9aa",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/c160/idle.png"
+    },
+    {
+      "loadout": "c160",
+      "state": "working",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/working/c160/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/working/c160/outbox/working-c160-strip.png",
+      "sourceManifestSha256": "c3c30d50e5771124fd6783fc025389e547fb5f9ed04d7d8aa1e8bf7642e6d4f3",
+      "stripSha256": "51e7d165ce2819ab56e23a45fe34dc0f096c7c057ef16c61db0e92fb63253a2e",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/c160/working.png"
+    },
+    {
+      "loadout": "c160",
+      "state": "attention",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/attention/c160/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/attention/c160/outbox/attention-c160-strip.png",
+      "sourceManifestSha256": "d825ba3baf2a52950bed8df20daa98b8494bb81238e11099191a83627e1d5d38",
+      "stripSha256": "8ff007d376a522a6ddb1c83d6669e176d260b5faea8a0d9d9c05e5fd245d6d7e",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/c160/attention.png"
+    },
+    {
+      "loadout": "c160",
+      "state": "done",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/done/c160/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/done/c160/outbox/done-c160-strip.png",
+      "sourceManifestSha256": "463a8eada851c1447046708f7c494b874a84244fefcaf164ab301a40dd01885e",
+      "stripSha256": "6ea80ff571dbbf6c198e5a37120d4bc3a7d453b5cd031f845af0ff2364973605",
+      "dimensions": [
+        144,
+        36
+      ],
+      "frameCount": 4,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/c160/done.png"
+    },
+    {
+      "loadout": "c160",
+      "state": "error",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/error/c160/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/error/c160/outbox/error-c160-strip.png",
+      "sourceManifestSha256": "fb35e9b0b332a633266554d0b2d20d0f74f80f55f1293faa844c25224ddfaa44",
+      "stripSha256": "c7d6a004c97604cc04c267de7f8189d19f47ab77ce18d8865a3b91aa3507cfe4",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/c160/error.png"
+    },
+    {
+      "loadout": "2515",
+      "state": "idle",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/idle/2515/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/idle/2515/outbox/idle-2515-strip.png",
+      "sourceManifestSha256": "63b836db797d671ed606f63f74146c376fa45957ad5e7d6fdee2a11c7cd8591f",
+      "stripSha256": "410fdfc445f71bad35e58ae2d2dbb7762ceaf4bb6d06b007cd9ccfa76d629aa9",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/2515/idle.png"
+    },
+    {
+      "loadout": "2515",
+      "state": "working",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/working/2515/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/working/2515/outbox/working-2515-strip.png",
+      "sourceManifestSha256": "e6840f4e69fd906bc0bb05d2a2cb4e541c3dd88d2f0bf317bdee31e893ab5f81",
+      "stripSha256": "389057d96417c26c13d8da875b5794751fe16061c8740eba874a352b0227b852",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/2515/working.png"
+    },
+    {
+      "loadout": "2515",
+      "state": "attention",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/attention/2515/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/attention/2515/outbox/attention-2515-strip.png",
+      "sourceManifestSha256": "d6c8b8ce3c4cc53bf14c785e04b275bd18093b37f10ff4e5dfb2ecac2b263ca3",
+      "stripSha256": "bc4805cd6c5d9a9e98816094658e08fbe2105e2ccc060685de9987bdd87096d2",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/2515/attention.png"
+    },
+    {
+      "loadout": "2515",
+      "state": "done",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/done/2515/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/done/2515/outbox/done-2515-strip.png",
+      "sourceManifestSha256": "40ee1c30efd64cfb3a80257b5caff4e604bc5869403bcd270b1e0602fabf8775",
+      "stripSha256": "7bd43a987b62bb2467a0ecc92993286ec5528eb20ceb00e15ccf51525e9147b1",
+      "dimensions": [
+        144,
+        36
+      ],
+      "frameCount": 4,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/2515/done.png"
+    },
+    {
+      "loadout": "2515",
+      "state": "error",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/error/2515/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/error/2515/outbox/error-2515-strip.png",
+      "sourceManifestSha256": "7343272ebc9e2357fca0c7d70381b5a9b035ad52f2c4676a56dbe670b5015c0b",
+      "stripSha256": "ec6b06cb699b9dd58107e2cd8d51ae77a76938c699d1319530a560e0171d6d34",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/2515/error.png"
+    },
+    {
+      "loadout": "4232",
+      "state": "idle",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/idle/4232/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/idle/4232/outbox/idle-4232-strip.png",
+      "sourceManifestSha256": "f4e423043220a08a7d54a6d01da2e8a2b57e6f6b27d819a1656262d3c1d71b24",
+      "stripSha256": "f876a78a8de4e87ea0d4f98052d391134f4b13ff359475ac9fdaaf9815f1fa6a",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/4232/idle.png"
+    },
+    {
+      "loadout": "4232",
+      "state": "working",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/working/4232/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/working/4232/outbox/working-4232-strip.png",
+      "sourceManifestSha256": "c8e679cfab7f444779100eecc09d781189b22295dbd30767b2b26bcb725faae2",
+      "stripSha256": "7b512dc88ce3dac37e880a0195c7caa8ea360672345df81d76c330872294d5e5",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/4232/working.png"
+    },
+    {
+      "loadout": "4232",
+      "state": "attention",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/attention/4232/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/attention/4232/outbox/attention-4232-strip.png",
+      "sourceManifestSha256": "9af9147895a71e70e6c3bcbf73f00e67c616422364d267fda18f9885ab9c5edf",
+      "stripSha256": "ca9536c7a3d161a4c93381415562b5b790a4091503cba833a7b37aca18ef00a3",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/4232/attention.png"
+    },
+    {
+      "loadout": "4232",
+      "state": "done",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/done/4232/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/done/4232/outbox/done-4232-strip.png",
+      "sourceManifestSha256": "ed05c8db4c19ca5a34a10562697c2a2fb91c8a02f3c38005b3a8b049056f80df",
+      "stripSha256": "fc655ab690ff975c17b25cb707cc5e00d4b151acf15ce9553499690ca07c2804",
+      "dimensions": [
+        144,
+        36
+      ],
+      "frameCount": 4,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/4232/done.png"
+    },
+    {
+      "loadout": "4232",
+      "state": "error",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/error/4232/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/error/4232/outbox/error-4232-strip.png",
+      "sourceManifestSha256": "a43a28538b271c38acc0aa13bb41f27245c69e6d1786d57ee7ea0f0c79d2a6b5",
+      "stripSha256": "e9ec4b76e6022c166f83e8c0033dc0945c9c52dd8585696062147d9157b15b77",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/4232/error.png"
+    },
+    {
+      "loadout": "d351",
+      "state": "idle",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/idle/d351/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/idle/d351/outbox/idle-d351-strip.png",
+      "sourceManifestSha256": "39190d484027303e20e1fdad98fb5ec2f8a999e58db0077f12b85febffaf79d8",
+      "stripSha256": "fab571d8485b7526fbb76e618409091858b266f9fbfdaabc53feaf0ae34a2526",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/d351/idle.png"
+    },
+    {
+      "loadout": "d351",
+      "state": "working",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/working/d351/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/working/d351/outbox/working-d351-strip.png",
+      "sourceManifestSha256": "dc5a2d2442d45ea0754307556a512a60acbbdcd2e8183d822fff895193937ac5",
+      "stripSha256": "214d784d3096c0fd77193d697995ef4e2689fcd1028273b98f97b4693f50e0f0",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/d351/working.png"
+    },
+    {
+      "loadout": "d351",
+      "state": "attention",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/attention/d351/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/attention/d351/outbox/attention-d351-strip.png",
+      "sourceManifestSha256": "eb409c0d5d8d43c098c17af7250c398c3a3f3ec07dc33690751959486d7ca6a0",
+      "stripSha256": "8db3eb08222d8c7fd96a7a64543cbbf8b68a675d3811c96c0b1ca6eb75abb5d5",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/d351/attention.png"
+    },
+    {
+      "loadout": "d351",
+      "state": "done",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/done/d351/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/done/d351/outbox/done-d351-strip.png",
+      "sourceManifestSha256": "969d83574c35414ccdcb51c6bb3edc04cbb5e8ad5b9fc394a0be889af69ed3a2",
+      "stripSha256": "d28f874456d92f433c1965a3311ea7cbb09286ad577cb02bf1d854223c178ee1",
+      "dimensions": [
+        144,
+        36
+      ],
+      "frameCount": 4,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/d351/done.png"
+    },
+    {
+      "loadout": "d351",
+      "state": "error",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/error/d351/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/error/d351/outbox/error-d351-strip.png",
+      "sourceManifestSha256": "1806c2e592e67b64cbbb37338c4ce0c07502f752bc029cc3050f5e1491db8584",
+      "stripSha256": "039b9011489b23fa5b5414a2c7aa53a81646eee54f16354a32247d3ebfaafeab",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/d351/error.png"
+    },
+    {
+      "loadout": "6124",
+      "state": "idle",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/idle/6124/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/idle/6124/outbox/idle-6124-strip.png",
+      "sourceManifestSha256": "9906a45a2b9feaa54884bec5c2b5c13386ae7f4e5af29cbccbcf5f4ce416be3a",
+      "stripSha256": "c1898ba2cf483f78119b17f96daa1dab4e8951e71d133e743f4819f0ce0801d5",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/6124/idle.png"
+    },
+    {
+      "loadout": "6124",
+      "state": "working",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/working/6124/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/working/6124/outbox/working-6124-strip.png",
+      "sourceManifestSha256": "7dac8dce2ab209991af6f2af0f8c4813ba02f242400974438a097399bc57aca0",
+      "stripSha256": "0a08dfe3740cbd8f8ca85aa40ab6d7aff7fe83d8cbec6d031747e813453e82b3",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/6124/working.png"
+    },
+    {
+      "loadout": "6124",
+      "state": "attention",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/attention/6124/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/attention/6124/outbox/attention-6124-strip.png",
+      "sourceManifestSha256": "e1cad09a9b38d775dfeec9d0ba0b4c6a2d6a43dc9ba062867e7916213be84592",
+      "stripSha256": "c2c90ab0583d3aa3cde084c77bd500c59018cca0d79034be7bf3baa4df97d061",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/6124/attention.png"
+    },
+    {
+      "loadout": "6124",
+      "state": "done",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/done/6124/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/done/6124/outbox/done-6124-strip.png",
+      "sourceManifestSha256": "e8934e3fe38e74734248a0ea5051f995e4b967775c7b8decc3939ebe089cb30e",
+      "stripSha256": "0f5a2ecd3a1e2139e3385a0929a1130b3fa22304b4a876b56d1f265bd98605eb",
+      "dimensions": [
+        144,
+        36
+      ],
+      "frameCount": 4,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/6124/done.png"
+    },
+    {
+      "loadout": "6124",
+      "state": "error",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/error/6124/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/error/6124/outbox/error-6124-strip.png",
+      "sourceManifestSha256": "284bf4c73f6262ec31d91d22308f89998b988c8fcb7b8ab899f40df38eec6aa9",
+      "stripSha256": "322b8fe09d9769675cb0c124b11c649b1874f751821939d31a5213f75c7ffae0",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/6124/error.png"
+    },
+    {
+      "loadout": "9132",
+      "state": "idle",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/idle/9132/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/idle/9132/outbox/idle-9132-strip.png",
+      "sourceManifestSha256": "4f00642a82cbde8fecd3ac987eb9a980ca9f2559b999e524713aec47d186c026",
+      "stripSha256": "83a17681b30eb70cc52be1aa47d6df65866e170d279d07206eff87c2d618d3dd",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/9132/idle.png"
+    },
+    {
+      "loadout": "9132",
+      "state": "working",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/working/9132/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/working/9132/outbox/working-9132-strip.png",
+      "sourceManifestSha256": "08495c4e5e333acbf881fcfc8452c40c5ebd624fe342095a7055c06cca238519",
+      "stripSha256": "4e885bb9814f7ea2700862d111b6810380e833446a032bf9870bfbc38d018451",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/9132/working.png"
+    },
+    {
+      "loadout": "9132",
+      "state": "attention",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/attention/9132/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/attention/9132/outbox/attention-9132-strip.png",
+      "sourceManifestSha256": "5fb93d4a2b61abc3d078fa71b495b54f9759eca748bd51afb154b9b087cdff7f",
+      "stripSha256": "47a13e4c3611450f097d24f8f5becaa9cb1dc9815ed215667761d252be810fd1",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/9132/attention.png"
+    },
+    {
+      "loadout": "9132",
+      "state": "done",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/done/9132/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/done/9132/outbox/done-9132-strip.png",
+      "sourceManifestSha256": "c23fc25e734cb11663eacca599bed3b537fabce461bdeb54c85f52181d72e800",
+      "stripSha256": "4fc5d8fd648432964c30f036b2180edf95a9813ae737f5c6e90f325a9a6f966c",
+      "dimensions": [
+        144,
+        36
+      ],
+      "frameCount": 4,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/9132/done.png"
+    },
+    {
+      "loadout": "9132",
+      "state": "error",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/error/9132/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/error/9132/outbox/error-9132-strip.png",
+      "sourceManifestSha256": "9d7195691ab3af71b0e9227849bfb014334b9edfea32fa73f3628f4fd9945f80",
+      "stripSha256": "f5de669ca76fe2d065e9ddbc6e843def50d8a88c7733a1ddbc39b7e21be143df",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/9132/error.png"
+    },
+    {
+      "loadout": "f061",
+      "state": "idle",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/idle/f061/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/idle/f061/outbox/idle-f061-strip.png",
+      "sourceManifestSha256": "ad09311f34fcb5ff5a116142b05079c1ddf3700f4997fd8cfecb4ee78a71ed7d",
+      "stripSha256": "4f204d528dec3805a9422ad837122df3b3d9544694828bae077e0dd54b3216d4",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/f061/idle.png"
+    },
+    {
+      "loadout": "f061",
+      "state": "working",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/working/f061/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/working/f061/outbox/working-f061-strip.png",
+      "sourceManifestSha256": "95edf7b3667606552641597755a1a3f7c7f64b47a9fcec48bfbd77e76d8f0c32",
+      "stripSha256": "64f5dbe148b2300aec9e6a577a6f2ac3512da12fa2edc4be7f57875d5aad89d2",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/f061/working.png"
+    },
+    {
+      "loadout": "f061",
+      "state": "attention",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/attention/f061/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/attention/f061/outbox/attention-f061-strip.png",
+      "sourceManifestSha256": "02743ea104ea850af3fc525f47ab7617da7f14b4aa397b55cc6c140be87bb3ba",
+      "stripSha256": "92bbde2fa87c1998e8eee996c309aeda632c5a2d5404e5ab056530d0cacb9341",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/f061/attention.png"
+    },
+    {
+      "loadout": "f061",
+      "state": "done",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/done/f061/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/done/f061/outbox/done-f061-strip.png",
+      "sourceManifestSha256": "292219c66d56442ea21a01173431037d26df80c57426b32709115ef4cc23f19b",
+      "stripSha256": "3a9e68c940ad9df62c123a5e7f605c76ba1b7ef3a9493ce9f4c1bcaa31ff965a",
+      "dimensions": [
+        144,
+        36
+      ],
+      "frameCount": 4,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/f061/done.png"
+    },
+    {
+      "loadout": "f061",
+      "state": "error",
+      "sourceManifest": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/error/f061/outbox/manifest.json",
+      "sourceStrip": ".agent-state/sprite-workflow/jobs/20260722-halo-pixabot-loadout-motion-v1/actions/error/f061/outbox/error-f061-strip.png",
+      "sourceManifestSha256": "4167615e2c8cd199a704bdde96250491bbad6602332d00874ac90161ddb74373",
+      "stripSha256": "243b846716456cb2487f51b133c513b14dc3828b360ce6e2d3cb5018c53f7e56",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "runtimeDestination": "apps/desktop/public/mascots/agent-halo-roster/body/halo-bot/f061/error.png"
+    }
+  ]
+}

@@ -115,6 +115,51 @@
   left: 32px;
 }
 
+.completion-pet-visual.halo-pet[data-pet="halo-bot"] {
+  --halo-pet-frame-width: 78px;
+  --halo-pet-frame-height: 78px;
+  --halo-pet-three-frame-width: 234px;
+  --halo-pet-done-width: 312px;
+  --halo-pet-frame-1-x: -78px;
+  --halo-pet-frame-2-x: -156px;
+  --halo-pet-frame-3-x: -234px;
+}
+
+.completion-pet-visual.halo-pet[data-pet="halo-bot"] .halo-pet-body {
+  top: 5px;
+  left: 19px;
+}
+
+.completion-pet-root[data-pet-size="medium"] .completion-pet-visual.halo-pet[data-pet="halo-bot"] {
+  --halo-pet-frame-width: 59px;
+  --halo-pet-frame-height: 59px;
+  --halo-pet-three-frame-width: 177px;
+  --halo-pet-done-width: 236px;
+  --halo-pet-frame-1-x: -59px;
+  --halo-pet-frame-2-x: -118px;
+  --halo-pet-frame-3-x: -177px;
+}
+
+.completion-pet-root[data-pet-size="medium"] .completion-pet-visual.halo-pet[data-pet="halo-bot"] .halo-pet-body {
+  top: 15px;
+  left: 29px;
+}
+
+.completion-pet-root[data-pet-size="small"] .completion-pet-visual.halo-pet[data-pet="halo-bot"] {
+  --halo-pet-frame-width: 39px;
+  --halo-pet-frame-height: 39px;
+  --halo-pet-three-frame-width: 117px;
+  --halo-pet-done-width: 156px;
+  --halo-pet-frame-1-x: -39px;
+  --halo-pet-frame-2-x: -78px;
+  --halo-pet-frame-3-x: -117px;
+}
+
+.completion-pet-root[data-pet-size="small"] .completion-pet-visual.halo-pet[data-pet="halo-bot"] .halo-pet-body {
+  top: 25px;
+  left: 39px;
+}
+
 .completion-pet-ember-starling {
   position: absolute;
   top: 6px;

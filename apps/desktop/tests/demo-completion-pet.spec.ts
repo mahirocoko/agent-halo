@@ -124,6 +124,32 @@ test("native Pet surface reads projection and sends only validated custom comman
   await expect.poll(() => page.evaluate(() => (window as typeof window & { __petNativeCalls: Array<{ command: string; args?: Record<string, unknown> }> }).__petNativeCalls.some((call) => call.command === "submit_completion_pet_action" && call.args?.action === "start-break"))).toBe(true);
 });
 
+test("Halo Bot completion keeps the selected loadout and square pixel geometry", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("agent-halo.halo-bot-loadout", "f061");
+    (window as typeof window & { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
+      invoke: async (command: string) => {
+        if (command === "completion_pet_state") return {
+          summon: { schemaVersion: 1, id: "halo-bot-pet", pet: "halo-bot", loadout: "f061", petSize: "large", preview: false, nextPhase: "short-break", title: "Focus complete", actionLabel: "Start Short break" },
+        };
+        return null;
+      },
+    };
+  });
+  await page.setViewportSize({ width: 116, height: 88 });
+  await page.goto("/?surface=pet");
+  const pet = page.locator('.completion-pet-visual.halo-pet[data-pet="halo-bot"]');
+  await expect(pet).toHaveAttribute("data-loadout", "f061");
+  const body = pet.locator(".halo-pet-body");
+  await expect(body).toHaveCSS("width", "78px");
+  await expect(body).toHaveCSS("height", "78px");
+  await expect(body).toHaveCSS("top", "5px");
+  await expect(body).toHaveCSS("left", "19px");
+  await expect(body).toHaveCSS("background-size", "234px 78px");
+  await expect(body).toHaveCSS("background-image", /\/body\/halo-bot\/f061\/working\.png/);
+  await expect(body).toHaveCSS("image-rendering", "pixelated");
+});
+
 test("manual Pet preview is dismiss-only and never exposes a Pomodoro action", async ({ page }) => {
   await page.addInitScript(() => {
     (window as typeof window & { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {

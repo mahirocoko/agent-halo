@@ -353,7 +353,7 @@ export const PetApp = () => {
           onPointerCancel={endPointer}
           data-tauri-drag-region="false"
         >
-          {emberGeometry ? <span className="completion-pet-ember-starling" style={emberGeometry.visual} aria-hidden="true" /> : <HaloPet className="completion-pet-visual" pet={summon.pet} status="working" activityKind="session" />}
+          {emberGeometry ? <span className="completion-pet-ember-starling" style={emberGeometry.visual} aria-hidden="true" /> : <HaloPet className="completion-pet-visual" loadout={summon.loadout} pet={summon.pet} status="working" activityKind="session" />}
         </button>
       </div>
     </main>

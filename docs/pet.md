@@ -2,7 +2,7 @@
 
 ## Phase 1 contract
 
-Agent Halo uses **Pet** as the product-facing companion concept. The global roster now contains the original 15 pixel companions plus **Ember Starling**, the default global Pet. It remains an event/state projection rather than a persistent desktop-pet simulation.
+Agent Halo uses **Pet** as the product-facing companion concept. The global roster contains the original 15 pixel companions, **Ember Starling**, and **Halo Bot**, the fresh/default global Pet. Halo Bot is one identity with ten curated user-selectable loadouts, not ten separate Pets. It remains an event/state projection rather than a persistent desktop-pet simulation.
 
 The Completion Pet is event-only:
 
@@ -47,6 +47,7 @@ This keeps the OS-owned fallback available when the renderer/app is unavailable 
 
 - Original-roster companion frame: `116 × 88` logical px. The default `2×` presentation is a centered continuously animated `104 × 78` Pet body; smaller Setup choices remain centered inside the same bounded native surface.
 - Ember Starling follows the existing floating-size choice with a tight surface per scale: `1×` uses `56 × 66`, `1.5×` uses `78 × 93`, and `2×` uses `100 × 120`; its radial surface is `260 × 270` so real break actions and their visible state label remain clear of the body.
+- Halo Bot keeps the original bounded Completion Pet surface but preserves its square pixel geometry: `1×` renders `39 × 39`, `1.5×` renders `59 × 59`, and `2×` renders `78 × 78`. Compact ambient/session delivery remains `30 × 30` / `36 × 36` with the same selected loadout.
 - Original-roster radial-menu frame: `260 × 230` logical px. Three circular actions orbit the Pet on a transparent surface; the dashed orbit and circular controls make the deliberate interaction area visible even without a backing card.
 - The frame remains tight because transparent WebViews still have rectangular native hitboxes.
 - Default position: 20px from the selected display's visible bottom-right corner.
@@ -60,7 +61,11 @@ This keeps the OS-owned fallback available when the renderer/app is unavailable 
 
 ## Preference migration
 
-The preference key is `agent-halo.pet`. When absent, Agent Halo reads the legacy `agent-halo.mascot` value and writes the normalized Pet preference. Fresh installs default to Ember Starling; every existing valid selection, including Scorpion, remains intact until the user changes it in Setup. Product UI, accessibility copy, types, and settings use **Pet**.
+The preference key is `agent-halo.pet`. When absent, Agent Halo reads the legacy `agent-halo.mascot` value and writes the normalized Pet preference. Fresh installs default to Halo Bot; every existing valid selection, including Ember Starling and Scorpion, remains intact until the user changes it in Setup. Halo Bot's independent `agent-halo.halo-bot-loadout` key accepts only `3051`, `1462`, `5324`, `c160`, `2515`, `4232`, `d351`, `6124`, `9132`, or `f061` and defaults to `3051`. The loadout is global, user-selected, and never project-hashed, randomized, or activity-swapped. Product UI, accessibility copy, types, and settings use **Pet**.
+
+## Global Halo Bot
+
+Halo Bot uses the MIT Pixabots layered character system pinned in the tracked asset provenance. One four-part rig composes face/eyes, head shell, body/outfit, and top accessory; Agent Halo preserves the authored palettes and adds deterministic layered `idle`, `working`, `attention`, `done`, and `error` motion. The ten approved loadouts share that motion contract while remaining one persisted Pet identity. Signal V4 stays a detached semantic layer and is never baked into the body strips.
 
 ## Global Ember Starling
 

@@ -1,0 +1,345 @@
+{
+  "sourceRepo": "/Users/mahiro/ghq/github.com/pablostanley/pixabots",
+  "sourceRevision": "b384de38a1ac34bdde443e375bb1782841507a75",
+  "license": "MIT",
+  "parts": [
+    {
+      "category": "eyes",
+      "name": "cheeky-terminal",
+      "upstream": "app/public/parts/eyes/cheeky-terminal.png",
+      "copied": "assets/parts/eyes/cheeky-terminal.png",
+      "sha256": "62305ba5efbac754bceff7f0fec0fe870c48811046f374c5584ae6e80e33823b",
+      "dimensions": [
+        512,
+        32
+      ],
+      "frames": 16,
+      "binaryAlpha": true
+    },
+    {
+      "category": "eyes",
+      "name": "glasses",
+      "upstream": "app/public/parts/eyes/glasses.png",
+      "copied": "assets/parts/eyes/glasses.png",
+      "sha256": "b1d6fb55b8e4fa274da20a72fd3b9ec07bd534d0144741101005f5b801399e33",
+      "dimensions": [
+        64,
+        32
+      ],
+      "frames": 2,
+      "binaryAlpha": true
+    },
+    {
+      "category": "eyes",
+      "name": "human",
+      "upstream": "app/public/parts/eyes/human.png",
+      "copied": "assets/parts/eyes/human.png",
+      "sha256": "aa79f078fe24ef1460c65b1a96ffe467ef06301f690372ad6ad678c10fdc0e17",
+      "dimensions": [
+        64,
+        32
+      ],
+      "frames": 2,
+      "binaryAlpha": true
+    },
+    {
+      "category": "eyes",
+      "name": "human-2",
+      "upstream": "app/public/parts/eyes/human-2.png",
+      "copied": "assets/parts/eyes/human-2.png",
+      "sha256": "b8fbe7b400c9bd7d86f8dab317ee4972d789da336de943d396e4ee317596c28f",
+      "dimensions": [
+        64,
+        32
+      ],
+      "frames": 2,
+      "binaryAlpha": true
+    },
+    {
+      "category": "eyes",
+      "name": "monitor",
+      "upstream": "app/public/parts/eyes/monitor.png",
+      "copied": "assets/parts/eyes/monitor.png",
+      "sha256": "48afc35de1a0583de012d0ff091263dbe32b1885f527270a49df8a81402c9c81",
+      "dimensions": [
+        32,
+        32
+      ],
+      "frames": 1,
+      "binaryAlpha": true
+    },
+    {
+      "category": "eyes",
+      "name": "monitor-round",
+      "upstream": "app/public/parts/eyes/monitor-round.png",
+      "copied": "assets/parts/eyes/monitor-round.png",
+      "sha256": "7f77dda563ede2dfe6e4dad7a293ae62fbdeeea93baf0b6bd2882792284177dc",
+      "dimensions": [
+        32,
+        32
+      ],
+      "frames": 1,
+      "binaryAlpha": true
+    },
+    {
+      "category": "eyes",
+      "name": "terminal-green",
+      "upstream": "app/public/parts/eyes/terminal-green.png",
+      "copied": "assets/parts/eyes/terminal-green.png",
+      "sha256": "d52ee818a08df5c2469849f1e3cd675218f9d3d5e3e249c1f40e9326f1bb1929",
+      "dimensions": [
+        64,
+        32
+      ],
+      "frames": 2,
+      "binaryAlpha": true
+    },
+    {
+      "category": "eyes",
+      "name": "tight-visor",
+      "upstream": "app/public/parts/eyes/tight-visor.png",
+      "copied": "assets/parts/eyes/tight-visor.png",
+      "sha256": "47edd0994534687674b9d0e257c2d74cd7beb4c96654e0dac93471f729cff238",
+      "dimensions": [
+        256,
+        32
+      ],
+      "frames": 8,
+      "binaryAlpha": true
+    },
+    {
+      "category": "eyes",
+      "name": "visor",
+      "upstream": "app/public/parts/eyes/visor.png",
+      "copied": "assets/parts/eyes/visor.png",
+      "sha256": "bd8f261068272ae0da148bc3b4c05b592fb28516bb66d55d39e86d9597b5b7b0",
+      "dimensions": [
+        256,
+        32
+      ],
+      "frames": 8,
+      "binaryAlpha": true
+    },
+    {
+      "category": "eyes",
+      "name": "wayfarer-face",
+      "upstream": "app/public/parts/eyes/wayfarer-face.png",
+      "copied": "assets/parts/eyes/wayfarer-face.png",
+      "sha256": "d5d86c97d3dc757e621e4e8e09afd36694fe9bf7bd29dd3d6bcfc4810ff3de2a",
+      "dimensions": [
+        256,
+        32
+      ],
+      "frames": 8,
+      "binaryAlpha": true
+    },
+    {
+      "category": "heads",
+      "name": "ac",
+      "upstream": "app/public/parts/heads/ac.png",
+      "copied": "assets/parts/heads/ac.png",
+      "sha256": "52628950739203c67265eb737b623179ddf55fecbe5e10e70c5c2779b2ac33f5",
+      "dimensions": [
+        32,
+        32
+      ],
+      "frames": 1,
+      "binaryAlpha": true
+    },
+    {
+      "category": "heads",
+      "name": "blob",
+      "upstream": "app/public/parts/heads/blob.png",
+      "copied": "assets/parts/heads/blob.png",
+      "sha256": "a3677320c55eb73fd07b8b44126ec68aea45bfed98ebc55d4635d7f10cde0b55",
+      "dimensions": [
+        32,
+        32
+      ],
+      "frames": 1,
+      "binaryAlpha": true
+    },
+    {
+      "category": "heads",
+      "name": "blob-blue",
+      "upstream": "app/public/parts/heads/blob-blue.png",
+      "copied": "assets/parts/heads/blob-blue.png",
+      "sha256": "b6e836c5b2c1c8b73bc653dc25ae251ecb377c2521aaf30e3eaa5bc5feef8ec3",
+      "dimensions": [
+        32,
+        32
+      ],
+      "frames": 1,
+      "binaryAlpha": true
+    },
+    {
+      "category": "heads",
+      "name": "bowl",
+      "upstream": "app/public/parts/heads/bowl.png",
+      "copied": "assets/parts/heads/bowl.png",
+      "sha256": "d8f788758656998d4ffb11a0ff0a24911c35b65b1c903bbcfdcb587125f2738e",
+      "dimensions": [
+        32,
+        32
+      ],
+      "frames": 1,
+      "binaryAlpha": true
+    },
+    {
+      "category": "heads",
+      "name": "box",
+      "upstream": "app/public/parts/heads/box.png",
+      "copied": "assets/parts/heads/box.png",
+      "sha256": "b46a260cd251d2e157b7fa66633caf13ad87d4a243e23eef1828b28f69c16171",
+      "dimensions": [
+        32,
+        32
+      ],
+      "frames": 1,
+      "binaryAlpha": true
+    },
+    {
+      "category": "heads",
+      "name": "commodore",
+      "upstream": "app/public/parts/heads/commodore.png",
+      "copied": "assets/parts/heads/commodore.png",
+      "sha256": "c07f53a321b0fc898044debe5cf09dea1c37926dd5ba4723ed72d43221621b82",
+      "dimensions": [
+        32,
+        32
+      ],
+      "frames": 1,
+      "binaryAlpha": true
+    },
+    {
+      "category": "body",
+      "name": "claws",
+      "upstream": "app/public/parts/body/claws.png",
+      "copied": "assets/parts/body/claws.png",
+      "sha256": "70981449c3ed1ee37e8cfcd5f43bd40aa809370a1578d214c1e8205d4cbb054d",
+      "dimensions": [
+        32,
+        32
+      ],
+      "frames": 1,
+      "binaryAlpha": true
+    },
+    {
+      "category": "body",
+      "name": "fire",
+      "upstream": "app/public/parts/body/fire.png",
+      "copied": "assets/parts/body/fire.png",
+      "sha256": "be5b987e18ab89faf873049c3a2dd99af7d1a72c76808942ce5a388e37d9aaef",
+      "dimensions": [
+        32,
+        32
+      ],
+      "frames": 1,
+      "binaryAlpha": true
+    },
+    {
+      "category": "body",
+      "name": "heart",
+      "upstream": "app/public/parts/body/heart.png",
+      "copied": "assets/parts/body/heart.png",
+      "sha256": "ccd4d59e857d933c3a661bc46562170161f6a1da692872eb1e312ffd0887d689",
+      "dimensions": [
+        32,
+        32
+      ],
+      "frames": 1,
+      "binaryAlpha": true
+    },
+    {
+      "category": "body",
+      "name": "swag",
+      "upstream": "app/public/parts/body/swag.png",
+      "copied": "assets/parts/body/swag.png",
+      "sha256": "0e37eb8644605258fe09f4879baad5caf9e6317c5f7ce909ee39507c0b2cc9b0",
+      "dimensions": [
+        32,
+        32
+      ],
+      "frames": 1,
+      "binaryAlpha": true
+    },
+    {
+      "category": "body",
+      "name": "wings",
+      "upstream": "app/public/parts/body/wings.png",
+      "copied": "assets/parts/body/wings.png",
+      "sha256": "677f81b936cdb4b30997bda363cce6f8c4ff55ca909f93c39073f4154727e724",
+      "dimensions": [
+        32,
+        32
+      ],
+      "frames": 1,
+      "binaryAlpha": true
+    },
+    {
+      "category": "top",
+      "name": "antenna",
+      "upstream": "app/public/parts/top/antenna.png",
+      "copied": "assets/parts/top/antenna.png",
+      "sha256": "a7e862c322b1373fe9f4d0ad5ec6b26eed5055dec6ce77f5ce9795bbba2dd747",
+      "dimensions": [
+        32,
+        32
+      ],
+      "frames": 1,
+      "binaryAlpha": true
+    },
+    {
+      "category": "top",
+      "name": "bulb",
+      "upstream": "app/public/parts/top/bulb.png",
+      "copied": "assets/parts/top/bulb.png",
+      "sha256": "afc7fd38732e6446a010142b1a9e317be79397c66ca41b9cbe7312ebe26f7074",
+      "dimensions": [
+        32,
+        32
+      ],
+      "frames": 1,
+      "binaryAlpha": true
+    },
+    {
+      "category": "top",
+      "name": "bunny-ears",
+      "upstream": "app/public/parts/top/bunny-ears.png",
+      "copied": "assets/parts/top/bunny-ears.png",
+      "sha256": "3072750ed9ab345c99622623891b3aa898effb57b5a463a860ffb5f7d62b86bc",
+      "dimensions": [
+        32,
+        32
+      ],
+      "frames": 1,
+      "binaryAlpha": true
+    },
+    {
+      "category": "top",
+      "name": "leaf",
+      "upstream": "app/public/parts/top/leaf.png",
+      "copied": "assets/parts/top/leaf.png",
+      "sha256": "7fe8dcc9da813aca698fff524e6f2f7d260ad86ceed79752684521b447d256d6",
+      "dimensions": [
+        32,
+        32
+      ],
+      "frames": 1,
+      "binaryAlpha": true
+    },
+    {
+      "category": "top",
+      "name": "lollypop",
+      "upstream": "app/public/parts/top/lollypop.png",
+      "copied": "assets/parts/top/lollypop.png",
+      "sha256": "3c344e76e1e69631ad315f69ab2e24b500d809200f70164ecbf5fa4bd7671006",
+      "dimensions": [
+        32,
+        32
+      ],
+      "frames": 1,
+      "binaryAlpha": true
+    }
+  ]
+}
