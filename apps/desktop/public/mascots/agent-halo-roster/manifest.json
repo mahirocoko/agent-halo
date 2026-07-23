@@ -1,33 +1,18 @@
 {
   "name": "Agent Halo Pet Roster",
-  "version": 7,
-  "status": "integration-candidate-halo-bot-main",
+  "version": 8,
+  "status": "integration-candidate-two-pet-motion-mapping",
   "humanApproved": true,
   "productionApproved": false,
   "mainMascot": "halo-bot",
   "mainPet": "halo-bot",
   "roster": [
     "halo-bot",
-    "pot",
-    "crawler",
-    "bat",
-    "jelly",
-    "cat",
-    "crt",
-    "cactus",
-    "nautilus",
-    "turtle",
-    "lantern",
-    "kettle",
-    "dragonfly",
-    "giraffe",
-    "scorpion",
-    "squid",
-    "ember-starling"
+    "haloform"
   ],
   "assignment": {
-    "status": "user-selected-global",
-    "strategy": "One persisted Pet selection is used for ambient, session, group, detail, and Completion Pet surfaces.",
+    "status": "user-selected-global-two-pet",
+    "strategy": "One persisted Pet selection is used across ambient, session, group, detail, and Completion surfaces. Retired/unknown stored identities normalize to Halo Bot.",
     "storageKey": "agent-halo.pet",
     "legacyStorageKey": "agent-halo.mascot",
     "default": "halo-bot",
@@ -54,6 +39,32 @@
       "randomization": false,
       "automaticActivitySwap": false,
       "strategy": "A separately persisted Halo Bot loadout is user-selected only; it does not change Pet assignment, hash by project, randomize, or swap for activity."
+    },
+    "motionMapping": {
+      "storageKey": "agent-halo.pet-motion-map",
+      "schemaVersion": 1,
+      "semanticStates": [
+        "idle",
+        "working",
+        "attention",
+        "done",
+        "error"
+      ],
+      "motions": [
+        "idle",
+        "working",
+        "attention",
+        "done",
+        "error"
+      ],
+      "default": {
+        "idle": "idle",
+        "working": "working",
+        "attention": "attention",
+        "done": "done",
+        "error": "error"
+      },
+      "scope": "Presentation-only body motion. Semantic data-state, status priority, accessibility copy, and Signal V4 remain truthful."
     }
   },
   "body": {
@@ -135,30 +146,6 @@
       }
     },
     "perPetOverrides": {
-      "ember-starling": {
-        "sourceFrame": [
-          144,
-          144
-        ],
-        "sessionDisplay": [
-          36,
-          36
-        ],
-        "ambientDisplay": [
-          30,
-          30
-        ],
-        "encoding": "WebP q50 alpha-q85 method6",
-        "style": "smooth hand-painted layered cut-paper",
-        "stateSelections": {
-          "idle": "B",
-          "working": "B",
-          "attention": "A",
-          "done": "A normalized",
-          "error": "B"
-        },
-        "signalLayer": "shared Signal V4"
-      },
       "halo-bot": {
         "sourceFrame": [
           36,
@@ -175,6 +162,28 @@
         "encoding": "PNG binary alpha",
         "style": "exact layered Pixabots pixel art",
         "signalLayer": "shared Signal V4"
+      },
+      "haloform": {
+        "sourceFrame": [
+          96,
+          96
+        ],
+        "sessionDisplay": [
+          36,
+          36
+        ],
+        "ambientDisplay": [
+          30,
+          30
+        ],
+        "completionSourceFrame": [
+          96,
+          96
+        ],
+        "encoding": "PNG binary alpha",
+        "style": "provider-derived native96 CRT companion with explicit semantic masks and deterministic integer-offset motion",
+        "signalLayer": "shared Signal V4",
+        "source": "apps/desktop/assets/mascots/agent-halo-roster/source/haloform-motion-v1"
       }
     }
   },
@@ -216,7 +225,7 @@
     "productionApproved": false,
     "primaryStrokePx": 2
   },
-  "colorStrategy": "Per-Pet authored palettes with no project or random hue. Ember Starling preserves charcoal and ember-orange; original roster preserves its cyan robot palette; Halo Bot preserves each selected Pixabots loadout palette.",
+  "colorStrategy": "Per-Pet authored palettes with no project or random hue. Halo Bot preserves selected Pixabots loadout palettes; Haloform preserves its approved cream, teal, cyan, orange, and dark CRT palette.",
   "palette": {
     "base": [
       "#E6FAFF",
@@ -230,15 +239,17 @@
   "provenance": {
     "selectedBy": "Mahiro",
     "selectedMain": "halo-bot",
-    "humanDecisionSha256": "bca53dae9936f40ce49b27f37f338312df16a7afa9a34b64143480d6fef386ce",
-    "acceptedVisualSource": "finalists-15-motion-audition-v1",
+    "humanDecisionSha256": "5b3260d1db5cd9af3b30f009992aafb173b65a3d3ab7fc93d4eb448a8bc381b0",
+    "acceptedVisualSource": "Halo Bot and haloform-motion-v1",
     "acceptedStates": [
       "idle",
       "working",
-      "done"
+      "attention",
+      "done",
+      "error"
     ],
     "attentionErrorSource": "finalists-15-state-proof-v1",
-    "selectionEvidence": "Mahiro retained all fifteen original finalists and selected Scorpion as their historical main. On 2026-07-21 Mahiro selected Ember Starling as the then-new global default while preserving every original Pet as an explicit selectable identity. On 2026-07-22 Mahiro explicitly promoted Halo Bot as the fresh/default main Pet; Ember and every valid existing selection remain historical or selectable identities.",
+    "selectionEvidence": "On 2026-07-23 Mahiro approved the explicit-mask Haloform motion, reduced the selectable roster to Halo Bot plus Haloform, and selected current 30px ambient / 36px session runtime footprints. Retired Pet source history remains outside the public runtime bundle.",
     "globalEmberEvidence": "Mahiro selected compact master B, requested complete chroma cleanup, and approved continuing through generated Idle/Working/Attention/Done/Error families before runtime integration.",
     "redesignPolicy": "Freeze accepted audition appearances and motion. Gemini v1/v2 redraws and partial imagegen A/B are non-selected experiments.",
     "signalEvidence": "Existing Candidate C semantic signal family was already human-approved and remains visually unchanged.",
@@ -282,89 +293,83 @@
       ],
       "assetPromotion": "humanApproved/runtime-integration-candidate",
       "productionApproved": false
+    },
+    "haloformPromotion": {
+      "approvedBy": "Mahiro",
+      "approvedAt": "2026-07-23",
+      "source": "20260723-haloforms-clarity-master96-semantic-v3",
+      "runtimeSource": "apps/desktop/assets/mascots/agent-halo-roster/source/haloform-motion-v1",
+      "providerRawSha256": "eb7d1d8abfcdcb5c41fa279fb0b9851d2571d5ba9c688cce0e30ee35d8067b98",
+      "canonical96Sha256": "cfe819f6c97cb8251f34eb5f55acdb3cbfe461ced285f109502ad4cbdc6565fb",
+      "truth": "Provider-derived target-size normalization plus explicit semantic masks; not provider-native 96px authorship."
     }
   },
   "files": {
-    "body/bat/attention.png": "a0ad12799723f4893db93cda09ea359539d37cab8ebf54b5d60e32376b0f3f59",
-    "body/bat/done.png": "1bb9f8652c6b45e80b858cb656e0067b5ad0e2008e9793772c367526e7f65f5a",
-    "body/bat/error.png": "2ba65bb5cde2924dafadf659cbe8f40a76b72cd6f1d1de9a416bb015de4ec728",
-    "body/bat/idle.png": "591fb999924a355ec3f0c877d993c4d6c3311a134f5ca04fbc077c4de7d6b369",
-    "body/bat/working.png": "57ba9456663cf18d8b9fa1364629b69347b4327feb59e1c4f8dfcf7c75fc3739",
-    "body/cactus/attention.png": "9eb6224b16b36f462e1fac40e77bbe497551a97f1fecadb97ebf0ad98d6a108c",
-    "body/cactus/done.png": "35f079d78ab9049fb9cb76182be36470ff6d9669c1ac7ef05b0c188cb8846e02",
-    "body/cactus/error.png": "e40eec935d67ee5b798f0220a066b2e8f5551134fede7755f9ef35f24174c87c",
-    "body/cactus/idle.png": "4f62beb8564910eead1dccd52f34daadbd28539cec074250d6c59d592a2692d4",
-    "body/cactus/working.png": "0a5180d71a74d9771e14a8e3fe27b66849e36913760469c1343f8247bc839a83",
-    "body/cat/attention.png": "dba63936f9f12a6cbe2ff18a0244c433c99d65357475aaed6af61af606af960e",
-    "body/cat/done.png": "0dd045e76df185eb86930708a5381ccc6e3ac510b6def7d7eaa2f4f9ebe5139e",
-    "body/cat/error.png": "4aebfbfa1b224d236f398015efa588ab08bc9bd98ae6dd1906efe06277ce5717",
-    "body/cat/idle.png": "74c611101da492d5f887340c6d7fbe1e1df664197b0077c7088151c5b2495915",
-    "body/cat/working.png": "0c0600b98b734ca0ddd33e50a00bbd8367a700673e227aeb34c98bcb6bdc0394",
-    "body/crawler/attention.png": "ff908c73a01db5939456e0c9c36d94f2a25d611948cc3de820b70bb11b9ff654",
-    "body/crawler/done.png": "9767cfe3dffa8d8f7cb4982c79a134cd68877d0f790422adda15b2203a8dc1d6",
-    "body/crawler/error.png": "200d511cd77f527ae811131b41008ac8c8885ee7430c3d7a33601f88e0d0026d",
-    "body/crawler/idle.png": "7b54331ddee6a0848ecd49406b1a3c8415a4a11bb619a4aabd8b8b450c5e6d04",
-    "body/crawler/working.png": "a6ae4faa3a39b2088691e8ff9f2b410763bb88ab26df3de0533e6d4668f0db24",
-    "body/crt/attention.png": "3d8fc053df2fd86ad387ccef82e2b87b953d6ba7266c5dbd627d4dd1be9ccf93",
-    "body/crt/done.png": "0e6c0a59057d401a585fabb66e7bf679d8861c25266ff456a1a8e0132afa0d7f",
-    "body/crt/error.png": "df33ba770fc870ba7c587c7b1c57489688d6b00f89c1b2462caf8efb3a328bd9",
-    "body/crt/idle.png": "97a4c93f4568f9f31214036974f3458ff0ef4e240e54c85b3a38922d6a53c2fd",
-    "body/crt/working.png": "31046c11c0947840ad91d580771bcf3ad181d8208f4c59d41e1d7c57e7cf14f9",
-    "body/dragonfly/attention.png": "6ce43bca8e4fdc8436e5641d5d64c9285ed17775dad538672356091e4f2fd177",
-    "body/dragonfly/done.png": "b01194a2ca8130fa83b56e4937c1505737359e859555b03bee2ab1de7c7cceb1",
-    "body/dragonfly/error.png": "ec4c27ac3ba6e5a3b4c919cc1c2bb72c6b3f026459a9c3e92e47b2b2dc460a7e",
-    "body/dragonfly/idle.png": "5683d1484a4d13cc017069063ec6a387eb09c674f63d0614ea9d4caa8762bdda",
-    "body/dragonfly/working.png": "35399a77f141dd53b017bbe79d18a2d03f0d631f5315637153d57ec6272d6406",
-    "body/giraffe/attention.png": "b071c7a518fbfb6485c4c98462abb38f7ef5c9aa712f809a35f94668aa85c8f8",
-    "body/giraffe/done.png": "7712015691a9bce5cfb62cb597d1fc730e85ef4d1eca8b544957945d9a3616e2",
-    "body/giraffe/error.png": "9a339b297076c1019ee67763da480f4aa9ddde8314e725e0446250e96394538c",
-    "body/giraffe/idle.png": "3b83a0c8cad25b81f142071b4dad39c23097ccfce5d4cc4ddb0cef8629a69676",
-    "body/giraffe/working.png": "26a77caba4ad2a95704187698979021d31371e231b083cc0f5f3a51f2ad8c45d",
-    "body/jelly/attention.png": "64d467666dd1cc621a590310f673b42e60529b1daa2f8bc6389d72a12a58dc00",
-    "body/jelly/done.png": "eea3af18657288a8560df1ed64cb66f1f1b41d50b7bc6e23c7ac5b0cd46e91a1",
-    "body/jelly/error.png": "b60005bd580819b3eea8213f68fb2191f8582cd197f0c92ff272dd467d525d47",
-    "body/jelly/idle.png": "a7f048b34f8bcd722550db3c2429ac5ec4d04378a3f2710b13b0e15772225cc0",
-    "body/jelly/working.png": "9ed2c35a575bf43d4ef7452dd5c792d3c0b12992a3fb19c7276679db03edd83a",
-    "body/kettle/attention.png": "d9e7e5be9c17f3827f65394dafe85e6f1726e2b1d33d3bc91ba9301edfc8a421",
-    "body/kettle/done.png": "f6a0132a869a538c13522cab269d332ea0d0f2270934ee3a58deccb4ed359b19",
-    "body/kettle/error.png": "b3b5726de82f11a36e5a7b69381409b81f5abb8ab560549b88491a27e46a213b",
-    "body/kettle/idle.png": "74422e91c54684157277b9e44a8bc21fe7e445b400e6d1be5a45c448cf0062c3",
-    "body/kettle/working.png": "e5e595e18d46764f2bf3edf073d729f17a9fc7879e490b40bf7f7b50f98f0a41",
-    "body/lantern/attention.png": "1615cdaafc47f2d8ab63b3f4bce04bd82c3d2c1457ba6c960cbc83c322920533",
-    "body/lantern/done.png": "6aeddf5c9f5c78cca977cff85f4680480ff9dc633e241f0e68ee9bc1ae89827a",
-    "body/lantern/error.png": "157168feb2ee8e1cbb00de6d615ed94119b0a4a0ac0eef525f5d8ee0fa585f01",
-    "body/lantern/idle.png": "96f218c682a76df4cf3f26f1f724e3639e87f368bcd48ac86683de2fbf2c9a69",
-    "body/lantern/working.png": "ced216df210de9619526e8265cd481239eb04015aa7732d06e64442688276c76",
-    "body/nautilus/attention.png": "931ea879ff93407b9bff5773c4eb70a944978e0259e8996956c12c563d9cf1aa",
-    "body/nautilus/done.png": "6eada46ed417ca9617be1aa4c68184b619e7482cd2e58dfff8c75fad5a03953d",
-    "body/nautilus/error.png": "942b8754e9bd446256f7c1251fe7b70c04d0ef84d02458990256d5e8cd749c04",
-    "body/nautilus/idle.png": "74b30e4188e9ad93946029f0d0f5f5617a18cbd411cf24991c2ec5b5cd511cdd",
-    "body/nautilus/working.png": "1962c97066b9b31135cf63c4436560f517027f950266aa4c6b34635a437df072",
-    "body/pot/attention.png": "66da2406b700e52f8b735f97f394f0ccd94a3208dc8915a20945a200dc5dc41e",
-    "body/pot/done.png": "7ae09ea184bfe01d53b00faf3754b66ac99dffa538fa7e3f0466d64d167c5894",
-    "body/pot/error.png": "95d9f5a63fad844a9532f5b8ca273ff1078dd5c359f12c2c18ac8bc37dd94c48",
-    "body/pot/idle.png": "38f1cb4c85bd46467479866836279a43bec4adfe2b4df85f993558c41ae3371c",
-    "body/pot/working.png": "5180f2e1b008eeacb339d4f2dc69266dc2b5126975c7e7fe81d376de150c1447",
-    "body/scorpion/attention.png": "4c14608d87dcac08a1253ce779b0ce5855e8e227bbc86f2b18c50b9e6a0ad445",
-    "body/scorpion/done.png": "ceb83dc795eb127a23f6e2ed96d255d7c53f1cb5ed979ffbfb4d65219f153e95",
-    "body/scorpion/error.png": "32630707c363aafcec6955958eb08b53997e66777ab678ee28ccda069b533298",
-    "body/scorpion/idle.png": "d1555b931f927642c315de0b4638228c5166cc24fcb459b51e99fc6f6d691097",
-    "body/scorpion/working.png": "818809fd19a4056c3205bd3ba400a750285ea81afeb5be3f7119b0c407e6b9eb",
-    "body/squid/attention.png": "7ecf81044932edce15cddf3c666726d59ac61824e3926bdac29ac950a04f7ba8",
-    "body/squid/done.png": "8245995a7c84cac997b656936a74a02d721ffcfc3e27cf2b5ebc8f5773b13674",
-    "body/squid/error.png": "abe85a7e47cadf60717caf08e071313e70dd47cac0c27fff77551c43743d04c1",
-    "body/squid/idle.png": "208910abb58fb1eb3fce28a4b2f2191cb0c31aa62320806d37f76c39e676fb61",
-    "body/squid/working.png": "9094e91b6c6b5f62d30bf56b5bc140e548f7615bdd863ffad6063a384bfbdd63",
-    "body/turtle/attention.png": "c02b2451559063e436b67cad7bf92cd35ca0cbf0e2bd520b921844dc1f396dcd",
-    "body/turtle/done.png": "7a6b3626ffb900a05d1b1eb0047d5ef61b672c2733e8ccaf92be98be078d479a",
-    "body/turtle/error.png": "9e415254295b3c93d744c259a08ac6e8092618407c56c860dad1949ca9869f42",
-    "body/turtle/idle.png": "bb5da656d148e1ec17d26a3172786feaf33f944f777ec654bb760d742790ff20",
-    "body/turtle/working.png": "07da8c09ad5531fb3120499e2c3727b77ecf2737818009449a9a650780d90994",
-    "body/ember-starling/attention.webp": "f6cc82b8abd9c9d65e4965f8c875bfbfa3d17a1a9292b431941e77a9b035655c",
-    "body/ember-starling/done.webp": "ba34f32d9322026e97389d63100576d2d0f3d870a62f97d2b1eb902da3387828",
-    "body/ember-starling/error.webp": "e41b8075cec0f822c40c0514038c0aacb38e9504e5672e7d43341b8ed7cb1669",
-    "body/ember-starling/idle.webp": "290323a82cb81bd149535889464acd554d6d56430e3eef27fa7c309210186c63",
-    "body/ember-starling/working.webp": "5558c9e0d72abf3669d4e59632d5d8db90f9a8c988d760bf814be4db1d6e5b2b",
+    "body/halo-bot/1462/attention.png": "86d2294c3db4dc501fcb2f5fd549dd6aeef58458999f8339e41bfd88fd602303",
+    "body/halo-bot/1462/done.png": "ddfb30b14589ea097215309d894d64f4279776c8a611f70e34f3ff99559690a2",
+    "body/halo-bot/1462/error.png": "082761bce80b8b41f1d7e8c2f3cc169471bf46ecc812f734854bfc94e812726a",
+    "body/halo-bot/1462/idle.png": "35751ec354d254237513744ed17e244d1f791d33e84e13f79521d84eed5de633",
+    "body/halo-bot/1462/working.png": "be864e9bfc006450043927903147d851dbaa9b9915ed321130e5a066fbe82602",
+    "body/halo-bot/2515/attention.png": "bc4805cd6c5d9a9e98816094658e08fbe2105e2ccc060685de9987bdd87096d2",
+    "body/halo-bot/2515/done.png": "7bd43a987b62bb2467a0ecc92993286ec5528eb20ceb00e15ccf51525e9147b1",
+    "body/halo-bot/2515/error.png": "ec6b06cb699b9dd58107e2cd8d51ae77a76938c699d1319530a560e0171d6d34",
+    "body/halo-bot/2515/idle.png": "410fdfc445f71bad35e58ae2d2dbb7762ceaf4bb6d06b007cd9ccfa76d629aa9",
+    "body/halo-bot/2515/working.png": "389057d96417c26c13d8da875b5794751fe16061c8740eba874a352b0227b852",
+    "body/halo-bot/3051/attention.png": "ff8808a2104234cd1647a082f6da4811979f62c14c77d8c47608fc13612a6578",
+    "body/halo-bot/3051/done.png": "25db460be11719592c2fc8f4fcee9db5715ae5508bca7bb3fcb727d6eac49c66",
+    "body/halo-bot/3051/error.png": "4473ba565a25351df3de964ca7e34c1b62583c9e7cbc6c7a29ea997b0ac3080b",
+    "body/halo-bot/3051/idle.png": "623eadb230ac9302c4eeb9b3428bd0317083a42b6ccf3206a1b1f939dc82c7d8",
+    "body/halo-bot/3051/working.png": "baf7da46cd3523039f7f7cc7539f0c2da6ea2318344f98f7c8f4a714076d8c4f",
+    "body/halo-bot/4232/attention.png": "ca9536c7a3d161a4c93381415562b5b790a4091503cba833a7b37aca18ef00a3",
+    "body/halo-bot/4232/done.png": "fc655ab690ff975c17b25cb707cc5e00d4b151acf15ce9553499690ca07c2804",
+    "body/halo-bot/4232/error.png": "e9ec4b76e6022c166f83e8c0033dc0945c9c52dd8585696062147d9157b15b77",
+    "body/halo-bot/4232/idle.png": "f876a78a8de4e87ea0d4f98052d391134f4b13ff359475ac9fdaaf9815f1fa6a",
+    "body/halo-bot/4232/working.png": "7b512dc88ce3dac37e880a0195c7caa8ea360672345df81d76c330872294d5e5",
+    "body/halo-bot/5324/attention.png": "44345f3ec501b3eb5eaba8151f21275b15a199a930b23ab4d365af7c89924708",
+    "body/halo-bot/5324/done.png": "5db674aa04cc398f8c2cc3b304fe61b9d339ea64183bfc7cc0f7dbf389d30b91",
+    "body/halo-bot/5324/error.png": "29b5a438854001d94100119533df60560dddd35ea238b362b4514516d6d536ad",
+    "body/halo-bot/5324/idle.png": "6d664d912a7eae32f29954f6945510c62ab7c0159f9f7b3bec14a478294fd0f7",
+    "body/halo-bot/5324/working.png": "79705e004e4f9ebdfac44cbc4efe503d6d814e20e0ecc5965895257e6db7c56f",
+    "body/halo-bot/6124/attention.png": "c2c90ab0583d3aa3cde084c77bd500c59018cca0d79034be7bf3baa4df97d061",
+    "body/halo-bot/6124/done.png": "0f5a2ecd3a1e2139e3385a0929a1130b3fa22304b4a876b56d1f265bd98605eb",
+    "body/halo-bot/6124/error.png": "322b8fe09d9769675cb0c124b11c649b1874f751821939d31a5213f75c7ffae0",
+    "body/halo-bot/6124/idle.png": "c1898ba2cf483f78119b17f96daa1dab4e8951e71d133e743f4819f0ce0801d5",
+    "body/halo-bot/6124/working.png": "0a08dfe3740cbd8f8ca85aa40ab6d7aff7fe83d8cbec6d031747e813453e82b3",
+    "body/halo-bot/9132/attention.png": "47a13e4c3611450f097d24f8f5becaa9cb1dc9815ed215667761d252be810fd1",
+    "body/halo-bot/9132/done.png": "4fc5d8fd648432964c30f036b2180edf95a9813ae737f5c6e90f325a9a6f966c",
+    "body/halo-bot/9132/error.png": "f5de669ca76fe2d065e9ddbc6e843def50d8a88c7733a1ddbc39b7e21be143df",
+    "body/halo-bot/9132/idle.png": "83a17681b30eb70cc52be1aa47d6df65866e170d279d07206eff87c2d618d3dd",
+    "body/halo-bot/9132/working.png": "4e885bb9814f7ea2700862d111b6810380e833446a032bf9870bfbc38d018451",
+    "body/halo-bot/c160/attention.png": "8ff007d376a522a6ddb1c83d6669e176d260b5faea8a0d9d9c05e5fd245d6d7e",
+    "body/halo-bot/c160/done.png": "6ea80ff571dbbf6c198e5a37120d4bc3a7d453b5cd031f845af0ff2364973605",
+    "body/halo-bot/c160/error.png": "c7d6a004c97604cc04c267de7f8189d19f47ab77ce18d8865a3b91aa3507cfe4",
+    "body/halo-bot/c160/idle.png": "cf517e91c2e59eca2f767ee38dd4caf7ba07a7faf522732925d3bb39513fb9aa",
+    "body/halo-bot/c160/working.png": "51e7d165ce2819ab56e23a45fe34dc0f096c7c057ef16c61db0e92fb63253a2e",
+    "body/halo-bot/d351/attention.png": "8db3eb08222d8c7fd96a7a64543cbbf8b68a675d3811c96c0b1ca6eb75abb5d5",
+    "body/halo-bot/d351/done.png": "d28f874456d92f433c1965a3311ea7cbb09286ad577cb02bf1d854223c178ee1",
+    "body/halo-bot/d351/error.png": "039b9011489b23fa5b5414a2c7aa53a81646eee54f16354a32247d3ebfaafeab",
+    "body/halo-bot/d351/idle.png": "fab571d8485b7526fbb76e618409091858b266f9fbfdaabc53feaf0ae34a2526",
+    "body/halo-bot/d351/working.png": "214d784d3096c0fd77193d697995ef4e2689fcd1028273b98f97b4693f50e0f0",
+    "body/halo-bot/f061/attention.png": "92bbde2fa87c1998e8eee996c309aeda632c5a2d5404e5ab056530d0cacb9341",
+    "body/halo-bot/f061/done.png": "3a9e68c940ad9df62c123a5e7f605c76ba1b7ef3a9493ce9f4c1bcaa31ff965a",
+    "body/halo-bot/f061/error.png": "243b846716456cb2487f51b133c513b14dc3828b360ce6e2d3cb5018c53f7e56",
+    "body/halo-bot/f061/idle.png": "4f204d528dec3805a9422ad837122df3b3d9544694828bae077e0dd54b3216d4",
+    "body/halo-bot/f061/working.png": "64f5dbe148b2300aec9e6a577a6f2ac3512da12fa2edc4be7f57875d5aad89d2",
+    "body/haloform/ambient/attention.png": "7f50a3186449387c581cd1c2e16fa2242923c69dd9c477d7d9b9e8d2bf0f5e0a",
+    "body/haloform/ambient/done.png": "718119104c103eae6c1ee0a9f8f76863476cb5f22c021f77814a5737efc355ac",
+    "body/haloform/ambient/error.png": "e9f7ff3b5713f42ef2d56e3353ca39a8a60af553dafcfcf1422991e10a6576d9",
+    "body/haloform/ambient/idle.png": "13a3ba1440f8faa5900df06b488dcd6294697350865c7fd3082e7c65b9469389",
+    "body/haloform/ambient/working.png": "a2120e5ef7922d8351be3cc6e13a5d8bda374f38098ab1fe89528dfadf9f0adb",
+    "body/haloform/completion/attention.png": "7f6b8d2f1661e11f38d36542de12fd819c8cbac0271f924eed5c04579d8fc37d",
+    "body/haloform/completion/done.png": "975733049f4436aa1a89843a0282722b7408ab552b65ce07dd0d050262d2f4ea",
+    "body/haloform/completion/error.png": "2b87d8fa9d7e5ea9159460c0a0dc73a3caa0d4e20de356814e8d6ba817972ce9",
+    "body/haloform/completion/idle.png": "2ceb0213efee5f04e87bdc534ac03fd6b601f5ee26e412c4ef0272e1802c9f13",
+    "body/haloform/completion/working.png": "593713a8e46ceaadc041e6db49516a1e234dcaac96e1c4bea4bb834864310e08",
+    "body/haloform/session/attention.png": "17b5e74739487a566143ae68595ebe7ee978a68fd097e386f1f5094d8b9bab9e",
+    "body/haloform/session/done.png": "3a5e41f8b7acdc739a31f1cf39d4c782290795a9bc839fe4466a622222e34f3f",
+    "body/haloform/session/error.png": "e23092c7ef26590d61356328cd1feeca434af9e9573432549a87606f96e84bc4",
+    "body/haloform/session/idle.png": "9acf9c2e1106eca733ecac3bff8d0887d8bdb4bde71398bb0805870daeb6fb88",
+    "body/haloform/session/working.png": "d47c5cf3fec7d7afcecd78e8ba8119bc66eda6fc766c9d0af9b0176978ef3eb4",
     "signals/attention-asking.png": "afaa0883d0c78347af8e5563b7c3b0cebdfd343c3e1b7fefdf15a7af57172fb4",
     "signals/delegating.png": "a03a5d9f07a0dde71a341b74a6bed70c2bd8c83bb8133dc0b877dceb08b82244",
     "signals/done.png": "241bba5f40874531273c9e8a641e3abf0dc4b13e96e77cc120508af589809882",
@@ -374,57 +379,7 @@
     "signals/planning-goal.png": "7992c77633b12b1a9d2430209d7fc2da745e6c5dab55c032239a6bbb7c867b1d",
     "signals/shell-tool-skill.png": "7ae5d4668b28d422a8df726800e3c6c5a3c6268f0f10f703bdb02dd00a504fd2",
     "signals/thinking-model.png": "8402b4e8dd6ce6752908a2c45a6bc0bb4be7d110b6e7b2f4e204cfe290ae9079",
-    "signals/visual.png": "105e7cf6234c918006f3dfaef148e269d872967bf8124bdd30098092b55709e8",
-    "body/halo-bot/3051/idle.png": "623eadb230ac9302c4eeb9b3428bd0317083a42b6ccf3206a1b1f939dc82c7d8",
-    "body/halo-bot/3051/working.png": "baf7da46cd3523039f7f7cc7539f0c2da6ea2318344f98f7c8f4a714076d8c4f",
-    "body/halo-bot/3051/attention.png": "ff8808a2104234cd1647a082f6da4811979f62c14c77d8c47608fc13612a6578",
-    "body/halo-bot/3051/done.png": "25db460be11719592c2fc8f4fcee9db5715ae5508bca7bb3fcb727d6eac49c66",
-    "body/halo-bot/3051/error.png": "4473ba565a25351df3de964ca7e34c1b62583c9e7cbc6c7a29ea997b0ac3080b",
-    "body/halo-bot/1462/idle.png": "35751ec354d254237513744ed17e244d1f791d33e84e13f79521d84eed5de633",
-    "body/halo-bot/1462/working.png": "be864e9bfc006450043927903147d851dbaa9b9915ed321130e5a066fbe82602",
-    "body/halo-bot/1462/attention.png": "86d2294c3db4dc501fcb2f5fd549dd6aeef58458999f8339e41bfd88fd602303",
-    "body/halo-bot/1462/done.png": "ddfb30b14589ea097215309d894d64f4279776c8a611f70e34f3ff99559690a2",
-    "body/halo-bot/1462/error.png": "082761bce80b8b41f1d7e8c2f3cc169471bf46ecc812f734854bfc94e812726a",
-    "body/halo-bot/5324/idle.png": "6d664d912a7eae32f29954f6945510c62ab7c0159f9f7b3bec14a478294fd0f7",
-    "body/halo-bot/5324/working.png": "79705e004e4f9ebdfac44cbc4efe503d6d814e20e0ecc5965895257e6db7c56f",
-    "body/halo-bot/5324/attention.png": "44345f3ec501b3eb5eaba8151f21275b15a199a930b23ab4d365af7c89924708",
-    "body/halo-bot/5324/done.png": "5db674aa04cc398f8c2cc3b304fe61b9d339ea64183bfc7cc0f7dbf389d30b91",
-    "body/halo-bot/5324/error.png": "29b5a438854001d94100119533df60560dddd35ea238b362b4514516d6d536ad",
-    "body/halo-bot/c160/idle.png": "cf517e91c2e59eca2f767ee38dd4caf7ba07a7faf522732925d3bb39513fb9aa",
-    "body/halo-bot/c160/working.png": "51e7d165ce2819ab56e23a45fe34dc0f096c7c057ef16c61db0e92fb63253a2e",
-    "body/halo-bot/c160/attention.png": "8ff007d376a522a6ddb1c83d6669e176d260b5faea8a0d9d9c05e5fd245d6d7e",
-    "body/halo-bot/c160/done.png": "6ea80ff571dbbf6c198e5a37120d4bc3a7d453b5cd031f845af0ff2364973605",
-    "body/halo-bot/c160/error.png": "c7d6a004c97604cc04c267de7f8189d19f47ab77ce18d8865a3b91aa3507cfe4",
-    "body/halo-bot/2515/idle.png": "410fdfc445f71bad35e58ae2d2dbb7762ceaf4bb6d06b007cd9ccfa76d629aa9",
-    "body/halo-bot/2515/working.png": "389057d96417c26c13d8da875b5794751fe16061c8740eba874a352b0227b852",
-    "body/halo-bot/2515/attention.png": "bc4805cd6c5d9a9e98816094658e08fbe2105e2ccc060685de9987bdd87096d2",
-    "body/halo-bot/2515/done.png": "7bd43a987b62bb2467a0ecc92993286ec5528eb20ceb00e15ccf51525e9147b1",
-    "body/halo-bot/2515/error.png": "ec6b06cb699b9dd58107e2cd8d51ae77a76938c699d1319530a560e0171d6d34",
-    "body/halo-bot/4232/idle.png": "f876a78a8de4e87ea0d4f98052d391134f4b13ff359475ac9fdaaf9815f1fa6a",
-    "body/halo-bot/4232/working.png": "7b512dc88ce3dac37e880a0195c7caa8ea360672345df81d76c330872294d5e5",
-    "body/halo-bot/4232/attention.png": "ca9536c7a3d161a4c93381415562b5b790a4091503cba833a7b37aca18ef00a3",
-    "body/halo-bot/4232/done.png": "fc655ab690ff975c17b25cb707cc5e00d4b151acf15ce9553499690ca07c2804",
-    "body/halo-bot/4232/error.png": "e9ec4b76e6022c166f83e8c0033dc0945c9c52dd8585696062147d9157b15b77",
-    "body/halo-bot/d351/idle.png": "fab571d8485b7526fbb76e618409091858b266f9fbfdaabc53feaf0ae34a2526",
-    "body/halo-bot/d351/working.png": "214d784d3096c0fd77193d697995ef4e2689fcd1028273b98f97b4693f50e0f0",
-    "body/halo-bot/d351/attention.png": "8db3eb08222d8c7fd96a7a64543cbbf8b68a675d3811c96c0b1ca6eb75abb5d5",
-    "body/halo-bot/d351/done.png": "d28f874456d92f433c1965a3311ea7cbb09286ad577cb02bf1d854223c178ee1",
-    "body/halo-bot/d351/error.png": "039b9011489b23fa5b5414a2c7aa53a81646eee54f16354a32247d3ebfaafeab",
-    "body/halo-bot/6124/idle.png": "c1898ba2cf483f78119b17f96daa1dab4e8951e71d133e743f4819f0ce0801d5",
-    "body/halo-bot/6124/working.png": "0a08dfe3740cbd8f8ca85aa40ab6d7aff7fe83d8cbec6d031747e813453e82b3",
-    "body/halo-bot/6124/attention.png": "c2c90ab0583d3aa3cde084c77bd500c59018cca0d79034be7bf3baa4df97d061",
-    "body/halo-bot/6124/done.png": "0f5a2ecd3a1e2139e3385a0929a1130b3fa22304b4a876b56d1f265bd98605eb",
-    "body/halo-bot/6124/error.png": "322b8fe09d9769675cb0c124b11c649b1874f751821939d31a5213f75c7ffae0",
-    "body/halo-bot/9132/idle.png": "83a17681b30eb70cc52be1aa47d6df65866e170d279d07206eff87c2d618d3dd",
-    "body/halo-bot/9132/working.png": "4e885bb9814f7ea2700862d111b6810380e833446a032bf9870bfbc38d018451",
-    "body/halo-bot/9132/attention.png": "47a13e4c3611450f097d24f8f5becaa9cb1dc9815ed215667761d252be810fd1",
-    "body/halo-bot/9132/done.png": "4fc5d8fd648432964c30f036b2180edf95a9813ae737f5c6e90f325a9a6f966c",
-    "body/halo-bot/9132/error.png": "f5de669ca76fe2d065e9ddbc6e843def50d8a88c7733a1ddbc39b7e21be143df",
-    "body/halo-bot/f061/idle.png": "4f204d528dec3805a9422ad837122df3b3d9544694828bae077e0dd54b3216d4",
-    "body/halo-bot/f061/working.png": "64f5dbe148b2300aec9e6a577a6f2ac3512da12fa2edc4be7f57875d5aad89d2",
-    "body/halo-bot/f061/attention.png": "92bbde2fa87c1998e8eee996c309aeda632c5a2d5404e5ab056530d0cacb9341",
-    "body/halo-bot/f061/done.png": "3a9e68c940ad9df62c123a5e7f605c76ba1b7ef3a9493ce9f4c1bcaa31ff965a",
-    "body/halo-bot/f061/error.png": "243b846716456cb2487f51b133c513b14dc3828b360ce6e2d3cb5018c53f7e56"
+    "signals/visual.png": "105e7cf6234c918006f3dfaef148e269d872967bf8124bdd30098092b55709e8"
   },
   "defaultMascot": "halo-bot",
   "defaultPet": "halo-bot",
@@ -435,19 +390,19 @@
         30
       ],
       "bodySize": [
-        36,
-        27
+        30,
+        30
       ],
       "bodyOrigin": [
         0,
-        3
+        0
       ],
       "signalSize": [
         20,
         20
       ],
       "signalOrigin": [
-        38,
+        34,
         5
       ]
     },
@@ -457,20 +412,34 @@
         36
       ],
       "bodySize": [
-        44,
-        33
+        36,
+        36
       ],
       "bodyOrigin": [
         0,
-        3
+        0
       ],
       "signalSize": [
         20,
         20
       ],
       "signalOrigin": [
-        46,
+        40,
         8
+      ]
+    },
+    "completion": {
+      "largeBodySize": [
+        78,
+        78
+      ],
+      "mediumBodySize": [
+        59,
+        59
+      ],
+      "smallBodySize": [
+        39,
+        39
       ]
     }
   }

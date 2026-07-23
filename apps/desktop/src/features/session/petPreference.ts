@@ -10,7 +10,11 @@ export const LEGACY_MASCOT_STORAGE_KEY = "agent-halo.mascot";
 export const readHaloPetPreference = (): HaloPetName => {
   try {
     const current = window.localStorage.getItem(PET_STORAGE_KEY);
-    if (current) return getHaloPetName(current);
+    if (current) {
+      const normalized = getHaloPetName(current);
+      if (current !== normalized) window.localStorage.setItem(PET_STORAGE_KEY, normalized);
+      return normalized;
+    }
     const migrated = getHaloPetName(window.localStorage.getItem(LEGACY_MASCOT_STORAGE_KEY));
     window.localStorage.setItem(PET_STORAGE_KEY, migrated);
     return migrated;

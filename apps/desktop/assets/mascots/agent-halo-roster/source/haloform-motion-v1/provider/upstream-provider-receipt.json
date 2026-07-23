@@ -1,0 +1,22 @@
+{
+  "poseAuthorship": "generated-poses",
+  "providerReceipt": {
+    "provider": "openai-built-in-imagegen",
+    "model": "unexposed-by-tool",
+    "operation": "image-edit",
+    "sourceArtifacts": [
+      {
+        "file": "raw/call_TJam6nD90EGODPCWIlZHJxVr.png",
+        "sha256": "eb7d1d8abfcdcb5c41fa279fb0b9851d2571d5ba9c688cce0e30ee35d8067b98"
+      }
+    ]
+  },
+  "generatedAt": "2026-07-23T10:16:13+07:00",
+  "promptPath": "../../imagegen-prompt.md",
+  "referencePath": "../../assets/assembled-source-a-reference.png",
+  "dimensions": [
+    1254,
+    1254
+  ],
+  "providerMetadataCaveat": "The built-in image generation tool exposed its tool identity and output path but did not expose a model identifier; the canonical receipt records that limitation explicitly."
+}

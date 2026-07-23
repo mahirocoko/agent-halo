@@ -1,8 +1,10 @@
 # Completion Pet
 
+Production workflow for future identities and Halo Bot loadouts: [`pet-production.md`](pet-production.md).
+
 ## Phase 1 contract
 
-Agent Halo uses **Pet** as the product-facing companion concept. The global roster contains the original 15 pixel companions, **Ember Starling**, and **Halo Bot**, the fresh/default global Pet. Halo Bot is one identity with ten curated user-selectable loadouts, not ten separate Pets. It remains an event/state projection rather than a persistent desktop-pet simulation.
+Agent Halo uses **Pet** as the product-facing companion concept. The selectable global roster contains only **Halo Bot** and **Haloform**. Halo Bot remains the fresh/default identity and has ten curated user-selectable loadouts; Haloform is the approved provider-derived CRT companion built from a native96 master and explicit semantic masks. Both remain event/state projections rather than persistent desktop-pet simulations.
 
 The Completion Pet is event-only:
 
@@ -45,10 +47,9 @@ This keeps the OS-owned fallback available when the renderer/app is unavailable 
 
 ## Window and interaction
 
-- Original-roster companion frame: `116 × 88` logical px. The default `2×` presentation is a centered continuously animated `104 × 78` Pet body; smaller Setup choices remain centered inside the same bounded native surface.
-- Ember Starling follows the existing floating-size choice with a tight surface per scale: `1×` uses `56 × 66`, `1.5×` uses `78 × 93`, and `2×` uses `100 × 120`; its radial surface is `260 × 270` so real break actions and their visible state label remain clear of the body.
-- Halo Bot keeps the original bounded Completion Pet surface but preserves its square pixel geometry: `1×` renders `39 × 39`, `1.5×` renders `59 × 59`, and `2×` renders `78 × 78`. Compact ambient/session delivery remains `30 × 30` / `36 × 36` with the same selected loadout.
-- Original-roster radial-menu frame: `260 × 230` logical px. Three circular actions orbit the Pet on a transparent surface; the dashed orbit and circular controls make the deliberate interaction area visible even without a backing card.
+- The collapsed companion frame remains `116 × 88` logical px. Halo Bot and Haloform use the same square Completion geometry: `1×` renders `39 × 39`, `1.5×` renders `59 × 59`, and `2×` renders `78 × 78`.
+- Compact ambient/session delivery remains `30 × 30` / `36 × 36`. Haloform is authored from its tracked native96 source and deterministic delivery strips; Halo Bot preserves the selected loadout.
+- The radial-menu frame is `260 × 230` logical px. Three circular actions orbit the Pet on a transparent surface; the dashed orbit and circular controls make the deliberate interaction area visible even without a backing card.
 - The frame remains tight because transparent WebViews still have rectangular native hitboxes.
 - Default position: 20px from the selected display's visible bottom-right corner.
 - Dragging persists a normalized companion anchor per display id/fingerprint and clamps to the current visible frame.
@@ -61,21 +62,23 @@ This keeps the OS-owned fallback available when the renderer/app is unavailable 
 
 ## Preference migration
 
-The preference key is `agent-halo.pet`. When absent, Agent Halo reads the legacy `agent-halo.mascot` value and writes the normalized Pet preference. Fresh installs default to Halo Bot; every existing valid selection, including Ember Starling and Scorpion, remains intact until the user changes it in Setup. Halo Bot's independent `agent-halo.halo-bot-loadout` key accepts only `3051`, `1462`, `5324`, `c160`, `2515`, `4232`, `d351`, `6124`, `9132`, or `f061` and defaults to `3051`. The loadout is global, user-selected, and never project-hashed, randomized, or activity-swapped. Product UI, accessibility copy, types, and settings use **Pet**.
+The preference key is `agent-halo.pet`. When absent, Agent Halo reads the legacy `agent-halo.mascot` value and writes the normalized Pet preference. Fresh installs default to Halo Bot. Only `halo-bot` and `haloform` are valid; retired, unknown, or malformed stored values normalize and rewrite to Halo Bot. Halo Bot's independent `agent-halo.halo-bot-loadout` key accepts only `3051`, `1462`, `5324`, `c160`, `2515`, `4232`, `d351`, `6124`, `9132`, or `f061` and defaults to `3051`. The loadout is global, user-selected, and never project-hashed or randomized. Product UI, accessibility copy, types, and settings use **Pet**.
+
+`agent-halo.pet-motion-map` stores one validated presentation mapping from each truthful Letta body state (`idle`, `working`, `attention`, `done`, `error`) to one of those five motion families. The default mapping is identity. Changing the mapping affects only the body strip and playback—for example, `working → idle` keeps semantic `data-state="working"`, Working copy/status precedence, Keep display awake behavior, and the independent Signal V4 activity icon unchanged.
 
 ## Global Halo Bot
 
 Halo Bot uses the MIT Pixabots layered character system pinned in the tracked asset provenance. One four-part rig composes face/eyes, head shell, body/outfit, and top accessory; Agent Halo preserves the authored palettes and adds deterministic layered `idle`, `working`, `attention`, `done`, and `error` motion. The ten approved loadouts share that motion contract while remaining one persisted Pet identity. Signal V4 stays a detached semantic layer and is never baked into the body strips.
 
-## Global Ember Starling
+## Global Haloform
 
-Ember Starling is one global identity across ambient, session, group, detail, Setup, and real Completion Pet surfaces:
+Haloform is one global identity across ambient, session, group, detail, Setup, and real Completion Pet surfaces:
 
-- compact surfaces use a Mahiro-selected `144 × 144` smooth cut-paper source family delivered at `30 × 30` ambient and `36 × 36` session/detail sizes;
-- Idle, Working, Attention, Done, and Error have separately generated body strips; Signal V4 remains the independent semantic icon layer;
-- the floating Completion form uses the larger four-frame body and the existing `1×` / `1.5×` / `2×` setting;
-- Setup **Show Pet** remains preview-only, but a naturally completed Focus now summons Ember with the real Start break, optional Movement, Later, and Close actions;
-- original pixel companions remain selectable and continue using their existing compact and Completion body families.
+- the source is one hash-bound standalone provider image normalized to an approved `96 × 96` canonical master; it is not claimed as provider-native 96px art;
+- explicit body/head/face/top masks and reconstructed hidden surfaces make deterministic integer-offset motion possible without changing the neutral canonical image;
+- tracked strips deliver `30 × 30` ambient, `36 × 36` session/detail, and `96 × 96` Completion source cells for Idle, Working, Attention, Done, and Error;
+- Signal V4 remains an independent truthful semantic layer and is never baked into the body strips;
+- provenance, masks, QA, approval receipt, and deterministic builder live at `apps/desktop/assets/mascots/agent-halo-roster/source/haloform-motion-v1/`.
 
 ## Verification
 
@@ -85,4 +88,4 @@ Ember Starling is one global identity across ambient, session, group, detail, Se
 - `×`, Not now, disable, and show failure leave no invisible hitbox.
 - Passive show preserves the current macOS foreground app and keyboard focus.
 - Drag/restore/clamp passes on the selected display, Retina coordinates, and disconnected-display fallback.
-- Browser state/action/accessibility tests, Rust position/state tests, performance budgets, release install/restart, and native foreground smoke pass.
+- Release evidence must cover browser state/action/accessibility tests, Rust position/state tests, performance budgets, release install/restart, installed-binary equality, and a native foreground smoke; each promotion reports this evidence explicitly rather than treating the Phase 1 contract as a blanket PASS.

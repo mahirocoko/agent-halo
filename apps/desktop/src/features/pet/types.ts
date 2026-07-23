@@ -10,7 +10,6 @@ export interface ICompletionPetSummon {
   pet: HaloPetName;
   loadout?: HaloBotLoadout;
   petSize: CompletionPetSize;
-  visual?: "ember-starling";
   preview: boolean;
   movementBreakEnabled?: boolean;
   nextPhase: CompletionPetBreakPhase;

@@ -1,29 +1,14 @@
 import type { CSSProperties } from "react";
 import { DEFAULT_HALO_BOT_LOADOUT, type HaloBotLoadout } from "./haloBot";
+import { DEFAULT_HALO_PET_MOTION_MAPPING, resolveHaloPetMotion, type HaloPetMotionMapping, type HaloPetSemanticState } from "./petMotion";
 import type { ActivityKind, ISessionSummary } from "./types";
 
 export const HALO_PET_ROSTER = [
   "halo-bot",
-  "pot",
-  "crawler",
-  "bat",
-  "jelly",
-  "cat",
-  "crt",
-  "cactus",
-  "nautilus",
-  "turtle",
-  "lantern",
-  "kettle",
-  "dragonfly",
-  "giraffe",
-  "scorpion",
-  "squid",
-  "ember-starling",
+  "haloform",
 ] as const;
 export type HaloPetName = (typeof HALO_PET_ROSTER)[number];
 export const DEFAULT_HALO_PET: HaloPetName = "halo-bot";
-type HaloPetState = "idle" | "working" | "attention" | "done" | "error";
 export type HaloPetSignal =
   | "none"
   | "thinking-model"
@@ -64,7 +49,7 @@ export const isHaloPetName = (value: unknown): value is HaloPetName =>
 export const getHaloPetName = (value?: string | null): HaloPetName =>
   isHaloPetName(value) ? value : DEFAULT_HALO_PET;
 
-const getState = (status?: ISessionSummary["status"], kind?: ActivityKind): HaloPetState => {
+export const getHaloPetSemanticState = (status?: ISessionSummary["status"], kind?: ActivityKind): HaloPetSemanticState => {
   if (status === "error" || kind === "error") return "error";
   if (status === "attention" || kind === "attention" || kind === "asking") return "attention";
   if (status === "done" || kind === "done") return "done";
@@ -82,12 +67,12 @@ export const getHaloPetSignal = (
   return SIGNAL_BY_ACTIVITY[kind];
 };
 
-const getStyle = (pet: HaloPetName, loadout: HaloBotLoadout, state: HaloPetState, signal: HaloPetSignal, activity: boolean) => ({
+const getStyle = (pet: HaloPetName, loadout: HaloBotLoadout, motion: HaloPetSemanticState, signal: HaloPetSignal, surface: "ambient" | "session" | "completion") => ({
   "--halo-pet-body": pet === "halo-bot"
-    ? `url("/mascots/agent-halo-roster/body/halo-bot/${loadout}/${state}.png")`
-    : `url("/mascots/agent-halo-roster/body/${pet}/${state}.${pet === "ember-starling" ? "webp" : "png"}")`,
+    ? `url("/mascots/agent-halo-roster/body/halo-bot/${loadout}/${motion}.png")`
+    : `url("/mascots/agent-halo-roster/body/haloform/${surface}/${motion}.png")`,
   ...(signal === "none" ? {} : { "--halo-pet-signal": `url("/mascots/agent-halo-roster/signals/${signal}.png")` }),
-  ...(pet === "ember-starling" ? activity ? {
+  ...(pet === "haloform" ? surface === "ambient" ? {
     "--halo-pet-frame-width": "30px",
     "--halo-pet-frame-height": "30px",
     "--halo-pet-three-frame-width": "90px",
@@ -96,7 +81,7 @@ const getStyle = (pet: HaloPetName, loadout: HaloBotLoadout, state: HaloPetState
     "--halo-pet-frame-2-x": "-60px",
     "--halo-pet-frame-3-x": "-90px",
     "--halo-pet-signal-left": "34px",
-  } : {
+  } : surface === "session" ? {
     "--halo-pet-frame-width": "36px",
     "--halo-pet-frame-height": "36px",
     "--halo-pet-three-frame-width": "108px",
@@ -105,7 +90,7 @@ const getStyle = (pet: HaloPetName, loadout: HaloBotLoadout, state: HaloPetState
     "--halo-pet-frame-2-x": "-72px",
     "--halo-pet-frame-3-x": "-108px",
     "--halo-pet-signal-left": "40px",
-  } : {}),
+  } : {} : {}),
   ...(pet === "halo-bot" ? {
     "--halo-pet-hue": "0deg",
     "--halo-pet-saturation": "1",
@@ -113,13 +98,7 @@ const getStyle = (pet: HaloPetName, loadout: HaloBotLoadout, state: HaloPetState
   } : {}),
 }) as CSSProperties & { "--halo-pet-body": string; "--halo-pet-signal"?: string };
 
-const EMBER_BODY_STYLE = {
-  top: 0,
-  imageRendering: "auto",
-  filter: "drop-shadow(0 0 2px rgba(255, 119, 28, 0.44)) saturate(var(--halo-pet-saturation)) brightness(var(--halo-pet-brightness))",
-} as CSSProperties;
-
-const HALO_BOT_BODY_STYLE = {
+const SQUARE_PET_BODY_STYLE = {
   imageRendering: "pixelated",
   filter: "saturate(var(--halo-pet-saturation)) brightness(var(--halo-pet-brightness))",
 } as CSSProperties;
@@ -128,19 +107,21 @@ export interface IHaloPetProps {
   activityKind?: ActivityKind;
   className: string;
   loadout?: HaloBotLoadout;
+  motionMapping?: HaloPetMotionMapping;
   pet?: HaloPetName;
   status?: ISessionSummary["status"];
-  surface?: "ambient" | "session";
+  surface?: "ambient" | "session" | "completion";
 }
 
-export const HaloPet = ({ activityKind, className, loadout, pet = DEFAULT_HALO_PET, status, surface = "session" }: IHaloPetProps) => {
-  const state = getState(status, activityKind);
+export const HaloPet = ({ activityKind, className, loadout, motionMapping = DEFAULT_HALO_PET_MOTION_MAPPING, pet = DEFAULT_HALO_PET, status, surface = "session" }: IHaloPetProps) => {
+  const state = getHaloPetSemanticState(status, activityKind);
+  const motion = resolveHaloPetMotion(state, motionMapping);
   const signal = getHaloPetSignal(status, activityKind);
   const visualStatus = status === "idle" || status === "inactive" ? status : state;
   const resolvedLoadout = pet === "halo-bot" ? loadout ?? DEFAULT_HALO_BOT_LOADOUT : DEFAULT_HALO_BOT_LOADOUT;
   return (
-    <span className={`${className} halo-pet`} data-status={visualStatus} data-session-status={status ?? "idle"} data-kind={activityKind} data-state={state} data-signal={signal} data-pet={pet} data-loadout={pet === "halo-bot" ? resolvedLoadout : undefined} style={getStyle(pet, resolvedLoadout, state, signal, surface === "ambient")} aria-hidden="true">
-      <span className="halo-pet-body" style={pet === "ember-starling" ? EMBER_BODY_STYLE : pet === "halo-bot" ? HALO_BOT_BODY_STYLE : undefined} />
+    <span className={`${className} halo-pet`} data-status={visualStatus} data-session-status={status ?? "idle"} data-kind={activityKind} data-state={state} data-motion={motion} data-signal={signal} data-pet={pet} data-loadout={pet === "halo-bot" ? resolvedLoadout : undefined} style={getStyle(pet, resolvedLoadout, motion, signal, surface)} aria-hidden="true">
+      <span className="halo-pet-body" style={SQUARE_PET_BODY_STYLE} />
       {signal === "none" ? null : <span className="halo-pet-signal" />}
     </span>
   );

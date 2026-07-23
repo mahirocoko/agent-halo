@@ -1,19 +1,24 @@
 # Agent Halo Pet roster
 
-This legacy asset path preserves the human-approved source direction for Agent Halo's Pet system.
+Future Pet identity and Halo Bot loadout workflow: [`../../../../../docs/pet-production.md`](../../../../../docs/pet-production.md).
+
+This asset family preserves active runtime provenance plus historical Pet source evidence.
 
 ## Current integration candidate
 
-- Main/default identity: **Halo Bot**. Ember Starling, the original Scorpion, and all sibling robot/companion finalists remain selectable or historically preserved.
+- Main/default identity: **Halo Bot**. **Haloform** is the only other selectable identity. Earlier companions remain historical source evidence but are removed from the public runtime roster.
 - Human decision: one global Pet identity is used across ambient, session, group, detail, and Completion surfaces. Workspace/project hashing remains retired.
-- The Pet preference key is `agent-halo.pet`; `agent-halo.mascot` remains a one-way legacy migration source. Fresh/missing/invalid storage falls back to Halo Bot while every valid existing selection remains intact. Halo Bot loadout selection is separately persisted at `agent-halo.halo-bot-loadout`; it defaults to `3051` and allows only the ten curated loadouts, with no project hashing, randomization, or automatic activity swapping.
-- Original-roster native body frames remain `24×18`, displayed at `44×33` session/detail and `36×27` ambient. Ember uses smooth `144×144` source cells displayed at `36×36` and `30×30` respectively.
-- Delivery wrappers are `66×36` session/detail and `58×30` ambient. The 2px horizontal gap gives the signal more visual authority without colliding with the smaller robot.
-- Pet and color randomization are disabled. Original robots keep cyan; Ember preserves its charcoal and ember-orange palette; Halo Bot preserves each selected Pixabots loadout palette.
-- Every Pet delivers Idle (3 frames), Working (3), Done (4), Attention (3), and Error (3). The original roster's Attention/Error loops use bounded native-grid edits; Halo Bot uses its promoted deterministic layered rig for all five states.
+- The Pet preference key is `agent-halo.pet`; `agent-halo.mascot` remains a one-way legacy migration source. Fresh, retired, unknown, or malformed storage normalizes and rewrites to Halo Bot. Halo Bot loadout selection is separately persisted at `agent-halo.halo-bot-loadout`; it defaults to `3051` and allows only the ten curated loadouts, with no project hashing or randomization.
+- Halo Bot and Haloform both display at `36×36` session/detail and `30×30` ambient inside the existing `66×36` / `58×30` wrappers. Haloform keeps a tracked `96×96` source/Completion master.
+- Every active Pet delivers Idle (3 frames), Working (3), Done (4), Attention (3), and Error (3). Halo Bot uses its deterministic layered Pixabots rig; Haloform uses its approved provider-derived canonical master, explicit semantic masks, and deterministic integer offsets.
+- `agent-halo.pet-motion-map` may redirect semantic states to body motions. This never changes status semantics or the detached Signal V4 layer.
 - The detached semantic signal family uses the human-directed Gemini V4 bold correction: loading, command prompt, pencil, flag, delegation branches, eye, memory chip, top-down question mark, check, and saturated-red error. Every signal is redrawn as a full direct-native `20×20` frame with normally 2px primary strokes; runtime does not scale it.
 
-Mahiro reviewed the repaired robot animation gallery and historically kept Scorpion as its main. On 2026-07-21 Mahiro selected Ember Starling's cut-paper direction, compact master B, and complete five-state body family as the new global default without removing the original roster.
+Mahiro's earlier Scorpion and Ember decisions remain in source history. On 2026-07-23 Mahiro explicitly reduced the active roster to Halo Bot plus Haloform and approved Haloform's explicit-mask motion for runtime integration.
+
+## Haloform provenance
+
+The complete standalone provider raster, compact receipt, canonical native96 master, explicit visible/hidden masks, QA evidence, human approval receipt, deterministic builder, and delivery review live at `source/haloform-motion-v1/`. The source is provider-derived and manually normalized; it is not described as provider-native 96px art. The builder reproduces ambient, session, and Completion strips without depending on ignored `.agent-state` files.
 
 ## Halo Bot provenance
 
@@ -32,6 +37,6 @@ Tracked MIT source layers, copied-part receipts, deterministic compositor, revie
 
 ## Production approval
 
-The original robot animation art and global selection flow are committed in `c966044`; Ember Starling's later global Pet path is committed in `cd568d7`. Halo Bot remains the current integration candidate until release install/restart and fresh native foreground review pass.
+The original robot animation art and global selection flow are committed in `c966044`; Ember Starling's historical path is committed in `cd568d7`; Halo Bot is committed in `3885825`. The current two-Pet roster and Haloform remain an integration candidate until release install/restart and fresh native foreground review pass.
 
 Mahiro separately foreground-approved the review-only Attention/Error motion extension. Those loops preserve each accepted frame-0 identity, palette, baseline, and semantic-signal separation; the exact review generator, manifest, QA report, and contacts are retained under `source/` and `qa/`.

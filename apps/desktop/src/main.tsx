@@ -25,6 +25,7 @@ import {
 } from "./features/session/persistence";
 import { readHaloPetPreference, writeHaloPetPreference } from "./features/session/petPreference";
 import { readHaloBotLoadoutPreference, writeHaloBotLoadoutPreference, type HaloBotLoadout } from "./features/session/haloBot";
+import { DEFAULT_HALO_PET_MOTION_MAPPING, readHaloPetMotionMapping, writeHaloPetMotionMapping, type HaloPetMotion, type HaloPetMotionMapping, type HaloPetSemanticState } from "./features/session/petMotion";
 import {
   buildSessionDetail,
   buildSessionSummaries,
@@ -159,6 +160,7 @@ const App = () => {
   const [usageSettings, setUsageSettings] = useState<IUsageSettings>(readUsageSettings);
   const [pet, setPet] = useState<HaloPetName>(readHaloPetPreference);
   const [haloBotLoadout, setHaloBotLoadout] = useState<HaloBotLoadout>(readHaloBotLoadoutPreference);
+  const [petMotionMapping, setPetMotionMapping] = useState<HaloPetMotionMapping>(readHaloPetMotionMapping);
   const [completionPetEnabled, setCompletionPetEnabled] = useState(readCompletionPetEnabled);
   const [completionPetSize, setCompletionPetSize] = useState<CompletionPetSize>(readCompletionPetSize);
   const [movementBreakEnabled, setMovementBreakEnabled] = useState(readMovementBreakEnabled);
@@ -260,7 +262,6 @@ const App = () => {
       pet,
       loadout: pet === "halo-bot" ? haloBotLoadout : undefined,
       petSize: completionPetSize,
-      visual: pet === "ember-starling" ? "ember-starling" : undefined,
       preview: false,
       movementBreakEnabled,
       nextPhase: completion.nextPhase,
@@ -957,6 +958,20 @@ const App = () => {
     }
   };
 
+  const updatePetMotion = (state: HaloPetSemanticState, motion: HaloPetMotion) => {
+    setPetMotionMapping((current) => {
+      const next = { ...current, [state]: motion };
+      writeHaloPetMotionMapping(next);
+      return next;
+    });
+  };
+
+  const resetPetMotionMapping = () => {
+    const next = { ...DEFAULT_HALO_PET_MOTION_MAPPING };
+    setPetMotionMapping(next);
+    writeHaloPetMotionMapping(next);
+  };
+
   const updateCompletionPetEnabled = (enabled: boolean) => {
     completionPetEnabledRef.current = enabled;
     completionPetSummonGenerationRef.current += 1;
@@ -1005,7 +1020,6 @@ const App = () => {
           pet,
           loadout: pet === "halo-bot" ? haloBotLoadout : undefined,
           petSize: completionPetSize,
-          visual: pet === "ember-starling" ? "ember-starling" : undefined,
           preview: true,
           movementBreakEnabled: false,
           nextPhase: "short-break",
@@ -1278,7 +1292,7 @@ const App = () => {
             </div>
             <div className="camera-spacer" aria-hidden="true" />
             <div className={`notch-wing notch-wing-right ${showPomodoroActivity ? "is-pomodoro" : ""}`} aria-hidden="true">
-              {showPomodoroActivity ? <span className="pomodoro-pill-phase">{pomodoroPhaseDetail}</span> : hasLiveActivity ? <ActivityPet activityKind={activityKind} loadout={haloBotLoadout} pet={pet} status={activityStatus} /> : null}
+              {showPomodoroActivity ? <span className="pomodoro-pill-phase">{pomodoroPhaseDetail}</span> : hasLiveActivity ? <ActivityPet activityKind={activityKind} loadout={haloBotLoadout} motionMapping={petMotionMapping} pet={pet} status={activityStatus} /> : null}
             </div>
           </div>
 
@@ -1351,6 +1365,7 @@ const App = () => {
                   keepAwakeEnabled={keepAwakeEnabled}
                   keepAwakeError={keepAwakeError}
                   pet={pet}
+                  petMotionMapping={petMotionMapping}
                   completionPetEnabled={completionPetEnabled}
                   completionPetSize={completionPetSize}
                   movementBreakEnabled={movementBreakEnabled}
@@ -1365,6 +1380,8 @@ const App = () => {
                   onHaloBotLoadoutChange={updateHaloBotLoadout}
                   onKeepAwakeChange={updateKeepAwakeEnabled}
                   onPetChange={updatePet}
+                  onPetMotionChange={updatePetMotion}
+                  onPetMotionReset={resetPetMotionMapping}
                   onCompletionPetEnabledChange={updateCompletionPetEnabled}
                   onCompletionPetSizeChange={updateCompletionPetSize}
                   onMovementBreakEnabledChange={updateMovementBreakEnabled}
@@ -1372,7 +1389,7 @@ const App = () => {
                 />
               ) : selectedSession ? (
                 <div className="detail-body session-context-view" data-status={selectedSession.status}>
-                  <SessionContextSummary loadout={haloBotLoadout} pet={pet} session={selectedSession} />
+                  <SessionContextSummary loadout={haloBotLoadout} motionMapping={petMotionMapping} pet={pet} session={selectedSession} />
                   <div className="detail-path" title={selectedSession.cwd}>{shortenPath(selectedSession.cwd)}</div>
                   {canUseNativeControls ? (
                     <div className="capability-note">Focus matches Ghostty terminal cwd/title and selects its tab</div>
@@ -1438,6 +1455,7 @@ const App = () => {
                                 group={group}
                                 groupKey={groupKey}
                                 loadout={haloBotLoadout}
+                                motionMapping={petMotionMapping}
                                 pet={pet}
                                 onClear={dismissSession}
                                 onClearGroup={clearCompletedSessionGroup}
@@ -1476,6 +1494,7 @@ const App = () => {
                                 group={group}
                                 groupKey={groupKey}
                                 loadout={haloBotLoadout}
+                                motionMapping={petMotionMapping}
                                 pet={pet}
                                 onClear={dismissSession}
                                 onClearGroup={clearCompletedSessionGroup}

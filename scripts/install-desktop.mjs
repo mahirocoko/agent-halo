@@ -25,6 +25,11 @@ if (!existsSync(sourceApp)) {
   process.exit(1);
 }
 
+// Replacing an app bundle does not reload an already-running process. Stop the
+// current menu-bar instance before copying so the installed UI cannot remain on
+// stale in-memory code after a successful install.
+spawnSync("pkill", ["-x", "agent-halo-desktop"], { stdio: "ignore" });
+
 try {
   mkdirSync(installDir, { recursive: true });
   rmSync(installPath, { recursive: true, force: true });
@@ -53,7 +58,8 @@ spawnSync(
   { stdio: "ignore" },
 );
 spawnSync("mdimport", [installPath], { stdio: "ignore" });
+run("open", ["-g", installPath]);
 
-console.log(`Installed ${appName} → ${installPath}`);
+console.log(`Installed and restarted ${appName} → ${installPath}`);
 console.log("Open it, then use Setup → Install/Reinstall to install the Letta mod if needed.");
 console.log("After first mod install, reload or restart Letta Code so it loads ~/.letta/mods/agent-halo.js.");

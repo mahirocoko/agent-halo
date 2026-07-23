@@ -115,7 +115,7 @@
   left: 32px;
 }
 
-.completion-pet-visual.halo-pet[data-pet="halo-bot"] {
+.completion-pet-visual.halo-pet:is([data-pet="halo-bot"], [data-pet="haloform"]) {
   --halo-pet-frame-width: 78px;
   --halo-pet-frame-height: 78px;
   --halo-pet-three-frame-width: 234px;
@@ -125,12 +125,12 @@
   --halo-pet-frame-3-x: -234px;
 }
 
-.completion-pet-visual.halo-pet[data-pet="halo-bot"] .halo-pet-body {
+.completion-pet-visual.halo-pet:is([data-pet="halo-bot"], [data-pet="haloform"]) .halo-pet-body {
   top: 5px;
   left: 19px;
 }
 
-.completion-pet-root[data-pet-size="medium"] .completion-pet-visual.halo-pet[data-pet="halo-bot"] {
+.completion-pet-root[data-pet-size="medium"] .completion-pet-visual.halo-pet:is([data-pet="halo-bot"], [data-pet="haloform"]) {
   --halo-pet-frame-width: 59px;
   --halo-pet-frame-height: 59px;
   --halo-pet-three-frame-width: 177px;
@@ -140,12 +140,12 @@
   --halo-pet-frame-3-x: -177px;
 }
 
-.completion-pet-root[data-pet-size="medium"] .completion-pet-visual.halo-pet[data-pet="halo-bot"] .halo-pet-body {
+.completion-pet-root[data-pet-size="medium"] .completion-pet-visual.halo-pet:is([data-pet="halo-bot"], [data-pet="haloform"]) .halo-pet-body {
   top: 15px;
   left: 29px;
 }
 
-.completion-pet-root[data-pet-size="small"] .completion-pet-visual.halo-pet[data-pet="halo-bot"] {
+.completion-pet-root[data-pet-size="small"] .completion-pet-visual.halo-pet:is([data-pet="halo-bot"], [data-pet="haloform"]) {
   --halo-pet-frame-width: 39px;
   --halo-pet-frame-height: 39px;
   --halo-pet-three-frame-width: 117px;
@@ -155,17 +155,9 @@
   --halo-pet-frame-3-x: -117px;
 }
 
-.completion-pet-root[data-pet-size="small"] .completion-pet-visual.halo-pet[data-pet="halo-bot"] .halo-pet-body {
+.completion-pet-root[data-pet-size="small"] .completion-pet-visual.halo-pet:is([data-pet="halo-bot"], [data-pet="haloform"]) .halo-pet-body {
   top: 25px;
   left: 39px;
-}
-
-.completion-pet-ember-starling {
-  position: absolute;
-  top: 6px;
-  left: 6px;
-  background: url("/pets/ember-starling/completion-working@2x.webp") 0 0 / 400% 100% no-repeat;
-  animation: ember-starling-working 960ms steps(4, end) infinite;
 }
 
 .completion-pet-radial {
@@ -311,14 +303,20 @@
 
 .completion-pet-context {
   position: absolute;
-  right: 0;
-  bottom: 10px;
-  left: 0;
-  color: var(--text-2);
+  right: auto;
+  bottom: 8px;
+  left: 50%;
+  width: max-content;
+  padding: 3px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  color: #fff;
+  background: #000;
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.01em;
   text-align: center;
+  transform: translateX(-50%);
   animation: completion-pet-context-in 180ms 380ms ease-out both;
 }
 
@@ -336,18 +334,13 @@
   outline: none;
 }
 
-.completion-pet-companion:focus-visible :is(.completion-pet-visual, .completion-pet-ember-starling) {
+.completion-pet-companion:focus-visible .completion-pet-visual {
   filter: drop-shadow(0 0 5px rgba(255, 157, 61, 0.96));
 }
 
 @keyframes completion-pet-float {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-2px); }
-}
-
-@keyframes ember-starling-working {
-  from { background-position-x: 0; }
-  to { background-position-x: 133.333%; }
 }
 
 @keyframes completion-pet-liquid-in {
@@ -402,7 +395,6 @@
   }
 
   .completion-pet-visual,
-  .completion-pet-ember-starling,
   .completion-pet-option,
   .completion-pet-orbit,
   .completion-pet-context {

@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "file": "call_TJam6nD90EGODPCWIlZHJxVr.png",
+    "sha256": "eb7d1d8abfcdcb5c41fa279fb0b9851d2571d5ba9c688cce0e30ee35d8067b98",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "usage": "Mahiro-selected standalone provider master"
+  },
+  "target": {
+    "native": [
+      96,
+      96
+    ],
+    "actualDisplay": [
+      96,
+      96
+    ]
+  },
+  "rejectionContext": {
+    "supersedes": "20260723-haloforms-clarity-master48-decompose-v2",
+    "reasons": [
+      "48px detail loss",
+      "animation mask/underlay artifacts"
+    ]
+  },
+  "normalizationPolicy": "provider-derived manual normalization; source hash and identity preserved"
+}

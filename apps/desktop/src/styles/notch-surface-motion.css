@@ -166,7 +166,7 @@
   flex: none;
 }
 
-/* Human-approved Scorpion roster integration candidate. */
+/* Shared Halo Bot / Haloform body and detached Signal V4 contract. */
 .halo-pet {
   --halo-pet-hue: 0deg;
   --halo-pet-saturation: 1;
@@ -207,7 +207,7 @@
   height: 36px;
 }
 
-.activity-pet.halo-pet[data-pet="halo-bot"] {
+.activity-pet.halo-pet:is([data-pet="halo-bot"], [data-pet="haloform"]) {
   --halo-pet-frame-width: 30px;
   --halo-pet-frame-height: 30px;
   --halo-pet-three-frame-width: 90px;
@@ -218,7 +218,7 @@
   --halo-pet-signal-left: 34px;
 }
 
-.session-pet.halo-pet[data-pet="halo-bot"] {
+.session-pet.halo-pet:is([data-pet="halo-bot"], [data-pet="haloform"]) {
   --halo-pet-frame-width: 36px;
   --halo-pet-frame-height: 36px;
   --halo-pet-three-frame-width: 108px;
@@ -229,7 +229,7 @@
   --halo-pet-signal-left: 40px;
 }
 
-:is(.activity-pet, .session-pet).halo-pet[data-pet="halo-bot"] .halo-pet-body {
+:is(.activity-pet, .session-pet).halo-pet:is([data-pet="halo-bot"], [data-pet="haloform"]) .halo-pet-body {
   top: 0;
 }
 
@@ -303,35 +303,55 @@
   --halo-pet-brightness: 1;
 }
 
-.halo-pet[data-state="idle"] .halo-pet-body,
-.halo-pet[data-state="working"] .halo-pet-body {
+.halo-pet[data-motion="idle"] .halo-pet-body,
+.halo-pet[data-motion="working"] .halo-pet-body {
   background-size: var(--halo-pet-three-frame-width) var(--halo-pet-frame-height);
 }
 
-.halo-pet[data-state="idle"] .halo-pet-body {
+.halo-pet[data-motion="idle"] .halo-pet-body {
   animation: halo-pet-three-frame-loop 0.9s step-end infinite;
 }
 
-.halo-pet[data-state="working"] .halo-pet-body {
+.halo-pet[data-motion="working"] .halo-pet-body {
   animation: halo-pet-three-frame-loop 0.45s step-end infinite;
 }
 
-.halo-pet[data-state="attention"] .halo-pet-body,
-.halo-pet[data-state="error"] .halo-pet-body {
+.halo-pet[data-motion="attention"] .halo-pet-body,
+.halo-pet[data-motion="error"] .halo-pet-body {
   background-size: var(--halo-pet-three-frame-width) var(--halo-pet-frame-height);
 }
 
-.halo-pet[data-state="attention"] .halo-pet-body {
+.halo-pet[data-motion="attention"] .halo-pet-body {
   animation: halo-pet-attention 0.7s step-end infinite;
 }
 
-.halo-pet[data-state="error"] .halo-pet-body {
+.halo-pet[data-motion="error"] .halo-pet-body {
   animation: halo-pet-error 0.63s step-end infinite;
 }
 
-.halo-pet[data-state="done"] .halo-pet-body {
+.halo-pet[data-motion="done"] .halo-pet-body {
   background-size: var(--halo-pet-done-width) var(--halo-pet-frame-height);
   animation: halo-pet-done 1.7s step-end 1 forwards;
+}
+
+.halo-pet[data-pet="haloform"][data-motion="idle"] .halo-pet-body {
+  animation: haloform-idle 1.18s step-end infinite;
+}
+
+.halo-pet[data-pet="haloform"][data-motion="working"] .halo-pet-body {
+  animation: haloform-working 0.5s step-end infinite;
+}
+
+.halo-pet[data-pet="haloform"][data-motion="attention"] .halo-pet-body {
+  animation: haloform-attention 0.78s step-end infinite;
+}
+
+.halo-pet[data-pet="haloform"][data-motion="done"] .halo-pet-body {
+  animation: haloform-done 1.44s step-end 1 forwards;
+}
+
+.halo-pet[data-pet="haloform"][data-motion="error"] .halo-pet-body {
+  animation: haloform-error 0.48s step-end infinite;
 }
 
 .halo-pet[data-signal]:not([data-signal="none"]):not([data-signal="thinking-model"]):not([data-signal="attention-asking"]):not([data-signal="done"]) .halo-pet-signal {
@@ -416,6 +436,37 @@
   }
 }
 
+@keyframes haloform-idle {
+  0%, 44.06% { background-position-x: 0; }
+  44.07%, 64.4% { background-position-x: var(--halo-pet-frame-1-x); }
+  64.41%, 100% { background-position-x: var(--halo-pet-frame-2-x); }
+}
+
+@keyframes haloform-working {
+  0%, 35.99% { background-position-x: 0; }
+  36%, 63.99% { background-position-x: var(--halo-pet-frame-1-x); }
+  64%, 100% { background-position-x: var(--halo-pet-frame-2-x); }
+}
+
+@keyframes haloform-attention {
+  0%, 35.89% { background-position-x: 0; }
+  35.9%, 58.97% { background-position-x: var(--halo-pet-frame-1-x); }
+  58.98%, 100% { background-position-x: var(--halo-pet-frame-2-x); }
+}
+
+@keyframes haloform-done {
+  0%, 18.05% { background-position-x: 0; }
+  18.06%, 33.32% { background-position-x: var(--halo-pet-frame-1-x); }
+  33.33%, 51.38% { background-position-x: var(--halo-pet-frame-2-x); }
+  51.39%, 100% { background-position-x: var(--halo-pet-frame-3-x); }
+}
+
+@keyframes haloform-error {
+  0%, 29.16% { background-position-x: 0; }
+  29.17%, 54.16% { background-position-x: var(--halo-pet-frame-1-x); }
+  54.17%, 100% { background-position-x: var(--halo-pet-frame-2-x); }
+}
+
 @keyframes halo-pet-signal-three-frame-loop {
   0%,
   33.32% {
@@ -490,7 +541,7 @@
     transform: none !important;
   }
 
-  .halo-pet[data-state="done"] .halo-pet-body {
+  .halo-pet[data-motion="done"] .halo-pet-body {
     background-position-x: var(--halo-pet-frame-3-x);
   }
 

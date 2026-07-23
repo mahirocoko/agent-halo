@@ -8,8 +8,9 @@ const assetRoot = join(distRoot, "assets");
 
 const BUDGETS = {
   coreDistBytes: 575_500,
-  cssGzipBytes: 10_800,
+  cssGzipBytes: 11_100,
   haloBotAssetBytes: 50_000,
+  haloformAssetBytes: 85_000,
   jsGzipBytes: 97_000,
   movementAssetBytes: 28_250_000,
 };
@@ -48,11 +49,12 @@ if (!css || !js) throw new Error("desktop build is missing its primary CSS or Ja
 const dist = await walk(distRoot);
 const movementAssets = await walk(join(distRoot, "mediapipe"));
 const haloBotAssets = await walk(join(distRoot, "mascots", "agent-halo-roster", "body", "halo-bot"));
+const haloformAssets = await walk(join(distRoot, "mascots", "agent-halo-roster", "body", "haloform"));
 const movementRuntimeBytes = assets
   .filter((asset) => asset.name.startsWith("vision_bundle-"))
   .reduce((total, asset) => total + asset.bytes, 0);
 const movementAssetBytes = movementAssets.bytes + movementRuntimeBytes;
-const coreDistBytes = dist.bytes - movementAssetBytes - haloBotAssets.bytes;
+const coreDistBytes = dist.bytes - movementAssetBytes - haloBotAssets.bytes - haloformAssets.bytes;
 const legacyEntries = [];
 const findLegacy = async (directory, relative = "") => {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -64,14 +66,15 @@ const findLegacy = async (directory, relative = "") => {
 await findLegacy(distRoot);
 
 const payload = {
-  baselineCommit: "4a5c0f1",
-  budgetRevision: "halo-bot-main-pet",
+  baselineCommit: "3885825",
+  budgetRevision: "two-pet-motion-mapping",
   budgets: BUDGETS,
   current: {
     cssGzipBytes: css.gzipBytes,
     coreDistBytes,
     distFiles: dist.files,
     haloBotAssetBytes: haloBotAssets.bytes,
+    haloformAssetBytes: haloformAssets.bytes,
     jsGzipBytes: js.gzipBytes,
     movementAssetBytes,
   },
@@ -84,5 +87,6 @@ if (css.gzipBytes > BUDGETS.cssGzipBytes) throw new Error(`CSS gzip budget excee
 if (js.gzipBytes > BUDGETS.jsGzipBytes) throw new Error(`JavaScript gzip budget exceeded: ${js.gzipBytes} > ${BUDGETS.jsGzipBytes}`);
 if (coreDistBytes > BUDGETS.coreDistBytes) throw new Error(`desktop core dist budget exceeded: ${coreDistBytes} > ${BUDGETS.coreDistBytes}`);
 if (haloBotAssets.bytes > BUDGETS.haloBotAssetBytes) throw new Error(`Halo Bot asset budget exceeded: ${haloBotAssets.bytes} > ${BUDGETS.haloBotAssetBytes}`);
+if (haloformAssets.bytes > BUDGETS.haloformAssetBytes) throw new Error(`Haloform asset budget exceeded: ${haloformAssets.bytes} > ${BUDGETS.haloformAssetBytes}`);
 if (movementAssetBytes > BUDGETS.movementAssetBytes) throw new Error(`movement asset budget exceeded: ${movementAssetBytes} > ${BUDGETS.movementAssetBytes}`);
 if (legacyEntries.length > 0) throw new Error(`legacy session-cat assets remain in dist: ${legacyEntries.join(", ")}`);

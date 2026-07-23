@@ -10,7 +10,7 @@ test("every surface uses the Halo Bot default with one stable loadout and no ran
   const pet = page.locator('.session-row .halo-pet[data-state="working"][data-signal="thinking-model"]');
   await expect(pet).toHaveCount(1);
   const initialPet = await pet.getAttribute("data-pet");
-  const roster = ["halo-bot", "pot", "crawler", "bat", "jelly", "cat", "crt", "cactus", "nautilus", "turtle", "lantern", "kettle", "dragonfly", "giraffe", "scorpion", "squid", "ember-starling"];
+  const roster = ["halo-bot", "haloform"];
   expect(roster).toContain(initialPet);
   expect(initialPet).toBe("halo-bot");
   await expect(pet).toHaveAttribute("data-loadout", "3051");
@@ -55,35 +55,35 @@ test("pet normalization defaults invalid or missing values to Halo Bot", async (
     return {
       fallback: getHaloPetName(null),
       invalid: getHaloPetName("/Users/mahiro/Git/one"),
-      selected: getHaloPetName("crt"),
+      selected: getHaloPetName("haloform"),
       roster: [...HALO_PET_ROSTER],
     };
   });
   expect(result.fallback).toBe("halo-bot");
   expect(result.invalid).toBe("halo-bot");
-  expect(result.selected).toBe("crt");
-  expect(result.roster).toHaveLength(17);
+  expect(result.selected).toBe("haloform");
+  expect(result.roster).toEqual(["halo-bot", "haloform"]);
 });
 
-test("legacy mascot preference migrates once into the Pet key", async ({ page }) => {
+test("retired legacy mascot preference migrates into the Halo Bot fallback", async ({ page }) => {
   await page.addInitScript(() => window.localStorage.setItem("agent-halo.mascot", "crt"));
   await page.goto("/?demo=1&demoScenario=idle");
-  await expect(page.locator(".session-row .halo-pet")).toHaveAttribute("data-pet", "crt");
-  expect(await page.evaluate(() => window.localStorage.getItem("agent-halo.pet"))).toBe("crt");
+  await expect(page.locator(".session-row .halo-pet")).toHaveAttribute("data-pet", "halo-bot");
+  expect(await page.evaluate(() => window.localStorage.getItem("agent-halo.pet"))).toBe("halo-bot");
 });
 
-test("an existing explicit Scorpion selection remains intact", async ({ page }) => {
-  await page.addInitScript(() => window.localStorage.setItem("agent-halo.pet", "scorpion"));
-  await page.goto("/?demo=1&demoScenario=idle");
-  await expect(page.locator(".session-row .halo-pet")).toHaveAttribute("data-pet", "scorpion");
-  expect(await page.evaluate(() => window.localStorage.getItem("agent-halo.pet"))).toBe("scorpion");
-});
-
-test("the previous Ember Starling default remains an intact explicit selection", async ({ page }) => {
+test("retired explicit Pet values normalize and rewrite to Halo Bot", async ({ page }) => {
   await page.addInitScript(() => window.localStorage.setItem("agent-halo.pet", "ember-starling"));
   await page.goto("/?demo=1&demoScenario=idle");
-  await expect(page.locator(".session-row .halo-pet")).toHaveAttribute("data-pet", "ember-starling");
-  expect(await page.evaluate(() => window.localStorage.getItem("agent-halo.pet"))).toBe("ember-starling");
+  await expect(page.locator(".session-row .halo-pet")).toHaveAttribute("data-pet", "halo-bot");
+  expect(await page.evaluate(() => window.localStorage.getItem("agent-halo.pet"))).toBe("halo-bot");
+});
+
+test("an existing Haloform selection remains intact", async ({ page }) => {
+  await page.addInitScript(() => window.localStorage.setItem("agent-halo.pet", "haloform"));
+  await page.goto("/?demo=1&demoScenario=idle");
+  await expect(page.locator(".session-row .halo-pet")).toHaveAttribute("data-pet", "haloform");
+  expect(await page.evaluate(() => window.localStorage.getItem("agent-halo.pet"))).toBe("haloform");
 });
 
 test("setup selects one global pet and persists the preference", async ({ page }) => {
@@ -96,29 +96,39 @@ test("setup selects one global pet and persists the preference", async ({ page }
   await petRow.getByRole("button", { name: /Choose/ }).click();
   const picker = page.getByRole("radiogroup", { name: "Pet", exact: true });
   const radios = picker.getByRole("radio");
-  await expect(radios).toHaveCount(17);
+  await expect(radios).toHaveCount(2);
   const haloBotOption = picker.getByRole("radio", { name: "Halo Bot" });
   await expect(haloBotOption).toHaveAttribute("aria-checked", "true");
   await expect(haloBotOption).toBeFocused();
   expect(await radios.evaluateAll((options) => options.filter((option) => option.tabIndex === 0).length)).toBe(1);
 
+  await haloBotOption.press("ArrowDown");
+  const haloformOption = picker.getByRole("radio", { name: "Haloform" });
+  await expect(haloformOption).toHaveAttribute("aria-checked", "true");
+  await expect(haloformOption).toBeFocused();
+  await haloformOption.press("ArrowUp");
+  await expect(haloBotOption).toHaveAttribute("aria-checked", "true");
+  await expect(haloBotOption).toBeFocused();
   await haloBotOption.press("ArrowRight");
-  const potOption = picker.getByRole("radio", { name: "Pot" });
-  await expect(potOption).toHaveAttribute("aria-checked", "true");
-  await expect(potOption).toBeFocused();
-  await potOption.press("Escape");
+  await expect(haloformOption).toHaveAttribute("aria-checked", "true");
+  await expect(haloformOption).toBeFocused();
+  await haloformOption.press("Escape");
   await expect(petRow.getByRole("button", { name: /Choose/ })).toBeFocused();
 
   await petRow.getByRole("button", { name: /Choose/ }).click();
-  await picker.getByRole("radio", { name: "CRT" }).click();
+  await picker.getByRole("radio", { name: "Haloform" }).click();
   await page.getByRole("button", { name: "Back to sessions" }).click();
-  await expect(page.locator(".session-row .halo-pet")).toHaveAttribute("data-pet", "crt");
-  await expect(page.locator(".activity-pet.halo-pet")).toHaveAttribute("data-pet", "crt");
+  await expect(page.locator(".session-row .halo-pet")).toHaveAttribute("data-pet", "haloform");
+  await expect(page.locator(".session-row .halo-pet")).toHaveAttribute("data-motion", "working");
+  await expect(page.locator(".session-row .halo-pet .halo-pet-body")).toHaveCSS("background-image", /\/body\/haloform\/session\/working\.png/);
+  await expect(page.locator(".session-row .halo-pet .halo-pet-body")).toHaveCSS("animation-name", "haloform-working");
+  await expect(page.locator(".activity-pet.halo-pet")).toHaveAttribute("data-pet", "haloform");
+  await expect(page.locator(".activity-pet.halo-pet .halo-pet-body")).toHaveCSS("background-image", /\/body\/haloform\/ambient\/working\.png/);
   await page.locator(".session-row-main").click();
-  await expect(page.locator(".session-context-summary .halo-pet")).toHaveAttribute("data-pet", "crt");
-  await expect.poll(() => page.evaluate(() => window.localStorage.getItem("agent-halo.pet"))).toBe("crt");
+  await expect(page.locator(".session-context-summary .halo-pet")).toHaveAttribute("data-pet", "haloform");
+  await expect.poll(() => page.evaluate(() => window.localStorage.getItem("agent-halo.pet"))).toBe("haloform");
   const stored = await page.evaluate(async () => (await import("/src/features/session/petPreference.ts")).readHaloPetPreference());
-  expect(stored).toBe("crt");
+  expect(stored).toBe("haloform");
 });
 
 test("Halo Bot persists one validated loadout independently from the global Pet", async ({ page }) => {
@@ -158,6 +168,43 @@ test("Halo Bot persists one validated loadout independently from the global Pet"
     };
   });
   expect(normalized).toEqual({ invalid: "3051", selected: "f061", loadouts: ["3051", "1462", "5324", "c160", "2515", "4232", "d351", "6124", "9132", "f061"] });
+});
+
+test("Letta state motion mapping changes only body presentation and persists", async ({ page }) => {
+  await page.goto("/?demo=1&demoScenario=long-llm");
+  await page.getByRole("button", { name: "Setup" }).click();
+  await page.getByRole("tab", { name: "Pet" }).click();
+  const workingMotion = page.getByRole("combobox", { name: "Working Letta state motion" });
+  await expect(workingMotion).toHaveValue("working");
+  await workingMotion.selectOption("idle");
+  await expect(page.getByRole("button", { name: "Reset" })).toBeEnabled();
+  await page.getByRole("button", { name: "Back to sessions" }).click();
+
+  const pet = page.locator('.session-row .halo-pet[data-state="working"]');
+  await expect(pet).toHaveAttribute("data-motion", "idle");
+  await expect(pet).toHaveAttribute("data-signal", "thinking-model");
+  await expect(pet.locator(".halo-pet-body")).toHaveCSS("background-image", /\/body\/halo-bot\/3051\/idle\.png/);
+  await expect(pet.locator(".halo-pet-body")).toHaveCSS("animation-duration", "0.9s");
+  await expect.poll(() => page.evaluate(() => window.localStorage.getItem("agent-halo.pet-motion-map"))).toContain('"working":"idle"');
+
+  const persisted = await page.evaluate(async () => (await import("/src/features/session/petMotion.ts")).readHaloPetMotionMapping());
+  expect(persisted.working).toBe("idle");
+});
+
+test("invalid motion mapping values normalize independently to truthful defaults", async ({ page }) => {
+  await page.addInitScript(() => window.localStorage.setItem("agent-halo.pet-motion-map", JSON.stringify({ schemaVersion: 1, mapping: { idle: "error", working: "unknown", attention: "done" } })));
+  await page.goto("/?demo=1&demoScenario=long-llm");
+  const normalized = await page.evaluate(async () => (await import("/src/features/session/petMotion.ts")).readHaloPetMotionMapping());
+  expect(normalized).toEqual({ idle: "error", working: "working", attention: "done", done: "done", error: "error" });
+  const pet = page.locator('.session-row .halo-pet[data-state="working"]');
+  await expect(pet).toHaveAttribute("data-motion", "working");
+  await expect(pet).toHaveAttribute("data-signal", "thinking-model");
+  const malformed = await page.evaluate(async () => {
+    window.localStorage.setItem("agent-halo.pet-motion-map", "not-json");
+    return (await import("/src/features/session/petMotion.ts")).readHaloPetMotionMapping();
+  });
+  expect(malformed).toEqual({ idle: "idle", working: "working", attention: "attention", done: "done", error: "error" });
+  await expect.poll(() => page.evaluate(() => window.localStorage.getItem("agent-halo.pet-motion-map"))).toContain('"schemaVersion":1');
 });
 
 test("Setup owns one global Completion Pet toggle", async ({ page }) => {
@@ -247,7 +294,7 @@ test("Pet Setup persists floating size and shows an isolated native preview", as
   await expect(page.getByText("Pet preview shown")).toBeVisible();
   await expect(page.getByRole("button", { name: "Show Completion Pet preview" })).toHaveText(/Show again/);
   const show = await page.evaluate(() => (window as typeof window & { __petPreviewCalls: Array<{ command: string; args?: Record<string, unknown> }> }).__petPreviewCalls.find((call) => call.command === "show_completion_pet"));
-  expect(show?.args?.summon).toMatchObject({ pet: "halo-bot", loadout: "3051", petSize: "medium", visual: undefined, preview: true, title: "Pet preview", actionLabel: "" });
+  expect(show?.args?.summon).toMatchObject({ pet: "halo-bot", loadout: "3051", petSize: "medium", preview: true, title: "Pet preview", actionLabel: "" });
   await sizes.getByRole("radio", { name: "2×" }).click();
   await expect(page.getByText("Settings changed · update preview")).toBeVisible();
   const update = page.getByRole("button", { name: "Update Completion Pet preview" });
@@ -261,7 +308,7 @@ test("Pet Setup persists floating size and shows an isolated native preview", as
   await expect(updateHaloBot).toHaveText(/Update Pet/);
   await updateHaloBot.click();
   const updatedHaloBotShow = await page.evaluate(() => (window as typeof window & { __petPreviewCalls: Array<{ command: string; args?: Record<string, unknown> }> }).__petPreviewCalls.filter((call) => call.command === "show_completion_pet").pop());
-  expect(updatedHaloBotShow?.args?.summon).toMatchObject({ pet: "halo-bot", loadout: "3051", petSize: "small", visual: undefined, preview: true });
+  expect(updatedHaloBotShow?.args?.summon).toMatchObject({ pet: "halo-bot", loadout: "3051", petSize: "small", preview: true });
 });
 
 test("every ActivityKind maps to one bounded signal group", async ({ page }) => {
@@ -328,7 +375,8 @@ test("production roster manifest preserves every body and shared signal hash", a
       mainPet: string;
       defaultMascot: string;
       defaultPet: string;
-      assignment: { status: string; storageKey: string; projectHashing: boolean; colorRandomization: boolean; loadout: { pet: string; storageKey: string; default: string; allowlist: string[]; automaticActivitySwap: boolean } };
+      roster: string[];
+      assignment: { status: string; storageKey: string; projectHashing: boolean; colorRandomization: boolean; loadout: { pet: string; storageKey: string; default: string; allowlist: string[]; automaticActivitySwap: boolean }; motionMapping: { storageKey: string; semanticStates: string[]; motions: string[]; default: Record<string, string>; scope: string } };
       signal: { idleIncluded: boolean; status: string };
       files: Record<string, string>;
     };
@@ -349,6 +397,7 @@ test("production roster manifest preserves every body and shared signal hash", a
       mainPet: manifest.mainPet,
       defaultMascot: manifest.defaultMascot,
       defaultPet: manifest.defaultPet,
+      roster: manifest.roster,
       assignment: manifest.assignment,
       signalStatus: manifest.signal.status,
       idleIncluded: manifest.signal.idleIncluded,
@@ -361,23 +410,28 @@ test("production roster manifest preserves every body and shared signal hash", a
   expect(result.mainPet).toBe("halo-bot");
   expect(result.defaultMascot).toBe("halo-bot");
   expect(result.defaultPet).toBe("halo-bot");
-  expect(result.assignment).toMatchObject({ status: "user-selected-global", storageKey: "agent-halo.pet", projectHashing: false, colorRandomization: false });
+  expect(result.roster).toEqual(["halo-bot", "haloform"]);
+  expect(result.assignment).toMatchObject({ status: "user-selected-global-two-pet", storageKey: "agent-halo.pet", projectHashing: false, colorRandomization: false });
   expect(result.assignment.loadout).toEqual({ pet: "halo-bot", storageKey: "agent-halo.halo-bot-loadout", default: "3051", allowlist: ["3051", "1462", "5324", "c160", "2515", "4232", "d351", "6124", "9132", "f061"], projectHashing: false, randomization: false, automaticActivitySwap: false, strategy: expect.any(String) });
+  expect(result.assignment.motionMapping).toMatchObject({ storageKey: "agent-halo.pet-motion-map", semanticStates: ["idle", "working", "attention", "done", "error"], motions: ["idle", "working", "attention", "done", "error"], default: { idle: "idle", working: "working", attention: "attention", done: "done", error: "error" }, scope: expect.stringContaining("Signal V4") });
   expect(result.signalStatus).toBe("integration-candidate-gemini-v4-bold");
   expect(result.idleIncluded).toBe(false);
-  expect(result.files).toHaveLength(140);
+  expect(result.files).toHaveLength(75);
   expect(result.files.every((file) => file.hashMatches)).toBe(true);
   expect(result.files.filter((file) => file.path.startsWith("signals/") && ["thinking-model", "attention-asking", "done"].some((name) => file.path.endsWith(`${name}.png`))).every((file) => file.size[0] === 80 && file.size[1] === 20)).toBe(true);
   expect(result.files.filter((file) => file.path.startsWith("signals/") && !["thinking-model", "attention-asking", "done"].some((name) => file.path.endsWith(`${name}.png`))).every((file) => file.size[0] === 60 && file.size[1] === 20)).toBe(true);
-  expect(result.files.find((file) => file.path.endsWith("/idle.png"))?.size).toEqual([72, 18]);
-  expect(result.files.find((file) => file.path.endsWith("/working.png"))?.size).toEqual([72, 18]);
-  expect(result.files.find((file) => file.path.endsWith("/attention.png"))?.size).toEqual([72, 18]);
-  expect(result.files.find((file) => file.path.endsWith("/done.png"))?.size).toEqual([96, 18]);
-  expect(result.files.find((file) => file.path.endsWith("/error.png"))?.size).toEqual([72, 18]);
   const haloBotFiles = result.files.filter((file) => file.path.startsWith("body/halo-bot/"));
   expect(haloBotFiles).toHaveLength(50);
   expect(haloBotFiles.filter((file) => file.path.endsWith("/done.png")).every((file) => file.size[0] === 144 && file.size[1] === 36)).toBe(true);
   expect(haloBotFiles.filter((file) => !file.path.endsWith("/done.png")).every((file) => file.size[0] === 108 && file.size[1] === 36)).toBe(true);
+  const haloformFiles = result.files.filter((file) => file.path.startsWith("body/haloform/"));
+  expect(haloformFiles).toHaveLength(15);
+  expect(haloformFiles.filter((file) => file.path.startsWith("body/haloform/ambient/") && file.path.endsWith("/done.png")).every((file) => file.size[0] === 120 && file.size[1] === 30)).toBe(true);
+  expect(haloformFiles.filter((file) => file.path.startsWith("body/haloform/ambient/") && !file.path.endsWith("/done.png")).every((file) => file.size[0] === 90 && file.size[1] === 30)).toBe(true);
+  expect(haloformFiles.filter((file) => file.path.startsWith("body/haloform/session/") && file.path.endsWith("/done.png")).every((file) => file.size[0] === 144 && file.size[1] === 36)).toBe(true);
+  expect(haloformFiles.filter((file) => file.path.startsWith("body/haloform/session/") && !file.path.endsWith("/done.png")).every((file) => file.size[0] === 108 && file.size[1] === 36)).toBe(true);
+  expect(haloformFiles.filter((file) => file.path.startsWith("body/haloform/completion/") && file.path.endsWith("/done.png")).every((file) => file.size[0] === 384 && file.size[1] === 96)).toBe(true);
+  expect(haloformFiles.filter((file) => file.path.startsWith("body/haloform/completion/") && !file.path.endsWith("/done.png")).every((file) => file.size[0] === 288 && file.size[1] === 96)).toBe(true);
 });
 
 test("idle and inactive keep the body but request no signal asset", async ({ page }) => {

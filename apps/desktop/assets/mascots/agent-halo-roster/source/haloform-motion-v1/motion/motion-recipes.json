@@ -1,0 +1,290 @@
+{
+  "status": "needs-human-review",
+  "promotionApproved": false,
+  "source": "../manifest.json",
+  "frameSize": [
+    96,
+    96
+  ],
+  "layerOrder": [
+    "body",
+    "head",
+    "face",
+    "top"
+  ],
+  "states": {
+    "idle": {
+      "durations": [
+        520,
+        240,
+        420
+      ],
+      "playback": "loop",
+      "frames": [
+        {},
+        {
+          "head": [
+            0,
+            -1
+          ],
+          "face": [
+            0,
+            -1
+          ],
+          "top": [
+            0,
+            -2
+          ]
+        },
+        {
+          "top": [
+            0,
+            -1
+          ]
+        }
+      ]
+    },
+    "working": {
+      "durations": [
+        180,
+        140,
+        180,
+        260
+      ],
+      "playback": "loop",
+      "frames": [
+        {
+          "face": [
+            -2,
+            0
+          ],
+          "top": [
+            -1,
+            0
+          ]
+        },
+        {
+          "head": [
+            1,
+            0
+          ],
+          "face": [
+            2,
+            0
+          ],
+          "top": [
+            2,
+            -1
+          ]
+        },
+        {
+          "head": [
+            -1,
+            0
+          ],
+          "face": [
+            -2,
+            0
+          ],
+          "top": [
+            -2,
+            0
+          ]
+        },
+        {}
+      ]
+    },
+    "attention": {
+      "durations": [
+        280,
+        180,
+        320
+      ],
+      "playback": "loop",
+      "frames": [
+        {
+          "head": [
+            0,
+            1
+          ],
+          "face": [
+            0,
+            1
+          ],
+          "top": [
+            0,
+            1
+          ]
+        },
+        {
+          "body": [
+            0,
+            -1
+          ],
+          "head": [
+            0,
+            -3
+          ],
+          "face": [
+            0,
+            -3
+          ],
+          "top": [
+            0,
+            -3
+          ]
+        },
+        {
+          "head": [
+            0,
+            -1
+          ],
+          "face": [
+            0,
+            -1
+          ],
+          "top": [
+            0,
+            -2
+          ]
+        }
+      ]
+    },
+    "done": {
+      "durations": [
+        260,
+        220,
+        260,
+        700
+      ],
+      "playback": "once-hold-final",
+      "frames": [
+        {
+          "head": [
+            0,
+            1
+          ],
+          "face": [
+            0,
+            1
+          ],
+          "top": [
+            0,
+            1
+          ]
+        },
+        {
+          "body": [
+            0,
+            -2
+          ],
+          "head": [
+            0,
+            -3
+          ],
+          "face": [
+            0,
+            -3
+          ],
+          "top": [
+            0,
+            -3
+          ]
+        },
+        {
+          "body": [
+            -1,
+            -1
+          ],
+          "head": [
+            1,
+            -2
+          ],
+          "face": [
+            1,
+            -2
+          ],
+          "top": [
+            -1,
+            -3
+          ]
+        },
+        {
+          "head": [
+            0,
+            -1
+          ],
+          "face": [
+            0,
+            -1
+          ],
+          "top": [
+            0,
+            -1
+          ]
+        }
+      ]
+    },
+    "error": {
+      "durations": [
+        140,
+        120,
+        220
+      ],
+      "playback": "loop",
+      "frames": [
+        {
+          "body": [
+            3,
+            0
+          ],
+          "head": [
+            -3,
+            0
+          ],
+          "face": [
+            -3,
+            0
+          ],
+          "top": [
+            -4,
+            0
+          ]
+        },
+        {
+          "body": [
+            -3,
+            0
+          ],
+          "head": [
+            3,
+            0
+          ],
+          "face": [
+            3,
+            0
+          ],
+          "top": [
+            4,
+            1
+          ]
+        },
+        {
+          "head": [
+            0,
+            1
+          ],
+          "face": [
+            0,
+            1
+          ],
+          "top": [
+            0,
+            1
+          ]
+        }
+      ]
+    }
+  },
+  "truth": "Provider-derived native96 canonical master plus explicit semantic masks and deterministic integer translations; no generated or manually authored motion poses."
+}

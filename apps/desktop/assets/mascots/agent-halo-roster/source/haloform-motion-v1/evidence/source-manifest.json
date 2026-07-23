@@ -1,0 +1,78 @@
+{
+  "jobId": "20260723-haloforms-clarity-master96-semantic-v3",
+  "sourceAsset": {
+    "path": "assets/call_TJam6nD90EGODPCWIlZHJxVr.png",
+    "sha256": "eb7d1d8abfcdcb5c41fa279fb0b9851d2571d5ba9c688cce0e30ee35d8067b98",
+    "dimensions": [
+      1254,
+      1254
+    ]
+  },
+  "targetMaster": {
+    "dimensions": [
+      96,
+      96
+    ],
+    "sha256": "cfe819f6c97cb8251f34eb5f55acdb3cbfe461ced285f109502ad4cbdc6565fb",
+    "paletteColors": 48,
+    "colorBudget": 64,
+    "perimeterMargin": ">= 3px transparent on all edges",
+    "retouchCounts": {
+      "fringe_cleaned": 0,
+      "clusters_repaired": 0
+    },
+    "preservation": "canonical-master.png preserved byte-for-byte"
+  },
+  "masks": {
+    "methodology": "explicit 96px component/bitmap masks",
+    "visiblePixelCounts": {
+      "top": 293,
+      "face": 234,
+      "head": 2321,
+      "body": 1379
+    },
+    "totalOpaquePixels": 4227,
+    "exhaustiveExclusive": true
+  },
+  "layers": [
+    {
+      "name": "body.png",
+      "order": 1,
+      "underlay": "Tapered contoured shaded neck continuation (y=60..67, x=42..55)"
+    },
+    {
+      "name": "head.png",
+      "order": 2,
+      "underlay": "Feature-free dark CRT screen texture + cream shell top cap (y=17..18, x=45..53)"
+    },
+    {
+      "name": "face.png",
+      "order": 3,
+      "underlay": "Eyes, eye rims/shadows, mouth glow & cheek blush marks only (0 screen background pixels)"
+    },
+    {
+      "name": "top.png",
+      "order": 4,
+      "underlay": "Complete antenna bulbs, stalk & connector base (y=3..18)"
+    }
+  ],
+  "neutralRecomposition": {
+    "status": "PASSED",
+    "diffPixelCount": 0
+  },
+  "motionAcceptance": {
+    "status": "NEEDS_HUMAN_REVIEW",
+    "posesTested": 7,
+    "poses": [
+      "neutral",
+      "face +2x",
+      "face -2x",
+      "top -3y",
+      "top +2x",
+      "head+face+top -4y",
+      "error opposition"
+    ],
+    "notes": "Refined explicit component masks. Zero feature ghosts or dark patches dragging observed."
+  },
+  "provenanceNote": "provider-derived target-size normalization, not provider-native 96px authorship"
+}

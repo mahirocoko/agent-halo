@@ -1,0 +1,9 @@
+{
+  "jobId": "20260723-haloforms-clarity-master96-semantic-v3",
+  "originalPath": "/Users/mahiro/ghq/github.com/mahirocoko/agent-halo/.agent-state/sprite-workflow/jobs/20260723-haloforms-clarity-master96-semantic-v3",
+  "sourceRequirement": "imagegen-required",
+  "sourceLane": "imagegen",
+  "sourceHash": "eb7d1d8abfcdcb5c41fa279fb0b9851d2571d5ba9c688cce0e30ee35d8067b98",
+  "canonical96Hash": "cfe819f6c97cb8251f34eb5f55acdb3cbfe461ced285f109502ad4cbdc6565fb",
+  "importNote": "One-time copy from approved ignored job; all rebuild inputs are now tracked locally."
+}

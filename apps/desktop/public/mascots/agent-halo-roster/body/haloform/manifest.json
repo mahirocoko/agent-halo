@@ -1,0 +1,565 @@
+{
+  "schemaVersion": 1,
+  "asset": "haloform",
+  "sourcePackage": "apps/desktop/assets/mascots/agent-halo-roster/source/haloform-motion-v1",
+  "sourceJob": "20260723-haloforms-clarity-master96-semantic-v3 (snapshot tracked in source package)",
+  "sourceMethod": "provider-derived native96 normalization plus explicit semantic masks and deterministic integer translations",
+  "providerNative96Authorship": false,
+  "humanApproval": {
+    "approvedBy": "Mahiro",
+    "scope": "tracked asset-production for Haloform identity, explicit semantic masks/motion, and 30px ambient / 36px session / native96 completion footprints",
+    "productionApproval": false,
+    "note": "This records only the explicit approval supplied for this asset-production handoff."
+  },
+  "contracts": {
+    "ambient": {
+      "sourceFrame": [
+        30,
+        30
+      ]
+    },
+    "session": {
+      "sourceFrame": [
+        36,
+        36
+      ]
+    },
+    "completion": {
+      "sourceFrame": [
+        96,
+        96
+      ]
+    },
+    "stateOrder": [
+      "idle",
+      "working",
+      "attention",
+      "done",
+      "error"
+    ],
+    "frameCounts": {
+      "idle": 3,
+      "working": 3,
+      "attention": 3,
+      "done": 4,
+      "error": 3
+    },
+    "alpha": "binary",
+    "background": "transparent",
+    "working": "approved first 3 loop frames; neutral settle frame from four-frame HTML demo is intentionally omitted"
+  },
+  "sourceHashes": {
+    "providerRaw": "eb7d1d8abfcdcb5c41fa279fb0b9851d2571d5ba9c688cce0e30ee35d8067b98",
+    "canonical96": "cfe819f6c97cb8251f34eb5f55acdb3cbfe461ced285f109502ad4cbdc6565fb",
+    "motionRecipes": "82a2f13ca30b1e9e09cc9d4137a93bb761decc8b928d7eb51e4e800666a6b87e",
+    "buildScript": "ae13e04a61ed1048179c1bfdcf676c91c67bea7d1e8aff2f2f79b2a40113f16a"
+  },
+  "review": {
+    "path": "apps/desktop/assets/mascots/agent-halo-roster/source/haloform-motion-v1/review/delivery-overview.png",
+    "sha256": "7bcdd8d8ad4f25eee0631dda6536527b3e520fff478085a396cae459f14e4f5c",
+    "truth": "Provider-derived native96 normalization plus explicit semantic masks; not provider-native 96px authorship."
+  },
+  "slots": [
+    {
+      "delivery": "ambient",
+      "state": "idle",
+      "runtimePath": "apps/desktop/public/mascots/agent-halo-roster/body/haloform/ambient/idle.png",
+      "sha256": "13a3ba1440f8faa5900df06b488dcd6294697350865c7fd3082e7c65b9469389",
+      "dimensions": [
+        90,
+        30
+      ],
+      "frameSize": [
+        30,
+        30
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "chromaPixels": 0,
+      "sourceFrameSize": [
+        96,
+        96
+      ],
+      "sourceFrameIndexes": [
+        0,
+        1,
+        2
+      ],
+      "workingNeutralSettleOmitted": false,
+      "durationsMs": [
+        520,
+        240,
+        420
+      ],
+      "playback": "loop"
+    },
+    {
+      "delivery": "ambient",
+      "state": "working",
+      "runtimePath": "apps/desktop/public/mascots/agent-halo-roster/body/haloform/ambient/working.png",
+      "sha256": "a2120e5ef7922d8351be3cc6e13a5d8bda374f38098ab1fe89528dfadf9f0adb",
+      "dimensions": [
+        90,
+        30
+      ],
+      "frameSize": [
+        30,
+        30
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "chromaPixels": 0,
+      "sourceFrameSize": [
+        96,
+        96
+      ],
+      "sourceFrameIndexes": [
+        0,
+        1,
+        2
+      ],
+      "workingNeutralSettleOmitted": true,
+      "durationsMs": [
+        180,
+        140,
+        180
+      ],
+      "playback": "loop"
+    },
+    {
+      "delivery": "ambient",
+      "state": "attention",
+      "runtimePath": "apps/desktop/public/mascots/agent-halo-roster/body/haloform/ambient/attention.png",
+      "sha256": "7f50a3186449387c581cd1c2e16fa2242923c69dd9c477d7d9b9e8d2bf0f5e0a",
+      "dimensions": [
+        90,
+        30
+      ],
+      "frameSize": [
+        30,
+        30
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "chromaPixels": 0,
+      "sourceFrameSize": [
+        96,
+        96
+      ],
+      "sourceFrameIndexes": [
+        0,
+        1,
+        2
+      ],
+      "workingNeutralSettleOmitted": false,
+      "durationsMs": [
+        280,
+        180,
+        320
+      ],
+      "playback": "loop"
+    },
+    {
+      "delivery": "ambient",
+      "state": "done",
+      "runtimePath": "apps/desktop/public/mascots/agent-halo-roster/body/haloform/ambient/done.png",
+      "sha256": "718119104c103eae6c1ee0a9f8f76863476cb5f22c021f77814a5737efc355ac",
+      "dimensions": [
+        120,
+        30
+      ],
+      "frameSize": [
+        30,
+        30
+      ],
+      "frameCount": 4,
+      "binaryAlpha": true,
+      "chromaPixels": 0,
+      "sourceFrameSize": [
+        96,
+        96
+      ],
+      "sourceFrameIndexes": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "workingNeutralSettleOmitted": false,
+      "durationsMs": [
+        260,
+        220,
+        260,
+        700
+      ],
+      "playback": "once-hold-final"
+    },
+    {
+      "delivery": "ambient",
+      "state": "error",
+      "runtimePath": "apps/desktop/public/mascots/agent-halo-roster/body/haloform/ambient/error.png",
+      "sha256": "e9f7ff3b5713f42ef2d56e3353ca39a8a60af553dafcfcf1422991e10a6576d9",
+      "dimensions": [
+        90,
+        30
+      ],
+      "frameSize": [
+        30,
+        30
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "chromaPixels": 0,
+      "sourceFrameSize": [
+        96,
+        96
+      ],
+      "sourceFrameIndexes": [
+        0,
+        1,
+        2
+      ],
+      "workingNeutralSettleOmitted": false,
+      "durationsMs": [
+        140,
+        120,
+        220
+      ],
+      "playback": "loop"
+    },
+    {
+      "delivery": "session",
+      "state": "idle",
+      "runtimePath": "apps/desktop/public/mascots/agent-halo-roster/body/haloform/session/idle.png",
+      "sha256": "9acf9c2e1106eca733ecac3bff8d0887d8bdb4bde71398bb0805870daeb6fb88",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameSize": [
+        36,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "chromaPixels": 0,
+      "sourceFrameSize": [
+        96,
+        96
+      ],
+      "sourceFrameIndexes": [
+        0,
+        1,
+        2
+      ],
+      "workingNeutralSettleOmitted": false,
+      "durationsMs": [
+        520,
+        240,
+        420
+      ],
+      "playback": "loop"
+    },
+    {
+      "delivery": "session",
+      "state": "working",
+      "runtimePath": "apps/desktop/public/mascots/agent-halo-roster/body/haloform/session/working.png",
+      "sha256": "d47c5cf3fec7d7afcecd78e8ba8119bc66eda6fc766c9d0af9b0176978ef3eb4",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameSize": [
+        36,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "chromaPixels": 0,
+      "sourceFrameSize": [
+        96,
+        96
+      ],
+      "sourceFrameIndexes": [
+        0,
+        1,
+        2
+      ],
+      "workingNeutralSettleOmitted": true,
+      "durationsMs": [
+        180,
+        140,
+        180
+      ],
+      "playback": "loop"
+    },
+    {
+      "delivery": "session",
+      "state": "attention",
+      "runtimePath": "apps/desktop/public/mascots/agent-halo-roster/body/haloform/session/attention.png",
+      "sha256": "17b5e74739487a566143ae68595ebe7ee978a68fd097e386f1f5094d8b9bab9e",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameSize": [
+        36,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "chromaPixels": 0,
+      "sourceFrameSize": [
+        96,
+        96
+      ],
+      "sourceFrameIndexes": [
+        0,
+        1,
+        2
+      ],
+      "workingNeutralSettleOmitted": false,
+      "durationsMs": [
+        280,
+        180,
+        320
+      ],
+      "playback": "loop"
+    },
+    {
+      "delivery": "session",
+      "state": "done",
+      "runtimePath": "apps/desktop/public/mascots/agent-halo-roster/body/haloform/session/done.png",
+      "sha256": "3a5e41f8b7acdc739a31f1cf39d4c782290795a9bc839fe4466a622222e34f3f",
+      "dimensions": [
+        144,
+        36
+      ],
+      "frameSize": [
+        36,
+        36
+      ],
+      "frameCount": 4,
+      "binaryAlpha": true,
+      "chromaPixels": 0,
+      "sourceFrameSize": [
+        96,
+        96
+      ],
+      "sourceFrameIndexes": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "workingNeutralSettleOmitted": false,
+      "durationsMs": [
+        260,
+        220,
+        260,
+        700
+      ],
+      "playback": "once-hold-final"
+    },
+    {
+      "delivery": "session",
+      "state": "error",
+      "runtimePath": "apps/desktop/public/mascots/agent-halo-roster/body/haloform/session/error.png",
+      "sha256": "e23092c7ef26590d61356328cd1feeca434af9e9573432549a87606f96e84bc4",
+      "dimensions": [
+        108,
+        36
+      ],
+      "frameSize": [
+        36,
+        36
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "chromaPixels": 0,
+      "sourceFrameSize": [
+        96,
+        96
+      ],
+      "sourceFrameIndexes": [
+        0,
+        1,
+        2
+      ],
+      "workingNeutralSettleOmitted": false,
+      "durationsMs": [
+        140,
+        120,
+        220
+      ],
+      "playback": "loop"
+    },
+    {
+      "delivery": "completion",
+      "state": "idle",
+      "runtimePath": "apps/desktop/public/mascots/agent-halo-roster/body/haloform/completion/idle.png",
+      "sha256": "2ceb0213efee5f04e87bdc534ac03fd6b601f5ee26e412c4ef0272e1802c9f13",
+      "dimensions": [
+        288,
+        96
+      ],
+      "frameSize": [
+        96,
+        96
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "chromaPixels": 0,
+      "sourceFrameSize": [
+        96,
+        96
+      ],
+      "sourceFrameIndexes": [
+        0,
+        1,
+        2
+      ],
+      "workingNeutralSettleOmitted": false,
+      "durationsMs": [
+        520,
+        240,
+        420
+      ],
+      "playback": "loop"
+    },
+    {
+      "delivery": "completion",
+      "state": "working",
+      "runtimePath": "apps/desktop/public/mascots/agent-halo-roster/body/haloform/completion/working.png",
+      "sha256": "593713a8e46ceaadc041e6db49516a1e234dcaac96e1c4bea4bb834864310e08",
+      "dimensions": [
+        288,
+        96
+      ],
+      "frameSize": [
+        96,
+        96
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "chromaPixels": 0,
+      "sourceFrameSize": [
+        96,
+        96
+      ],
+      "sourceFrameIndexes": [
+        0,
+        1,
+        2
+      ],
+      "workingNeutralSettleOmitted": true,
+      "durationsMs": [
+        180,
+        140,
+        180
+      ],
+      "playback": "loop"
+    },
+    {
+      "delivery": "completion",
+      "state": "attention",
+      "runtimePath": "apps/desktop/public/mascots/agent-halo-roster/body/haloform/completion/attention.png",
+      "sha256": "7f6b8d2f1661e11f38d36542de12fd819c8cbac0271f924eed5c04579d8fc37d",
+      "dimensions": [
+        288,
+        96
+      ],
+      "frameSize": [
+        96,
+        96
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "chromaPixels": 0,
+      "sourceFrameSize": [
+        96,
+        96
+      ],
+      "sourceFrameIndexes": [
+        0,
+        1,
+        2
+      ],
+      "workingNeutralSettleOmitted": false,
+      "durationsMs": [
+        280,
+        180,
+        320
+      ],
+      "playback": "loop"
+    },
+    {
+      "delivery": "completion",
+      "state": "done",
+      "runtimePath": "apps/desktop/public/mascots/agent-halo-roster/body/haloform/completion/done.png",
+      "sha256": "975733049f4436aa1a89843a0282722b7408ab552b65ce07dd0d050262d2f4ea",
+      "dimensions": [
+        384,
+        96
+      ],
+      "frameSize": [
+        96,
+        96
+      ],
+      "frameCount": 4,
+      "binaryAlpha": true,
+      "chromaPixels": 0,
+      "sourceFrameSize": [
+        96,
+        96
+      ],
+      "sourceFrameIndexes": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "workingNeutralSettleOmitted": false,
+      "durationsMs": [
+        260,
+        220,
+        260,
+        700
+      ],
+      "playback": "once-hold-final"
+    },
+    {
+      "delivery": "completion",
+      "state": "error",
+      "runtimePath": "apps/desktop/public/mascots/agent-halo-roster/body/haloform/completion/error.png",
+      "sha256": "2b87d8fa9d7e5ea9159460c0a0dc73a3caa0d4e20de356814e8d6ba817972ce9",
+      "dimensions": [
+        288,
+        96
+      ],
+      "frameSize": [
+        96,
+        96
+      ],
+      "frameCount": 3,
+      "binaryAlpha": true,
+      "chromaPixels": 0,
+      "sourceFrameSize": [
+        96,
+        96
+      ],
+      "sourceFrameIndexes": [
+        0,
+        1,
+        2
+      ],
+      "workingNeutralSettleOmitted": false,
+      "durationsMs": [
+        140,
+        120,
+        220
+      ],
+      "playback": "loop"
+    }
+  ]
+}

@@ -4,19 +4,21 @@ test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => window.localStorage.clear());
 });
 
-test("Pet surface is projection-only and keeps the approved Scorpion completion anatomy", async ({ page }) => {
+test("Pet surface is projection-only and uses the approved Haloform completion anatomy", async ({ page }) => {
   await page.setViewportSize({ width: 116, height: 88 });
   await page.goto("/?surface=pet&demoPet=1");
   await expect(page.locator(".overlay-root")).toHaveCount(0);
   const companion = page.getByRole("button", { name: "Focus complete. Open break actions" });
   await expect(companion).toBeVisible();
   await expect(companion).toHaveAttribute("aria-expanded", "false");
-  const visual = page.locator('.completion-pet-visual[data-pet="scorpion"][data-state="working"][data-signal="none"]');
+  const visual = page.locator('.completion-pet-visual[data-pet="haloform"][data-state="working"][data-motion="working"][data-signal="none"]');
   await expect(visual).toHaveCount(1);
-  await expect(visual.locator(".halo-pet-body")).toHaveCSS("animation-name", "halo-pet-three-frame-loop");
+  await expect(visual.locator(".halo-pet-body")).toHaveCSS("animation-name", "haloform-working");
+  await expect(visual.locator(".halo-pet-body")).toHaveCSS("animation-duration", "0.5s");
   await expect(visual.locator(".halo-pet-body")).toHaveCSS("animation-iteration-count", "infinite");
-  await expect(visual.locator(".halo-pet-body")).toHaveCSS("width", "104px");
+  await expect(visual.locator(".halo-pet-body")).toHaveCSS("width", "78px");
   await expect(visual.locator(".halo-pet-body")).toHaveCSS("height", "78px");
+  await expect(visual.locator(".halo-pet-body")).toHaveCSS("background-image", /\/body\/haloform\/completion\/working\.png/);
   await expect(visual.locator(".halo-pet-signal")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Hide completion pet" })).toHaveCount(0);
   await expect(page.getByRole("status")).toHaveText("Focus complete. Short break ready.");
@@ -107,7 +109,7 @@ test("native Pet surface reads projection and sends only validated custom comman
       invoke: async (command: string, args?: Record<string, unknown>) => {
         calls.push({ command, args });
         if (command === "completion_pet_state") return {
-          summon: { schemaVersion: 1, id: "native-pet", pet: "scorpion", petSize: "large", preview: false, nextPhase: "short-break", title: "Focus complete", actionLabel: "Start Short break" },
+          summon: { schemaVersion: 1, id: "native-pet", pet: "haloform", petSize: "large", preview: false, nextPhase: "short-break", title: "Focus complete", actionLabel: "Start Short break" },
         };
         return null;
       },
@@ -155,7 +157,7 @@ test("manual Pet preview is dismiss-only and never exposes a Pomodoro action", a
     (window as typeof window & { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
       invoke: async (command: string) => {
         if (command === "completion_pet_state") return {
-          summon: { schemaVersion: 1, id: "preview-pet", pet: "scorpion", petSize: "large", preview: true, nextPhase: "short-break", title: "Pet preview", actionLabel: "" },
+          summon: { schemaVersion: 1, id: "preview-pet", pet: "haloform", petSize: "large", preview: true, nextPhase: "short-break", title: "Pet preview", actionLabel: "" },
         };
         return null;
       },
@@ -171,29 +173,31 @@ test("manual Pet preview is dismiss-only and never exposes a Pomodoro action", a
   await expect(page.getByRole("status")).toHaveText("Pet preview.");
 });
 
-test("global Ember Starling completion exposes the prepared break actions", async ({ page }) => {
+test("global Haloform completion exposes the prepared break actions", async ({ page }) => {
   await page.addInitScript(() => {
     (window as typeof window & { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
       invoke: async (command: string) => {
         if (command === "completion_pet_state") return {
-          summon: { schemaVersion: 1, id: "ember-focus", pet: "ember-starling", petSize: "large", visual: "ember-starling", preview: false, movementBreakEnabled: false, nextPhase: "short-break", title: "Focus complete", actionLabel: "Start Short break" },
+          summon: { schemaVersion: 1, id: "haloform-focus", pet: "haloform", petSize: "large", preview: false, movementBreakEnabled: false, nextPhase: "short-break", title: "Focus complete", actionLabel: "Start Short break" },
         };
         return null;
       },
     };
   });
-  await page.setViewportSize({ width: 260, height: 270 });
+  await page.setViewportSize({ width: 260, height: 230 });
   await page.goto("/?surface=pet");
   const root = page.locator(".completion-pet-root");
   const companion = page.getByRole("button", { name: "Focus complete. Open break actions" });
-  await expect(root).toHaveAttribute("data-visual", "ember-starling");
+  await expect(root).toHaveAttribute("data-preview", "false");
   await expect(page.getByRole("status")).toHaveText("Focus complete. Short break ready.");
   await companion.click();
   const dialog = page.getByRole("dialog", { name: "Focus complete actions" });
   await expect(dialog.getByRole("button", { name: "Start Short break" })).toBeFocused();
-  await expect(dialog.getByRole("button", { name: "Start Short break" })).toHaveCSS("z-index", "4");
   await expect(dialog.getByRole("button", { name: "Start Short break" })).toHaveText(/Short\s*break/);
-  await expect(dialog.getByText("Short break ready")).toBeVisible();
+  const context = dialog.getByText("Focus complete");
+  await expect(context).toBeVisible();
+  await expect(context).toHaveCSS("color", "rgb(255, 255, 255)");
+  await expect(context).toHaveCSS("background-color", "rgb(0, 0, 0)");
   await expect(dialog.getByRole("button", { name: "Not now" })).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Hide completion pet" })).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Start 10 Squats movement break" })).toHaveCount(0);
@@ -202,68 +206,73 @@ test("global Ember Starling completion exposes the prepared break actions", asyn
   await expect(dialog.getByRole("button", { name: "Not now" })).toHaveCSS("outline-width", "2px");
 });
 
-test("global Ember Starling preview uses its isolated large dismiss-only surface", async ({ page }) => {
-  await page.setViewportSize({ width: 100, height: 120 });
-  await page.goto("/?surface=pet&demoEmberPet=1");
+test("global Haloform preview uses the generic dismiss-only surface", async ({ page }) => {
+  await page.addInitScript(() => {
+    (window as typeof window & { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
+      invoke: async (command: string) => command === "completion_pet_state"
+        ? { summon: { schemaVersion: 1, id: "haloform-preview", pet: "haloform", petSize: "large", preview: true, nextPhase: "short-break", title: "Pet preview", actionLabel: "" } }
+        : null,
+    };
+  });
+  await page.setViewportSize({ width: 116, height: 88 });
+  await page.goto("/?surface=pet");
   const root = page.locator(".completion-pet-root");
-  const companion = page.getByRole("button", { name: "Ember Starling preview. Open controls" });
-  const visual = page.locator(".completion-pet-ember-starling");
-  await expect(root).toHaveAttribute("data-visual", "ember-starling");
+  const companion = page.getByRole("button", { name: "Pet preview. Open controls" });
+  const petVisual = page.locator('.completion-pet-visual[data-pet="haloform"]');
+  const visual = petVisual.locator(".halo-pet-body");
   await expect(root).toHaveAttribute("data-preview", "true");
-  await expect(companion).toHaveCSS("width", "100px");
-  await expect(companion).toHaveCSS("height", "120px");
-  await expect(visual).toHaveCSS("width", "88px");
-  await expect(visual).toHaveCSS("height", "108px");
-  await expect(visual).toHaveCSS("background-size", "400% 100%");
-  await expect(visual).toHaveCSS("animation-name", "ember-starling-working");
-  await expect(page.locator(".completion-pet-visual")).toHaveCount(0);
-  await expect(page.getByRole("status")).toHaveText("Ember Starling preview.");
+  await expect(companion).toHaveCSS("width", "116px");
+  await expect(companion).toHaveCSS("height", "88px");
+  await expect(visual).toHaveCSS("width", "78px");
+  await expect(visual).toHaveCSS("height", "78px");
+  await expect(visual).toHaveCSS("background-size", "234px 78px");
+  await expect(page.getByRole("status")).toHaveText("Pet preview.");
   await companion.focus();
-  await expect(visual).toHaveCSS("filter", /drop-shadow/);
+  await expect(petVisual).toHaveCSS("filter", /drop-shadow/);
 
-  await page.setViewportSize({ width: 260, height: 270 });
+  await page.setViewportSize({ width: 260, height: 230 });
   await companion.click();
-  const dialog = page.getByRole("dialog", { name: "Ember Starling preview controls" });
+  const dialog = page.getByRole("dialog", { name: "Pet preview controls" });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("button", { name: /Start .*break/ })).toHaveCount(0);
   await expect(dialog.getByRole("button", { name: "Not now" })).toHaveCount(0);
   await expect(dialog.getByRole("button", { name: "Start 10 Squats movement break" })).toHaveCount(0);
-  const close = dialog.getByRole("button", { name: "Hide Ember Starling preview" });
+  const close = dialog.getByRole("button", { name: "Hide completion pet" });
   await expect(close).toBeFocused();
-  await expect(close).toHaveCSS("z-index", "4");
-  await expect(page.locator(".completion-pet-context")).toHaveCount(0);
-  await expect(companion).toHaveCSS("left", "80px");
-  await expect(companion).toHaveCSS("top", "60px");
+  await expect(page.locator(".completion-pet-context")).toHaveText("Pet preview");
 });
 
-test("reduced motion holds Ember Starling on its first frame", async ({ page }) => {
+test("reduced motion holds Haloform on its first frame", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.setViewportSize({ width: 100, height: 120 });
-  await page.goto("/?surface=pet&demoEmberPet=1");
-  await expect(page.locator(".completion-pet-ember-starling")).toHaveCSS("animation-name", "none");
-  await expect(page.locator(".completion-pet-ember-starling")).toHaveCSS("background-position", "0px 0px");
+  await page.setViewportSize({ width: 116, height: 88 });
+  await page.goto("/?surface=pet&demoPet=1");
+  const body = page.locator('.completion-pet-visual[data-pet="haloform"] .halo-pet-body');
+  await expect(body).toHaveCSS("animation-name", "none");
+  await expect(body).toHaveCSS("background-position", "0px 0px");
 });
 
-test("Ember Starling keeps tight native geometry at 1× and 1.5×", async ({ page }) => {
+test("Haloform keeps square generic geometry at 1× and 1.5×", async ({ page }) => {
   const cases = [
-    { size: "small", viewport: [56, 66], companion: [56, 66], visual: [44, 54], expanded: [102, 87] },
-    { size: "medium", viewport: [78, 93], companion: [78, 93], visual: [66, 81], expanded: [91, 73.5] },
+    { size: "small", body: 39, top: 25, left: 39 },
+    { size: "medium", body: 59, top: 15, left: 29 },
   ] as const;
   for (const candidate of cases) {
-    await page.setViewportSize({ width: candidate.viewport[0], height: candidate.viewport[1] });
-    await page.goto(`/?surface=pet&demoEmberPet=1&demoPetSize=${candidate.size}`);
+    await page.setViewportSize({ width: 116, height: 88 });
+    await page.goto(`/?surface=pet&demoPet=1&demoPetSize=${candidate.size}`);
     const root = page.locator(".completion-pet-root");
-    const companion = page.getByRole("button", { name: "Ember Starling preview. Open controls" });
-    const visual = page.locator(".completion-pet-ember-starling");
+    const companion = page.getByRole("button", { name: "Focus complete. Open break actions" });
+    const body = page.locator('.completion-pet-visual[data-pet="haloform"] .halo-pet-body');
     await expect(root).toHaveAttribute("data-pet-size", candidate.size);
-    await expect(companion).toHaveCSS("width", `${candidate.companion[0]}px`);
-    await expect(companion).toHaveCSS("height", `${candidate.companion[1]}px`);
-    await expect(visual).toHaveCSS("width", `${candidate.visual[0]}px`);
-    await expect(visual).toHaveCSS("height", `${candidate.visual[1]}px`);
-    await page.setViewportSize({ width: 260, height: 270 });
+    await expect(companion).toHaveCSS("width", "116px");
+    await expect(companion).toHaveCSS("height", "88px");
+    await expect(body).toHaveCSS("width", `${candidate.body}px`);
+    await expect(body).toHaveCSS("height", `${candidate.body}px`);
+    await expect(body).toHaveCSS("top", `${candidate.top}px`);
+    await expect(body).toHaveCSS("left", `${candidate.left}px`);
+    await page.setViewportSize({ width: 260, height: 230 });
     await companion.click();
-    await expect(companion).toHaveCSS("left", `${candidate.expanded[0]}px`);
-    await expect(companion).toHaveCSS("top", `${candidate.expanded[1]}px`);
+    await expect(companion).toHaveCSS("left", "72px");
+    await expect(companion).toHaveCSS("top", "72px");
   }
 });
 
@@ -293,7 +302,7 @@ test("native Movement Break queues one completion result without mounting Pomodo
       invoke: async (command: string, args?: Record<string, unknown>) => {
         calls.push({ command, args });
         if (command === "completion_pet_state") return {
-          summon: { schemaVersion: 1, id: "movement-focus", pet: "scorpion", petSize: "large", preview: false, movementBreakEnabled: true, nextPhase: "short-break", title: "Focus complete", actionLabel: "Start Short break" },
+          summon: { schemaVersion: 1, id: "movement-focus", pet: "haloform", petSize: "large", preview: false, movementBreakEnabled: true, nextPhase: "short-break", title: "Focus complete", actionLabel: "Start Short break" },
         };
         return null;
       },
@@ -319,7 +328,7 @@ test("Movement attempt remains cancellable and clears its native attempt token",
       invoke: async (command: string, args?: Record<string, unknown>) => {
         calls.push({ command, args });
         if (command === "completion_pet_state") return {
-          summon: { schemaVersion: 1, id: "movement-permission", pet: "scorpion", petSize: "large", preview: false, movementBreakEnabled: true, nextPhase: "short-break", title: "Focus complete", actionLabel: "Start Short break" },
+          summon: { schemaVersion: 1, id: "movement-permission", pet: "haloform", petSize: "large", preview: false, movementBreakEnabled: true, nextPhase: "short-break", title: "Focus complete", actionLabel: "Start Short break" },
         };
         return null;
       },
@@ -353,7 +362,7 @@ test("authorized Movement Break shows a live preview with fixed target and stops
     Object.defineProperty(navigator, "mediaDevices", { value: { getUserMedia: async () => stream }, configurable: true });
     controlled.__TAURI_INTERNALS__ = {
       invoke: async (command: string, args?: Record<string, unknown>) => {
-        if (command === "completion_pet_state") return { summon: { schemaVersion: 1, id: "preview-focus", pet: "scorpion", petSize: "large", preview: false, movementBreakEnabled: true, nextPhase: "short-break", title: "Focus complete", actionLabel: "Start Short break" } };
+        if (command === "completion_pet_state") return { summon: { schemaVersion: 1, id: "preview-focus", pet: "haloform", petSize: "large", preview: false, movementBreakEnabled: true, nextPhase: "short-break", title: "Focus complete", actionLabel: "Start Short break" } };
         if (command === "set_completion_pet_movement" && args?.active === false) throw new Error("resize failed");
         return null;
       },

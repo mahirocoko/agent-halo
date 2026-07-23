@@ -3,6 +3,7 @@ import { ArrowRight, Bot, Check, Coffee, Download, Dumbbell, Focus, Monitor as M
 import type { IAgentHaloBridgeCapabilities } from "@agent-halo/protocol";
 import { HALO_PET_ROSTER, type HaloPetName } from "../session/HaloPet";
 import { HALO_BOT_LOADOUT_LABELS, HALO_BOT_LOADOUTS, type HaloBotLoadout } from "../session/haloBot";
+import { DEFAULT_HALO_PET_MOTION_MAPPING, HALO_PET_MOTIONS, type HaloPetMotion, type HaloPetMotionMapping, type HaloPetSemanticState } from "../session/petMotion";
 import { shortenPath } from "../session/activity";
 import { displayResolutionLabel, type IDisplayStateSnapshot } from "./display";
 import type { CompletionPetSize } from "../pet/preferences";
@@ -15,33 +16,31 @@ const completionPetSizeLabel = (size: CompletionPetSize): string => size === "sm
 
 const PET_LABELS: Record<HaloPetName, string> = {
   "halo-bot": "Halo Bot",
-  pot: "Pot",
-  crawler: "Crawler",
-  bat: "Bat",
-  jelly: "Jelly",
-  cat: "Cat",
-  crt: "CRT",
-  cactus: "Cactus",
-  nautilus: "Nautilus",
-  turtle: "Turtle",
-  lantern: "Lantern",
-  kettle: "Kettle",
-  dragonfly: "Dragonfly",
-  giraffe: "Giraffe",
-  scorpion: "Scorpion",
-  squid: "Squid",
-  "ember-starling": "Ember Starling",
+  haloform: "Haloform",
+};
+
+const PET_MOTION_LABELS: Record<HaloPetMotion, string> = {
+  idle: "Idle",
+  working: "Working",
+  attention: "Attention",
+  done: "Done",
+  error: "Error",
+};
+
+const PET_MOTION_OPTION_LABELS: Record<HaloPetMotion, string> = {
+  ...PET_MOTION_LABELS,
+  working: "Work",
+  attention: "Alert",
 };
 
 const petPreviewStyle = (pet: HaloPetName, loadout: HaloBotLoadout, compact = false) => ({
   backgroundImage: pet === "halo-bot"
     ? `url("/mascots/agent-halo-roster/body/halo-bot/${loadout}/idle.png")`
-    : `url("/mascots/agent-halo-roster/body/${pet}/idle.${pet === "ember-starling" ? "webp" : "png"}")`,
-  ...(["ember-starling", "halo-bot"].includes(pet) ? compact
+    : `url("/mascots/agent-halo-roster/body/haloform/session/idle.png")`,
+  ...(compact
     ? { height: 32, backgroundSize: "96px 32px", backgroundPosition: "0 0", imageRendering: "auto" }
-    : { height: 52, backgroundSize: "156px 52px", imageRendering: "auto" }
-    : {}),
-  ...(pet === "halo-bot" ? { imageRendering: "pixelated" } : {}),
+    : { height: 52, backgroundSize: "156px 52px", imageRendering: "auto" }),
+  imageRendering: "pixelated",
 }) as CSSProperties;
 
 export interface ISetupPanelProps {
@@ -63,6 +62,7 @@ export interface ISetupPanelProps {
   completionPetEnabled: boolean;
   completionPetSize: CompletionPetSize;
   movementBreakEnabled: boolean;
+  petMotionMapping: HaloPetMotionMapping;
   petPreviewStatus: string | null;
   petPreviewState: "idle" | "showing" | "shown" | "stale" | "error";
   onCheckBridge: () => void;
@@ -75,10 +75,12 @@ export interface ISetupPanelProps {
   onCompletionPetEnabledChange: (enabled: boolean) => void;
   onCompletionPetSizeChange: (size: CompletionPetSize) => void;
   onMovementBreakEnabledChange: (enabled: boolean) => void;
+  onPetMotionChange: (state: HaloPetSemanticState, motion: HaloPetMotion) => void;
+  onPetMotionReset: () => void;
   onShowPetPreview: () => Promise<void>;
 }
 
-export const SetupPanel = ({ capabilities, canUseNativeControls, completionPetEnabled, completionPetSize, connectionTitle, displayError, displayLoading, displayState, guidance, haloBotLoadout, isConnected, keepAwakeActive, keepAwakeEnabled, keepAwakeError, movementBreakEnabled, pet, petPreviewState, petPreviewStatus, modStatus, nativeAction, onCheckBridge, onCompletionPetEnabledChange, onCompletionPetSizeChange, onDisplayChange, onDisplayRefresh, onHaloBotLoadoutChange, onInstallMod, onKeepAwakeChange, onMovementBreakEnabledChange, onPetChange, onShowPetPreview }: ISetupPanelProps) => {
+export const SetupPanel = ({ capabilities, canUseNativeControls, completionPetEnabled, completionPetSize, connectionTitle, displayError, displayLoading, displayState, guidance, haloBotLoadout, isConnected, keepAwakeActive, keepAwakeEnabled, keepAwakeError, movementBreakEnabled, pet, petMotionMapping, petPreviewState, petPreviewStatus, modStatus, nativeAction, onCheckBridge, onCompletionPetEnabledChange, onCompletionPetSizeChange, onDisplayChange, onDisplayRefresh, onHaloBotLoadoutChange, onInstallMod, onKeepAwakeChange, onMovementBreakEnabledChange, onPetChange, onPetMotionChange, onPetMotionReset, onShowPetPreview }: ISetupPanelProps) => {
   const [activeCategory, setActiveCategory] = useState<SetupCategory>("connection");
   const [compactNavigation, setCompactNavigation] = useState(() => window.matchMedia("(max-width: 380px)").matches);
   const [petPickerOpen, setPetPickerOpen] = useState(false);
@@ -92,6 +94,7 @@ export const SetupPanel = ({ capabilities, canUseNativeControls, completionPetEn
   const activeDisplay = displays.find((display) => display.id === displayState?.activeDisplayId) ?? null;
   const displayRadioSelection = displayState?.selectedDisplayId ?? null;
   const displayFocusTarget = displayRadioSelection ?? displayState?.activeDisplayId ?? null;
+  const motionMappingIsDefault = HALO_PET_MOTIONS.every((state) => petMotionMapping[state] === DEFAULT_HALO_PET_MOTION_MAPPING[state]);
 
   const focusPet = (selection: HaloPetName): void => {
     window.requestAnimationFrame(() => document.getElementById(`pet-option-${selection}`)?.focus());
@@ -122,15 +125,14 @@ export const SetupPanel = ({ capabilities, canUseNativeControls, completionPetEn
     event.preventDefault();
     event.stopPropagation();
     const currentIndex = HALO_PET_ROSTER.indexOf(current);
-    const rowSize = 4;
     const delta = event.key === "ArrowLeft"
       ? -1
       : event.key === "ArrowRight"
         ? 1
         : event.key === "ArrowUp"
-          ? -rowSize
+          ? -1
           : event.key === "ArrowDown"
-            ? rowSize
+            ? 1
             : 0;
     const nextIndex = event.key === "Home"
       ? 0
@@ -290,6 +292,24 @@ export const SetupPanel = ({ capabilities, canUseNativeControls, completionPetEn
               <div className="setup-row"><span className="status-slot"><Bot className="setup-icon" size={14} strokeWidth={2.3} /></span><span className="setup-copy"><span className="setup-title">Completion Pet</span><span className="setup-detail">{completionPetEnabled ? "Shows after a completed Focus" : "Off · uses a macOS notification"}</span></span><button className={`pill-btn ${completionPetEnabled ? "accent" : ""}`} type="button" role="switch" aria-checked={completionPetEnabled} onClick={() => onCompletionPetEnabledChange(!completionPetEnabled)} data-tauri-drag-region="false" aria-label={`${completionPetEnabled ? "Disable" : "Enable"} completion pet`}>{completionPetEnabled ? "On" : "Off"}</button></div>
               <div className="setup-row"><span className="status-slot"><Dumbbell className="setup-icon" size={14} strokeWidth={2.3} /></span><span className="setup-copy"><span className="setup-title">Movement break</span><span className="setup-detail">{movementBreakEnabled ? "10 squats · camera only after you choose it" : "Off · hidden from future completions"}</span></span><button className={`pill-btn ${movementBreakEnabled ? "accent" : ""}`} type="button" role="switch" aria-checked={movementBreakEnabled} onClick={() => onMovementBreakEnabledChange(!movementBreakEnabled)} data-tauri-drag-region="false" aria-label={`${movementBreakEnabled ? "Disable" : "Enable"} movement break`}>{movementBreakEnabled ? "On" : "Off"}</button></div>
               {movementBreakEnabled ? <div className="notice-row movement-privacy-note" role="note">Camera opens only after 10 Squats is clicked. Pose analysis stays on this Mac; no video or audio is saved.</div> : null}
+              {!petPickerOpen && !loadoutPickerOpen ? (
+                <div className="pet-motion-mapping" role="group" aria-labelledby="pet-motion-mapping-title">
+                  <div className="pet-motion-mapping-head">
+                    <span><strong id="pet-motion-mapping-title">Letta motion mapping</strong><small>Choose body motion per state · status and Signal do not change</small></span>
+                    <button className="pill-btn" type="button" disabled={motionMappingIsDefault} onClick={onPetMotionReset} data-tauri-drag-region="false">Reset</button>
+                  </div>
+                  <div className="pet-motion-mapping-grid">
+                    {HALO_PET_MOTIONS.map((state) => (
+                      <label className="pet-motion-row" htmlFor={`pet-motion-${state}`} key={state}>
+                        <span>{PET_MOTION_LABELS[state]}</span>
+                        <select id={`pet-motion-${state}`} value={petMotionMapping[state]} onChange={(event) => onPetMotionChange(state, event.target.value as HaloPetMotion)} data-tauri-drag-region="false" aria-label={`${PET_MOTION_LABELS[state]} Letta state motion`} title={`${PET_MOTION_LABELS[state]} uses ${PET_MOTION_LABELS[petMotionMapping[state]]} motion`}>
+                          {HALO_PET_MOTIONS.map((motion) => <option value={motion} key={motion}>{PET_MOTION_OPTION_LABELS[motion]}</option>)}
+                        </select>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
               {petPreviewStatus ? <div className="notice-row pet-preview-status" data-state={petPreviewState} data-online={petPreviewState === "shown"} role="status" aria-live="polite">{petPreviewStatus}</div> : null}
             </>
           ) : null}

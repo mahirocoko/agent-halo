@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "asset": "haloform",
+  "approvedBy": "Mahiro",
+  "approvalScope": "Tracked asset-production only: preserve the approved semantic masks/current motion demo, ship deterministic Haloform body strips at 30px ambient, 36px session, and 96px completion.",
+  "approvedInputs": {
+    "job": "20260723-haloforms-clarity-master96-semantic-v3",
+    "canonicalMaster": "canonical/canonical96.png",
+    "semanticLayers": ["layers/body.png", "layers/head.png", "layers/face.png", "layers/top.png"],
+    "motionRecipes": "motion/motion-recipes.json"
+  },
+  "runtimeFootprints": {
+    "ambient": [30, 30],
+    "session": [36, 36],
+    "completion": [96, 96]
+  },
+  "doesNotApprove": [
+    "TypeScript, CSS, Rust, docs, tests, or roster-manifest changes",
+    "legacy asset deletion",
+    "broader runtime or production promotion beyond this explicit asset handoff"
+  ],
+  "provenanceTruth": "Provider-derived native96 normalization plus explicit semantic masks and deterministic integer translations; not provider-native 96px authorship."
+}
