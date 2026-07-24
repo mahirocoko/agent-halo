@@ -2,7 +2,7 @@ use std::{
     collections::BTreeMap,
     error::Error as StdError,
     fs,
-    io::{Read, Write},
+    io::{ErrorKind, Read, Write},
     net::{SocketAddr, TcpStream},
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -20,6 +20,12 @@ use tauri::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+
+#[cfg(unix)]
+use std::os::unix::{
+    fs::{FileTypeExt, MetadataExt},
+    net::UnixStream,
+};
 
 mod keep_awake;
 mod notification;
@@ -3286,8 +3292,323 @@ fn agent_halo_mod_status() -> Result<(String, bool), String> {
 }
 
 #[tauri::command]
-fn focus_terminal(conversation_id: String, cwd: Option<String>) -> Result<String, String> {
-    focus_ghostty_window(&conversation_id, cwd.as_deref())
+fn focus_terminal(
+    conversation_id: String,
+    cwd: Option<String>,
+    herdr_socket_path: Option<String>,
+    herdr_pane_id: Option<String>,
+    herdr_source_pid: Option<u32>,
+    herdr_source_started_at_ms: Option<u64>,
+) -> Result<String, String> {
+    let mut herdr_error = None;
+    if let (Some(socket_path), Some(pane_id), Some(source_pid), Some(source_started_at_ms)) = (
+        herdr_socket_path
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty()),
+        herdr_pane_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty()),
+        herdr_source_pid,
+        herdr_source_started_at_ms,
+    ) {
+        match focus_herdr_pane(
+            socket_path,
+            pane_id,
+            &conversation_id,
+            source_pid,
+            source_started_at_ms,
+        ) {
+            Ok(message) => return Ok(message),
+            Err(error) => herdr_error = Some(error),
+        }
+    }
+
+    let fallback = focus_ghostty_window(&conversation_id, cwd.as_deref())?;
+    if fallback.starts_with("Activated Ghostty ·") && herdr_error.is_some() {
+        return Ok(format!("Herdr focus unavailable · {fallback}"));
+    }
+    Ok(fallback)
+}
+
+#[cfg(unix)]
+fn focus_herdr_pane(
+    socket_path: &str,
+    pane_id: &str,
+    conversation_id: &str,
+    source_pid: u32,
+    source_started_at_ms: u64,
+) -> Result<String, String> {
+    validate_herdr_target(socket_path, pane_id)?;
+    let deadline = Instant::now() + Duration::from_millis(1_800);
+    let identity = herdr_socket_request(
+        socket_path,
+        build_herdr_request("agent.get", pane_id),
+        deadline,
+    )?;
+    verify_herdr_agent_identity(
+        &identity,
+        pane_id,
+        conversation_id,
+        source_pid,
+        source_started_at_ms,
+    )?;
+    let focused = herdr_socket_request(
+        socket_path,
+        build_herdr_request("agent.focus", pane_id),
+        deadline,
+    )?;
+    if focused.get("result").is_none() {
+        return Err("Herdr focus response had no result".to_string());
+    }
+
+    activate_ghostty()?;
+    Ok(format!("Focused Herdr · {pane_id}"))
+}
+
+#[cfg(not(unix))]
+fn focus_herdr_pane(
+    _socket_path: &str,
+    _pane_id: &str,
+    _conversation_id: &str,
+    _source_pid: u32,
+    _source_started_at_ms: u64,
+) -> Result<String, String> {
+    Err("Exact Herdr focus is unavailable on this platform".to_string())
+}
+
+#[cfg(unix)]
+fn herdr_socket_request(
+    socket_path: &str,
+    request: Value,
+    deadline: Instant,
+) -> Result<Value, String> {
+    let expected_id = request
+        .get("id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "Herdr request has no ID".to_string())?
+        .to_string();
+
+    let mut stream = connect_herdr_socket(socket_path, deadline)?;
+    let remaining = deadline
+        .checked_duration_since(Instant::now())
+        .ok_or_else(|| "Herdr focus request exceeded its total deadline".to_string())?;
+    stream
+        .set_write_timeout(Some(remaining))
+        .map_err(|error| format!("Failed to bound Herdr write: {error}"))?;
+    stream
+        .write_all(format!("{request}\n").as_bytes())
+        .map_err(|error| format!("Failed to request Herdr state: {error}"))?;
+    stream
+        .flush()
+        .map_err(|error| format!("Failed to flush Herdr state request: {error}"))?;
+    stream
+        .set_nonblocking(true)
+        .map_err(|error| format!("Failed to bound Herdr response polling: {error}"))?;
+
+    let mut response = Vec::new();
+    let mut chunk = [0_u8; 4_096];
+    loop {
+        if Instant::now() >= deadline {
+            return Err("Herdr focus request exceeded its total deadline".to_string());
+        }
+        match stream.read(&mut chunk) {
+            Ok(0) => break,
+            Ok(count) => {
+                response.extend_from_slice(&chunk[..count]);
+                if response.len() > 64 * 1024 {
+                    return Err("Herdr focus response exceeded the bounded limit".to_string());
+                }
+                if let Some(newline) = response.iter().position(|byte| *byte == b'\n') {
+                    response.truncate(newline);
+                    break;
+                }
+            }
+            Err(error) if error.kind() == ErrorKind::WouldBlock => {
+                thread::sleep(Duration::from_millis(2));
+            }
+            Err(error) if error.kind() == ErrorKind::Interrupted => {}
+            Err(error) => {
+                return Err(format!("Failed to read Herdr state response: {error}"));
+            }
+        }
+    }
+    if response.is_empty() {
+        return Err("Herdr returned an empty focus response".to_string());
+    }
+
+    let payload: Value = serde_json::from_slice(&response)
+        .map_err(|error| format!("Herdr returned invalid state JSON: {error}"))?;
+    validate_herdr_response(payload, &expected_id)
+}
+
+#[cfg(unix)]
+fn connect_herdr_socket(socket_path: &str, deadline: Instant) -> Result<UnixStream, String> {
+    let remaining = deadline
+        .checked_duration_since(Instant::now())
+        .ok_or_else(|| "Herdr focus request exceeded its total deadline".to_string())?;
+    let socket_path = socket_path.to_string();
+    let (sender, receiver) = mpsc::sync_channel(1);
+    thread::spawn(move || {
+        let _ = sender.send(UnixStream::connect(socket_path));
+    });
+    match receiver.recv_timeout(remaining) {
+        Ok(Ok(stream)) => Ok(stream),
+        Ok(Err(error)) => Err(format!("Failed to connect to Herdr: {error}")),
+        Err(mpsc::RecvTimeoutError::Timeout) => {
+            Err("Herdr focus request exceeded its total deadline while connecting".to_string())
+        }
+        Err(mpsc::RecvTimeoutError::Disconnected) => {
+            Err("Herdr focus connection worker stopped unexpectedly".to_string())
+        }
+    }
+}
+
+fn validate_herdr_response(payload: Value, expected_id: &str) -> Result<Value, String> {
+    if payload.get("id").and_then(Value::as_str) != Some(expected_id) {
+        return Err("Herdr response ID did not match the request".to_string());
+    }
+    if let Some(error) = payload.get("error") {
+        let message = error
+            .get("message")
+            .and_then(Value::as_str)
+            .unwrap_or("Herdr returned an unspecified error");
+        return Err(format!("Herdr focus failed: {message}"));
+    }
+    Ok(payload)
+}
+
+fn validate_herdr_target(socket_path: &str, pane_id: &str) -> Result<(), String> {
+    if !is_valid_herdr_pane_id(pane_id) {
+        return Err("Invalid Herdr pane identity".to_string());
+    }
+
+    let socket = Path::new(socket_path);
+    if !socket.is_absolute() || socket.extension().and_then(|value| value.to_str()) != Some("sock")
+    {
+        return Err("Invalid Herdr socket path".to_string());
+    }
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .ok_or_else(|| "Cannot validate Herdr socket without HOME".to_string())?;
+    let allowed_root = home.join(".config").join("herdr");
+    let allowed_root = allowed_root
+        .canonicalize()
+        .map_err(|error| format!("Cannot resolve Herdr config directory: {error}"))?;
+    let socket_parent = socket
+        .parent()
+        .ok_or_else(|| "Invalid Herdr socket parent".to_string())?
+        .canonicalize()
+        .map_err(|error| format!("Cannot resolve Herdr socket directory: {error}"))?;
+    if !socket_parent.starts_with(&allowed_root) {
+        return Err("Herdr socket must stay inside ~/.config/herdr".to_string());
+    }
+    let metadata = fs::symlink_metadata(socket)
+        .map_err(|error| format!("Cannot inspect Herdr socket: {error}"))?;
+    if metadata.file_type().is_symlink() || !metadata.file_type().is_socket() {
+        return Err("Herdr focus target must be a direct Unix socket".to_string());
+    }
+    #[cfg(target_os = "macos")]
+    if metadata.uid() != unsafe { libc::geteuid() } {
+        return Err("Herdr socket must be owned by the current user".to_string());
+    }
+    if metadata.mode() & 0o077 != 0 {
+        return Err("Herdr socket must use private permissions".to_string());
+    }
+    Ok(())
+}
+
+fn is_valid_herdr_pane_id(pane_id: &str) -> bool {
+    let Some((workspace, pane)) = pane_id.split_once(":p") else {
+        return false;
+    };
+    if !workspace.starts_with('w')
+        || workspace.len() < 2
+        || !workspace[1..]
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric())
+        || pane.is_empty()
+        || !pane
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric())
+    {
+        return false;
+    }
+    true
+}
+
+fn build_herdr_request(method: &str, pane_id: &str) -> Value {
+    serde_json::json!({
+        "id": format!("agent-halo-{}-{}", method.replace('.', "-"), std::process::id()),
+        "method": method,
+        "params": { "target": pane_id },
+    })
+}
+
+fn herdr_scope_fingerprint(conversation_id: &str) -> String {
+    let digest = Sha256::digest(conversation_id.as_bytes());
+    digest[..8]
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+fn verify_herdr_agent_identity(
+    payload: &Value,
+    pane_id: &str,
+    conversation_id: &str,
+    source_pid: u32,
+    source_started_at_ms: u64,
+) -> Result<(), String> {
+    let agent = payload
+        .pointer("/result/agent")
+        .ok_or_else(|| "Herdr target has no active agent".to_string())?;
+    if agent.get("pane_id").and_then(Value::as_str) != Some(pane_id)
+        || agent.get("agent").and_then(Value::as_str) != Some("letta")
+    {
+        return Err("Herdr pane no longer contains the expected Letta agent".to_string());
+    }
+    let tokens = agent
+        .get("tokens")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "Herdr pane has no Letta identity tokens".to_string())?;
+    let token_pid = tokens
+        .get("letta_pid")
+        .and_then(Value::as_str)
+        .and_then(|value| value.parse::<u32>().ok());
+    let token_started_at = tokens
+        .get("letta_started_at")
+        .and_then(Value::as_str)
+        .and_then(|value| value.parse::<u64>().ok());
+    let token_scope = tokens.get("letta_scope").and_then(Value::as_str);
+    let start_delta = token_started_at.map(|value| value.abs_diff(source_started_at_ms));
+    let expected_scope = herdr_scope_fingerprint(conversation_id);
+    if token_pid != Some(source_pid)
+        || start_delta.is_none_or(|delta| delta > 2_000)
+        || token_scope != Some(expected_scope.as_str())
+    {
+        return Err(
+            "Herdr pane identity is stale or belongs to another Letta conversation".to_string(),
+        );
+    }
+    Ok(())
+}
+
+fn activate_ghostty() -> Result<(), String> {
+    let output = Command::new("open")
+        .args(["-a", "Ghostty"])
+        .output()
+        .map_err(|error| format!("Failed to launch Ghostty: {error}"))?;
+    if output.status.success() {
+        return Ok(());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    Err(if stderr.is_empty() {
+        "Failed to activate Ghostty".to_string()
+    } else {
+        format!("Failed to activate Ghostty: {stderr}")
+    })
 }
 
 fn focus_ghostty_window(conversation_id: &str, cwd: Option<&str>) -> Result<String, String> {
@@ -3297,21 +3618,8 @@ fn focus_ghostty_window(conversation_id: &str, cwd: Option<&str>) -> Result<Stri
         return Ok(message);
     }
 
-    let output = Command::new("open")
-        .args(["-a", "Ghostty"])
-        .output()
-        .map_err(|error| format!("Failed to launch Ghostty: {error}"))?;
-
-    if output.status.success() {
-        return Ok("Activated Ghostty · exact terminal not found".to_string());
-    }
-
-    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    Err(if stderr.is_empty() {
-        "Failed to activate Ghostty".to_string()
-    } else {
-        format!("Failed to activate Ghostty: {stderr}")
-    })
+    activate_ghostty()?;
+    Ok("Activated Ghostty · exact terminal not found".to_string())
 }
 
 fn build_focus_hints(conversation_id: &str, cwd: Option<&str>) -> Vec<String> {
@@ -4218,6 +4526,111 @@ pub fn run() {
 #[cfg(test)]
 mod display_selection_tests {
     use super::*;
+
+    #[test]
+    fn herdr_focus_accepts_only_public_pane_identity_shape() {
+        assert!(is_valid_herdr_pane_id("w1:p1"));
+        assert!(is_valid_herdr_pane_id("wabc:pA9"));
+        assert!(!is_valid_herdr_pane_id("p1"));
+        assert!(!is_valid_herdr_pane_id("w1:../p1"));
+        assert!(!is_valid_herdr_pane_id("w1:p1;open"));
+    }
+
+    #[test]
+    fn herdr_focus_request_targets_exact_agent_pane() {
+        let request = build_herdr_request("agent.focus", "w5:p2");
+        assert_eq!(request["method"], "agent.focus");
+        assert_eq!(request["params"]["target"], "w5:p2");
+    }
+
+    #[test]
+    fn herdr_response_requires_matching_id_and_rejects_any_error_object() {
+        assert!(validate_herdr_response(
+            serde_json::json!({ "id": "expected", "result": { "type": "ok" } }),
+            "expected",
+        )
+        .is_ok());
+        assert!(validate_herdr_response(
+            serde_json::json!({ "id": "other", "result": { "type": "ok" } }),
+            "expected",
+        )
+        .is_err());
+        assert!(validate_herdr_response(
+            serde_json::json!({ "id": "expected", "error": {} }),
+            "expected",
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn herdr_focus_rejects_reused_pane_identity() {
+        let conversation_id = "local-conv-203";
+        let payload = serde_json::json!({
+            "result": {
+                "agent": {
+                    "agent": "letta",
+                    "pane_id": "w1:p1",
+                    "tokens": {
+                        "letta_pid": "88759",
+                        "letta_started_at": "1784870000000",
+                        "letta_scope": herdr_scope_fingerprint(conversation_id),
+                    }
+                }
+            }
+        });
+
+        assert!(verify_herdr_agent_identity(
+            &payload,
+            "w1:p1",
+            conversation_id,
+            88_759,
+            1_784_870_000_500,
+        )
+        .is_ok());
+        assert!(verify_herdr_agent_identity(
+            &payload,
+            "w1:p1",
+            conversation_id,
+            99_999,
+            1_784_870_000_500,
+        )
+        .is_err());
+        assert!(verify_herdr_agent_identity(
+            &payload,
+            "w1:p1",
+            "local-conv-other",
+            88_759,
+            1_784_870_000_500,
+        )
+        .is_err());
+    }
+
+    #[test]
+    #[ignore = "requires an explicitly selected live Herdr pane and activates Ghostty"]
+    fn live_herdr_focus_smoke() {
+        let socket = std::env::var("AGENT_HALO_TEST_HERDR_SOCKET").expect("live Herdr socket");
+        let pane = std::env::var("AGENT_HALO_TEST_HERDR_PANE").expect("live Herdr pane");
+        let conversation =
+            std::env::var("AGENT_HALO_TEST_CONVERSATION").expect("live conversation");
+        let source_pid = std::env::var("AGENT_HALO_TEST_SOURCE_PID")
+            .expect("live source PID")
+            .parse::<u32>()
+            .expect("numeric source PID");
+        let source_started_at_ms = std::env::var("AGENT_HALO_TEST_SOURCE_STARTED_AT_MS")
+            .expect("live source start")
+            .parse::<u64>()
+            .expect("numeric source start");
+
+        let result = focus_herdr_pane(
+            &socket,
+            &pane,
+            &conversation,
+            source_pid,
+            source_started_at_ms,
+        )
+        .expect("live Herdr focus should succeed");
+        assert_eq!(result, format!("Focused Herdr · {pane}"));
+    }
 
     #[test]
     fn completion_pet_surface_cannot_call_main_window_commands() {

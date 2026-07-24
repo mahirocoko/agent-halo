@@ -1,4 +1,4 @@
-import type { AgentHaloEvent } from "@agent-halo/protocol";
+import type { AgentHaloEvent, IAgentHaloHerdrTarget } from "@agent-halo/protocol";
 
 export type ActivityKind =
   | "session" | "thinking" | "planning" | "tool" | "shell" | "editing"
@@ -21,6 +21,7 @@ export interface ISessionSummary {
   model: string;
   status: "idle" | "working" | "attention" | "inactive" | "done" | "error";
   lastActivityAt: string;
+  herdrTarget: IAgentHaloHerdrTarget | null;
 }
 
 export interface ISessionDetail extends ISessionSummary {

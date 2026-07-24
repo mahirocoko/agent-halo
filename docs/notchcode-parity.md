@@ -4,7 +4,7 @@ Mahiro's direction is for Agent Halo to feel like Notchcode, not a generic AI da
 
 ## V1 scope decision
 
-Mahiro accepted Notchcode v1 as a read-only + dismiss + setup/control-plane surface. Bridge-level scoped focus/end actions remain intentionally unavailable until Letta exposes public scoped session/process controls. The desktop may offer the separately labeled native Ghostty focus fallback; it must never be described as Letta session/process control.
+Mahiro accepted Notchcode v1 as a read-only + dismiss + setup/control-plane surface. Bridge-level scoped focus/end actions remain intentionally unavailable until Letta exposes public scoped session/process controls. The desktop may focus trusted Herdr pane identity and retain the separately labeled native Ghostty fallback; neither may be described as Letta session/process control.
 
 ## Success criteria
 
@@ -27,8 +27,8 @@ Mahiro accepted Notchcode v1 as a read-only + dismiss + setup/control-plane surf
 | Setup/control plane | Setup view shows bridge, mod install status, next step, session-control capability boundary, one global Pet picker, Halo Bot's independent ten-loadout picker, Completion Pet On/Off, and a persisted connected-display picker. | Done |
 | Setup boundary regression | `apps/desktop/tests/demo-setup.spec.ts` verifies browser demo does not fake native install/check behavior or focus/end controls. | Covered |
 | Capability-aware bridge | `packages/protocol/src/index.ts` defines bridge capabilities; `/health` and `/snapshot` include them from `mods/agent-halo.js`. | Done |
-| No fake bridge focus/end | Bridge-level `focusTerminal` / `endSession` remain false; desktop labels Ghostty focus as a native fallback, not exact Letta session/process control. | Done |
-| Ghostty focus fallback | Desktop detail view uses Ghostty's scripting dictionary to match cwd/title/id, select the owning tab/window, and focus the terminal. It reports fallback app activation honestly when no terminal match is found. | Done |
+| No fake bridge focus/end | Bridge-level `focusTerminal` / `endSession` remain false; desktop terminal-host focus is not presented as Letta session/process control. | Done |
+| Herdr + Ghostty focus | Trusted runtime identity focuses an exact Herdr pane first; absent/stale/failed identity keeps Ghostty cwd/title/id matching and reports fallback activation honestly. | Done |
 | Real end session action | Needs a real Letta session/process capability before exposing controls. | Post-v1 |
 
 ## Focus/end capability evidence
@@ -41,7 +41,7 @@ Current Letta Code mod public APIs expose lifecycle, turn, tool, compaction, and
 
 The installed Letta Code protocol types include lower-level app-server commands/events such as `abort_message`, `terminal_kill`, terminal process messages, queue/approval events, tool execution events, and result usage. These are not the trusted public mod API used by `mods/agent-halo.js`. Agent Halo should therefore keep bridge-level `sessionActions.focusTerminal` and `sessionActions.endSession` false, and should not fake queue/approval activity, until Letta exposes a public scoped session/process/app-server action or Mahiro explicitly accepts an internal/experimental bridge.
 
-Current desktop focus is intentionally separate from bridge capabilities: `focus_terminal` is a macOS/Ghostty fallback that uses Ghostty's scripting dictionary to inspect windows/tabs and match cwd/title/id before selecting and activating the result. It reports app-level activation when no exact tab match exists. It is not a Letta-scoped process action.
+Current desktop focus is intentionally separate from bridge capabilities: `focus_terminal` first uses trusted additive Herdr socket/pane identity when available, then preserves the macOS/Ghostty scripting fallback that inspects windows/tabs and matches cwd/title/id. It reports app-level activation when no exact target is available. It is not a Letta-scoped process action.
 
 ## Verification commands
 
@@ -60,4 +60,4 @@ Use `pnpm desktop:dev` for native smoke because browser demo cannot exercise Tau
 
 ## Completion rule
 
-Notchcode v1 can be considered complete under Mahiro's accepted read-only + dismiss + setup/control-plane scope. Do not expose **bridge-level** focus/end controls while `sessionActions.focusTerminal` and `sessionActions.endSession` are unavailable. The desktop-only Ghostty focus fallback may remain when it is labeled as native matching rather than a Letta capability.
+Notchcode v1 can be considered complete under Mahiro's accepted read-only + dismiss + setup/control-plane scope. Do not expose **bridge-level** focus/end controls while `sessionActions.focusTerminal` and `sessionActions.endSession` are unavailable. Desktop-only Herdr/Ghostty terminal-host focus may remain when it is labeled as navigation rather than a Letta capability.

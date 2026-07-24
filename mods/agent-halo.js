@@ -11,11 +11,26 @@ const CONFIG_PATH = join(MOD_DIR, "agent-halo.config.json");
 const DEFAULT_LOG_FILE = join(MOD_DIR, "agent-halo.events.ndjson");
 const INGEST_TOKEN_PATH = join(MOD_DIR, "agent-halo.ingest-token");
 const HOST_STARTED_AT_MS = Math.round(Date.now() - process.uptime() * 1_000);
+const HERDR_RUNTIME = process.env.HERDR_ENV === "1"
+  && typeof process.env.HERDR_SOCKET_PATH === "string"
+  && process.env.HERDR_SOCKET_PATH.length > 0
+  && typeof process.env.HERDR_PANE_ID === "string"
+  && process.env.HERDR_PANE_ID.length > 0
+  ? Object.freeze({
+      socketPath: process.env.HERDR_SOCKET_PATH,
+      paneId: process.env.HERDR_PANE_ID,
+      sourcePid: process.pid,
+      sourceStartedAtMs: HOST_STARTED_AT_MS,
+      workspaceId: process.env.HERDR_WORKSPACE_ID ?? null,
+      tabId: process.env.HERDR_TAB_ID ?? null,
+    })
+  : null;
 const HOST_RUNTIME = Object.freeze({
   sourcePid: process.pid,
   sourcePpid: Number.isInteger(process.ppid) && process.ppid > 0 ? process.ppid : null,
   sourceStartedAtMs: HOST_STARTED_AT_MS,
   sourceKind: "lettaHost",
+  herdr: HERDR_RUNTIME,
 });
 
 function readOrCreateIngestToken() {

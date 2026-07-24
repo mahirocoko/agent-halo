@@ -26,7 +26,7 @@ The current app now spans session presence, a floating Completion Pet, Pomodoro,
 
 | Surface | Current role |
 | --- | --- |
-| **Sessions** | Workspace-grouped Letta conversations, truthful activity state, sticky completion history, detail, clear/dismiss, and Ghostty focus |
+| **Sessions** | Workspace-grouped Letta conversations, truthful activity state, sticky completion history, detail, clear/dismiss, exact Herdr-pane focus when available, and Ghostty fallback |
 | **Completion Pet** | A separate non-focus-stealing Pet window for natural Focus completion, with Start break, Later, Close, and optional Movement Break actions |
 | **Pomodoro** | Local Focus/Short/Long phases, custom durations and cadence, pause/restart/reset/skip, persisted deadlines, and silent macOS alerts |
 | **Movement Break** | Explicit 10-squat challenge using one local camera stream, a white shoulder line, fixed green target, live progress, and bundled offline pose inference |
@@ -38,7 +38,7 @@ The current app now spans session presence, a floating Completion Pet, Pomodoro,
 
 - Projects live Letta Code lifecycle, turn, model, tool, compaction, completion, and needs-input activity into a compact notch surface.
 - Keeps recent conversations in workspace groups, including distinct subagent/default lanes, sticky completed rows, per-session context, and guarded clear/dismiss behavior.
-- Focuses matching Ghostty tabs/windows through a native cwd/title/session-aware fallback.
+- Focuses the exact Herdr pane when trusted runtime identity is present, then falls back to native Ghostty cwd/title/session matching.
 - Tracks local AI usage and read-only Letta/subprocess pressure without hiding known providers or exposing process controls.
 - Runs an independent local Pomodoro with customizable phases, persisted deadlines, collapsed countdown, silent notifications, and a separate Completion Pet.
 - Offers an opt-in 10-squat Movement Break only after an explicit Pet action; preview and shoulder tracking use one local stream and bundled offline assets.
@@ -62,7 +62,7 @@ Letta Code public mod events
   -> local bridge on 127.0.0.1:47621
   -> SSE / snapshot / NDJSON log
   -> Tauri desktop notch overlay + terminal viewer
-       ├─ Sessions / presence / Ghostty focus
+       ├─ Sessions / presence / Herdr + Ghostty focus
        ├─ Usage / Runtime / keep-awake
        └─ Setup / display placement
 
@@ -214,7 +214,7 @@ Run native Rust checks from the Tauri crate:
 cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
 ```
 
-The browser demo is useful for layout and interaction checks. Native behavior — mod install, Ghostty focus, menu-bar behavior, transparent window sizing, display placement, camera permission/release, notifications, and real event streams — must be validated in the Tauri desktop app.
+The browser demo is useful for layout and interaction checks. Native behavior — mod install, Herdr/Ghostty focus, menu-bar behavior, transparent window sizing, display placement, camera permission/release, notifications, and real event streams — must be validated in the Tauri desktop app.
 
 ## Project layout
 
@@ -266,7 +266,7 @@ Agent Halo is built around local state:
 ## Known boundaries
 
 - Real “end session” control is not exposed until Letta provides a stable scoped session/process API.
-- Ghostty focus is a native fallback, not a guaranteed exact process/session focus API.
+- Herdr identity can focus an exact pane; Ghostty matching remains a native fallback. Neither is a Letta process/session-control API.
 - `llm_*` and `compact_*` events are local-backend dependent.
 - App-server queue/approval/result protocol support is intentionally deferred until there is a stable integration boundary.
 - Browser demo checks cannot prove native Tauri or Ghostty behavior.

@@ -20,6 +20,16 @@ test("overview uses dense trusted metadata and contextual Focus", async ({ page 
   await expect(focus).toHaveCSS("opacity", "1");
 });
 
+test("trusted Herdr runtime identity changes the focus target without claiming Letta process control", async ({ page }) => {
+  await page.goto("/?demo=1&demoScenario=herdr");
+
+  const row = page.locator('.session-row[data-status="working"]');
+  const focus = row.getByRole("button", { name: "Focus agent-halo session in Herdr" });
+  await row.hover();
+  await expect(focus).toBeVisible();
+  await expect(focus).toHaveAttribute("title", "Focus exact Herdr pane");
+});
+
 test("working session replaces overview with a truthful context view", async ({ page }) => {
   await page.goto("/?demo=1&demoScenario=long-llm");
 

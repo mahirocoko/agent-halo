@@ -328,6 +328,37 @@ const createScenario = (scenario: string): AgentHaloEvent[] => {
     ];
   }
 
+  if (scenario === "herdr") {
+    const runtime = {
+      ...common.runtime,
+      herdr: {
+        socketPath: "/Users/mahiro/.config/herdr/herdr.sock",
+        workspaceId: "w1",
+        tabId: "w1:t1",
+        paneId: "w1:p1",
+        sourcePid: common.runtime.sourcePid,
+        sourceStartedAtMs: common.runtime.sourceStartedAtMs,
+      },
+    };
+    return [
+      {
+        ...common,
+        runtime,
+        id: `${common.id}-open`,
+        type: "conversation_open",
+        data: { reason: "startup", previousConversationId: null },
+      },
+      {
+        ...common,
+        runtime,
+        id: `${common.id}-llm`,
+        timestamp: at(1),
+        type: "llm_start",
+        data: { model: "gpt-5.6-sol", messageCount: 6, contextWindow: 372_000 },
+      },
+    ];
+  }
+
   if (scenario === "long-llm") {
     const old = new Date(now - 90_000).toISOString();
     return [

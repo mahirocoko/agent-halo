@@ -1232,12 +1232,16 @@ const App = () => {
       const message = await invoke<string>("focus_terminal", {
         conversationId: session.conversationId,
         cwd: "cwd" in session ? session.cwd : session.workspacePath,
+        herdrSocketPath: session.herdrTarget?.socketPath ?? null,
+        herdrPaneId: session.herdrTarget?.paneId ?? null,
+        herdrSourcePid: session.herdrTarget?.sourcePid ?? null,
+        herdrSourceStartedAtMs: session.herdrTarget?.sourceStartedAtMs ?? null,
       });
-      const exactMatch = message.startsWith("Focused Ghostty ·");
+      const exactMatch = message.startsWith("Focused Herdr ·") || message.startsWith("Focused Ghostty ·");
       setSessionAction({ ok: exactMatch, message });
       if (exactMatch) closePanel({ suppressHover: true });
     } catch (error) {
-      setSessionAction({ ok: false, message: error instanceof Error ? error.message : "Ghostty focus failed" });
+      setSessionAction({ ok: false, message: error instanceof Error ? error.message : "Terminal focus failed" });
     }
   };
 

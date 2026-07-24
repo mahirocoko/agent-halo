@@ -51,6 +51,17 @@ const isInternalOnlySession = (events: AgentHaloEvent[]) =>
   events.length > 0 &&
   events.every((event) => !event.cwd || isInternalWorkspacePath(event.cwd));
 
+const getSessionHerdrTarget = (events: AgentHaloEvent[]) =>
+  events.find(
+    (event) =>
+      typeof event.runtime?.herdr?.socketPath === "string" &&
+      event.runtime.herdr.socketPath.length > 0 &&
+      typeof event.runtime.herdr.paneId === "string" &&
+      event.runtime.herdr.paneId.length > 0 &&
+      Number.isInteger(event.runtime.herdr.sourcePid) &&
+      Number.isFinite(event.runtime.herdr.sourceStartedAtMs),
+  )?.runtime?.herdr ?? null;
+
 export const buildWorkspaceSessionGroups = (
   sessions: ISessionSummary[],
 ): IWorkspaceSessionGroup[] => {
@@ -134,6 +145,7 @@ export const buildSessionSummaries = (
       model: sessionEvents.find((event) => event.model)?.model ?? "Letta",
       status: getEventSessionStatus(latest, now),
       lastActivityAt: latest.timestamp,
+      herdrTarget: getSessionHerdrTarget(sessionEvents),
     });
   }
 
@@ -156,6 +168,7 @@ export const buildSessionSummaries = (
       model: presence.model ?? "Letta",
       status: "idle",
       lastActivityAt: presence.lastEventAt ?? new Date(0).toISOString(),
+      herdrTarget: getSessionHerdrTarget(eventsForSession),
     });
   }
 

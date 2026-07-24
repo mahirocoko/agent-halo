@@ -23,12 +23,20 @@ Events are newline-delimited JSON in `~/.letta/mods/agent-halo.events.ndjson` an
     sourcePpid: number | null,
     sourceStartedAtMs: number,
     sourceKind: "lettaHost" | "hookRelay" | "unknown" | string,
+    herdr?: {
+      socketPath: string,
+      paneId: string,
+      sourcePid: number,
+      sourceStartedAtMs: number,
+      workspaceId?: string | null,
+      tabId?: string | null,
+    } | null,
   } | null,
   data: object
 }
 ```
 
-`runtime` is optional, additive protocol-v2 metadata for local read-only observability. Events emitted inside the Letta mod identify the originating Letta host process before multi-instance forwarding, so a secondary session does not inherit the primary bridge owner's PID. Forwarded `/ingest` runtime identity requires a machine-local 0600 shared token generated under `~/.letta/mods/`; untrusted or older senders remain event-compatible but their `runtime` field is stripped before storage. Hook-derived events reuse a recently correlated Letta scope only when that scope is unambiguous and no older than the bounded active-scope window; an unscoped hook event leaves `runtime` null. Runtime metadata never grants process control and does not expose command arguments.
+`runtime` is optional, additive protocol-v2 metadata for local read-only observability. Events emitted inside the Letta mod identify the originating Letta host process before multi-instance forwarding, so a secondary session does not inherit the primary bridge owner's PID. A Letta host launched inside Herdr may also preserve the inherited local socket plus workspace/tab/pane and source-process identity; this is terminal-host navigation metadata, not a Letta process capability. Forwarded `/ingest` runtime identity requires a machine-local 0600 shared token generated under `~/.letta/mods/`; untrusted or older senders remain event-compatible but their `runtime` field is stripped before storage. Hook-derived events reuse a recently correlated Letta scope only when that scope is unambiguous and no older than the bounded active-scope window; an unscoped hook event leaves `runtime` null. Runtime metadata never grants Letta process control and does not expose command arguments.
 
 `conversationId` is normalized before emission. A real scoped conversation id wins. When Letta reports the literal fallback id `default`, Agent Halo uses `agent:<agentId>` (or a workspace fallback only when no agent id exists) so stateless/subagent lanes from different agents and projects never collapse into one global `default` session.
 
@@ -66,7 +74,7 @@ Events are newline-delimited JSON in `~/.letta/mods/agent-halo.events.ndjson` an
 
 `GET /snapshot` also returns `recent: AgentHaloEvent[]`. `POST /hook/stop` converts a Letta `Stop` hook into `turn_complete`; legacy `turn_stop` events remain readable. `POST /hook/attention` converts an optionally configured `PermissionRequest` hook into `attention_requested`. The installer copies the relay but does not mutate global Letta settings while other sessions may be writing them. `POST /ingest` is the local multi-instance fan-in endpoint: secondary mod instances that cannot bind the bridge port forward their events to the primary bridge instead of dropping them. Current bridge session actions intentionally report `focusTerminal: false` and `endSession: false` until real Letta-scoped session/process capabilities exist.
 
-The desktop app may expose a separate native-only Ghostty focus fallback. That action uses Ghostty's macOS scripting dictionary to match a terminal by cwd/title/id, select the owning tab, and focus the terminal; it is still not a bridge-level session action and should remain clearly labeled as a desktop-native fallback.
+The desktop app may expose a separate native terminal-host focus action. With trusted Herdr runtime identity it first reads the current Herdr agent and requires matching Letta PID, process start, and hashed conversation-scope tokens before sending `agent.focus`, then activates the Ghostty host. This prevents persisted pane IDs from silently targeting a reused pane after restart. The Unix socket must be a private current-user socket below `~/.config/herdr`, and the complete identity/focus exchange has a bounded deadline. If identity is absent, stale, invalid, or the request fails, the app preserves the existing Ghostty scripting-dictionary match by cwd/title/id. Neither path is a bridge-level Letta session/process action, so `sessionActions.focusTerminal` remains false.
 
 Lower-level Letta Code app-server/device protocol exports richer queue, approval, tool-execution, and result events. Agent Halo does not consume that internal websocket protocol; the bridge stays on public mod events plus supported local hook events. `attention_requested` means only “the local harness asked for user input,” not that Agent Halo owns or can resolve the approval queue.
 
