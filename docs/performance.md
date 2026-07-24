@@ -51,6 +51,8 @@ The `movement-break-phase-1-code-split` revision keeps the primary ceilings at 1
 
 The `halo-bot-main-pet` revision raises the primary CSS ceiling to 10,800 bytes and core `dist/` ceiling to 575,500 bytes for the accessible ten-loadout Setup disclosure, independent persisted loadout contract, square Completion Pet geometry, and explicit native summon validation. Halo Bot's 50 compact body strips are accounted separately under a 50,000-byte runtime-asset ceiling instead of being hidden inside the core allowance; the promoted set measures 49,730 bytes. JavaScript remains capped at 97,000 bytes and the MediaPipe movement-runtime ceiling remains unchanged.
 
+The `inactive-group-removal` revision keeps the primary CSS ceiling at 11,100 bytes and raises JavaScript gzip from 97,000 to 97,300 bytes for guarded whole-group history removal. The `3fc8ff8` base measured 96,822 bytes JavaScript gzip; the exact-membership confirmation, atomic registry cleanup, and per-child tombstones measure 97,138 bytes in the final candidate. Core `dist/`, mascot, movement-runtime, and legacy-asset constraints remain unchanged.
+
 The low-risk bridge refactor's three-run median measured event duration `603.06ms → 574.18ms` (−4.79%) and throughput `33,164 → 34,832 events/s` (+5.03%) for 20,000 deterministic events. Startup stayed effectively flat; synchronous NDJSON durability and event ordering remain unchanged.
 
 ## Commands

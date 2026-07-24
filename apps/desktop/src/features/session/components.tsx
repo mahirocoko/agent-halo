@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Focus, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Focus, Trash2, X } from "lucide-react";
 import { formatRelativeAge, formatTime, shortModelName } from "./activity";
 import { SessionPet } from "./HaloPet";
 import type { HaloPetName } from "./HaloPet";
@@ -48,9 +48,10 @@ export const SessionListRow = ({ child = false, loadout, motionMapping, pet, onC
   </li>
 );
 
-export interface IWorkspaceSessionGroupItemProps { expanded: boolean; group: IWorkspaceSessionGroup; groupKey: string; loadout: HaloBotLoadout; motionMapping: HaloPetMotionMapping; pet: HaloPetName; onClear: (id: string) => void; onClearGroup: (group: IWorkspaceSessionGroup) => void; onFocus: (session: ISessionSummary) => void; onOpen: (id: string) => void; onToggle: (key: string) => void; }
-export const WorkspaceSessionGroupItem = ({ expanded, group, groupKey, loadout, motionMapping, pet, onClear, onClearGroup, onFocus, onOpen, onToggle }: IWorkspaceSessionGroupItemProps) => {
+export interface IWorkspaceSessionGroupItemProps { expanded: boolean; group: IWorkspaceSessionGroup; groupKey: string; loadout: HaloBotLoadout; motionMapping: HaloPetMotionMapping; pet: HaloPetName; removeGroupArmed: boolean; onClear: (id: string) => void; onFocus: (session: ISessionSummary) => void; onGroupAction: (groupKey: string, group: IWorkspaceSessionGroup) => void; onOpen: (id: string) => void; onToggle: (key: string) => void; }
+export const WorkspaceSessionGroupItem = ({ expanded, group, groupKey, loadout, motionMapping, pet, removeGroupArmed, onClear, onFocus, onGroupAction, onOpen, onToggle }: IWorkspaceSessionGroupItemProps) => {
   if (group.sessions.length === 1) return <SessionListRow loadout={loadout} motionMapping={motionMapping} pet={pet} session={group.sessions[0]} onClear={onClear} onFocus={onFocus} onOpen={onOpen} />;
+  const canRemoveInactiveGroup = group.sessions.every((session) => session.status === "inactive");
   return (
     <li className="session-group-block" data-status={group.status}><div className="session-row session-group" data-status={group.status}>
       <button className="session-row-main session-group-main" type="button" onClick={() => onToggle(groupKey)} data-tauri-drag-region="false" aria-expanded={expanded} aria-label={`${expanded ? "Collapse" : "Expand"} ${group.project}, ${group.sessions.length} sessions`}>
@@ -58,7 +59,8 @@ export const WorkspaceSessionGroupItem = ({ expanded, group, groupKey, loadout, 
         <span className="session-label"><span className="session-title-line"><span className="session-project">{group.project}</span><span className="session-group-count">×{group.sessions.length}</span><span className={`session-inline-status status-text-${group.status}`}>{statusLabel(group.status)}</span></span><span className="session-activity">{group.detail}</span><span className="session-folder">{group.workspace}</span></span>
         <span className="session-row-metadata" title={formatTime(group.lastActivityAt)}><span className="session-model">{shortModelName(group.primarySession.model)}</span><span className="session-age">{formatRelativeAge(group.lastActivityAt)}</span></span>
       </button>
-      {group.sessions.every((session) => session.status === "done") ? <div className="session-row-actions"><button className="row-btn row-clear" type="button" onClick={() => onClearGroup(group)} data-tauri-drag-region="false" aria-label={`Clear completed ${group.project} group`} title="Hide every completed session in this group until it has fresh activity"><X size={12} strokeWidth={2.5} /></button></div> : null}
+      {group.sessions.every((session) => session.status === "done") ? <div className="session-row-actions"><button className="row-btn row-clear" type="button" onClick={() => onGroupAction(groupKey, group)} data-tauri-drag-region="false" aria-label={`Clear completed ${group.project} group`} title="Hide every completed session in this group until it has fresh activity"><X size={12} strokeWidth={2.5} /></button></div> : null}
+      {canRemoveInactiveGroup ? <div className="session-row-actions"><button className={`row-btn danger row-remove-group ${removeGroupArmed ? "is-armed" : ""}`} type="button" onClick={() => onGroupAction(groupKey, group)} data-tauri-drag-region="false" aria-label={removeGroupArmed ? `Confirm remove ${group.sessions.length} inactive ${group.project} sessions` : `Remove ${group.sessions.length} inactive ${group.project} sessions`} title="Remove inactive group from local history"><Trash2 size={11} strokeWidth={2.3} />{removeGroupArmed ? <span>Remove {group.sessions.length}</span> : null}</button></div> : null}
     </div>{expanded ? <ul className="session-child-list" aria-label={`${group.project} sessions`}>{group.sessions.map((session) => <SessionListRow child loadout={loadout} motionMapping={motionMapping} pet={pet} session={session} onClear={onClear} onFocus={onFocus} onOpen={onOpen} key={session.conversationId} />)}</ul> : null}</li>
   );
 };

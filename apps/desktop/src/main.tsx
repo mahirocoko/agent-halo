@@ -155,6 +155,8 @@ const writeKeepAwakeEnabled = (enabled: boolean) => {
   try { window.localStorage.setItem(KEEP_AWAKE_STORAGE_KEY, `${enabled}`); } catch { /* current runtime still owns state */ }
 };
 
+const getGroupRemovalId = (groupKey: string, group: IWorkspaceSessionGroup) => [groupKey, ...group.sessions.map((session) => session.conversationId).sort()].join("\n");
+
 const App = () => {
   const { capabilities, connection, lastLiveEvent, now, presence, recentEvents, refreshCapabilities, sessionEventRegistry, setSessionEventRegistry, view } = useAgentHaloPresence({ demoMode: DEMO_MODE, demoScenario: DEMO_SCENARIO });
   const [usageSettings, setUsageSettings] = useState<IUsageSettings>(readUsageSettings);
@@ -194,6 +196,7 @@ const App = () => {
   const [expandedSessionGroupKeys, setExpandedSessionGroupKeys] = useState<Set<string>>(() => new Set());
   const [clearCompletedArmed, setClearCompletedArmed] = useState(false);
   const [pendingRemoveHistoryId, setPendingRemoveHistoryId] = useState<string | null>(null);
+  const [pendingGroupHistoryRemoval, setPendingGroupHistoryRemoval] = useState<string | null>(null);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const sheetInnerRef = useRef<HTMLDivElement | null>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
@@ -343,7 +346,16 @@ const App = () => {
   }, [clearCompletedArmed]);
 
   useEffect(() => {
+    if (!pendingGroupHistoryRemoval) return undefined;
+    const timer = window.setTimeout(() => setPendingGroupHistoryRemoval(null), 4_000);
+    return () => window.clearTimeout(timer);
+  }, [pendingGroupHistoryRemoval]);
+
+  useEffect(() => setPendingGroupHistoryRemoval(null), [activeMainTab, panelOpen]);
+
+  useEffect(() => {
     setPendingRemoveHistoryId(null);
+    setPendingGroupHistoryRemoval(null);
   }, [selectedSessionId]);
 
   useEffect(() => {
@@ -1097,26 +1109,35 @@ const App = () => {
     });
   };
 
-  const deleteSession = (conversationId: string) => {
+  const deleteSessions = (conversationIds: string[]) => {
+    const removing = new Set(conversationIds);
+    if (removing.size === 0) return;
+    const deletedAt = Date.now();
     setSessionAction({ ok: null, message: null });
     setSessionEventRegistry((current) => {
-      const { [conversationId]: _removed, ...next } = current;
+      const next = { ...current };
+      for (const conversationId of removing) delete next[conversationId];
       writeSessionEventRegistry(next);
       return next;
     });
     setDismissedSessionIds((current) => {
-      if (typeof current[conversationId] !== "number") return current;
-      const { [conversationId]: _removed, ...next } = current;
+      const next = { ...current };
+      for (const conversationId of removing) delete next[conversationId];
       writeDismissedSessionIds(next);
       return next;
     });
     setDeletedSessionIds((current) => {
-      const next = { ...current, [conversationId]: Date.now() };
+      const next = { ...current };
+      for (const conversationId of removing) next[conversationId] = deletedAt;
       writeDeletedSessionIds(next);
       return next;
     });
-    if (conversationId === acknowledgedConversationId) setAcknowledgedConversationId(null);
-    if (selectedSessionId === conversationId) setSelectedSessionId(null);
+    if (acknowledgedConversationId && removing.has(acknowledgedConversationId)) setAcknowledgedConversationId(null);
+    if (selectedSessionId && removing.has(selectedSessionId)) setSelectedSessionId(null);
+  };
+
+  const deleteSession = (conversationId: string) => {
+    deleteSessions([conversationId]);
   };
 
   const requestRemoveSessionHistory = (conversationId: string) => {
@@ -1126,6 +1147,22 @@ const App = () => {
     }
     deleteSession(conversationId);
     setPendingRemoveHistoryId(null);
+  };
+
+  const requestRemoveInactiveSessionGroup = (groupKey: string, group: IWorkspaceSessionGroup) => {
+    if (!group.sessions.every((session) => session.status === "inactive")) return;
+    const removalId = getGroupRemovalId(groupKey, group);
+    if (pendingGroupHistoryRemoval !== removalId) {
+      setPendingGroupHistoryRemoval(removalId);
+      return;
+    }
+    deleteSessions(group.sessions.map((session) => session.conversationId));
+    setPendingGroupHistoryRemoval(null);
+  };
+
+  const handleSessionGroupAction = (groupKey: string, group: IWorkspaceSessionGroup) => {
+    if (group.sessions.every((session) => session.status === "done")) clearCompletedSessionGroup(group);
+    else requestRemoveInactiveSessionGroup(groupKey, group);
   };
 
   const loadModStatus = async () => {
@@ -1461,9 +1498,10 @@ const App = () => {
                                 loadout={haloBotLoadout}
                                 motionMapping={petMotionMapping}
                                 pet={pet}
+                                removeGroupArmed={pendingGroupHistoryRemoval === getGroupRemovalId(groupKey, group)}
                                 onClear={dismissSession}
-                                onClearGroup={clearCompletedSessionGroup}
                                 onFocus={(session) => void focusSelectedSession(session)}
+                                onGroupAction={handleSessionGroupAction}
                                 onOpen={openSession}
                                 onToggle={toggleSessionGroup}
                                 key={groupKey}
@@ -1500,9 +1538,10 @@ const App = () => {
                                 loadout={haloBotLoadout}
                                 motionMapping={petMotionMapping}
                                 pet={pet}
+                                removeGroupArmed={pendingGroupHistoryRemoval === getGroupRemovalId(groupKey, group)}
                                 onClear={dismissSession}
-                                onClearGroup={clearCompletedSessionGroup}
                                 onFocus={(session) => void focusSelectedSession(session)}
+                                onGroupAction={handleSessionGroupAction}
                                 onOpen={openSession}
                                 onToggle={toggleSessionGroup}
                                 key={groupKey}

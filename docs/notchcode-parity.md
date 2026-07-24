@@ -23,7 +23,7 @@ Mahiro accepted Notchcode v1 as a read-only + dismiss + setup/control-plane surf
 | Clear completed sessions | Per-session Clear hides completed rows and persists IDs in `localStorage` under `agent-halo.dismissed-sessions`; guarded Clear completed handles the current completed section. | Done |
 | Completion persistence regressions | `apps/desktop/tests/demo-dismiss.spec.ts` separately verifies quiet-reload persistence and fresh-activity resurrection after Clear. | Covered |
 | Expandable workspace groups | Active and Completed sections keep one compact scroll surface; grouped workspaces expose child detail, Focus, and per-session Clear actions. | Covered |
-| Quiet completion ledger | Completed sessions retain sticky workspace/child access and scoped Clear controls while using lower visual emphasis than Active work. | Covered |
+| Quiet completion ledger | Completed sessions retain sticky workspace/child access and scoped Clear controls while using lower visual emphasis than Active work. Fully inactive workspace groups expose a guarded destructive Remove action that tombstones every child together; mixed/live groups never expose it. | Covered |
 | Setup/control plane | Setup view shows bridge, mod install status, next step, session-control capability boundary, one global Pet picker, Halo Bot's independent ten-loadout picker, Completion Pet On/Off, and a persisted connected-display picker. | Done |
 | Setup boundary regression | `apps/desktop/tests/demo-setup.spec.ts` verifies browser demo does not fake native install/check behavior or focus/end controls. | Covered |
 | Capability-aware bridge | `packages/protocol/src/index.ts` defines bridge capabilities; `/health` and `/snapshot` include them from `mods/agent-halo.js`. | Done |

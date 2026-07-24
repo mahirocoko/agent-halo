@@ -1,8 +1,40 @@
 import { expect, test } from "@playwright/test";
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => window.localStorage.clear());
+  await page.addInitScript(() => {
+    if (window.sessionStorage.getItem("agent-halo-test-storage-ready")) return;
+    window.localStorage.clear();
+    window.sessionStorage.setItem("agent-halo-test-storage-ready", "true");
+  });
 });
+
+const seedInactiveGroup = async (page: import("@playwright/test").Page, mixed = false) => {
+  await page.goto("/?demo=1&demoScenario=idle");
+  await page.evaluate(({ hasWorkingChild }) => {
+    const now = Date.now();
+    const old = new Date(now - 3_600_000).toISOString();
+    const registry = Object.fromEntries(Array.from({ length: 6 }, (_, index) => {
+      const conversationId = `local-conv-demo-inactive-${index + 1}`;
+      return [conversationId, [
+        {
+          version: 2,
+          id: `inactive-${index + 1}-llm`,
+          timestamp: hasWorkingChild && index === 0 ? new Date(now).toISOString() : old,
+          agentId: "agent-demo-mahiro-code",
+          agentName: "Mahiro Code",
+          conversationId,
+          cwd: "/Users/mahiro/ghq/github.com/haabiz/admin-template",
+          model: "gpt-5.6-sol",
+          permissionMode: "unrestricted",
+          type: "llm_start",
+          data: { model: "gpt-5.6-sol", messageCount: 4, contextWindow: 200_000 },
+        },
+      ]];
+    }));
+    window.localStorage.setItem("agent-halo.session-events", JSON.stringify(registry));
+  }, { hasWorkingChild: mixed });
+  await page.goto("/?demo=1");
+};
 
 test("grouped completed workspace exposes every child session and guarded clear", async ({ page }) => {
   await page.goto("/?demo=1&demoScenario=multi");
@@ -60,4 +92,58 @@ test("completed workspace group can clear all of its done children", async ({ pa
     "local-conv-demo-done-a",
     "local-conv-demo-done-b",
   ]);
+});
+
+test("inactive workspace group requires confirmation before removing every child", async ({ page }) => {
+  await seedInactiveGroup(page);
+
+  const removeGroup = page.getByRole("button", { name: "Remove 6 inactive admin-template sessions" });
+  await expect(removeGroup).toBeVisible();
+  await removeGroup.focus();
+  await removeGroup.press("Enter");
+
+  const confirmRemove = page.getByRole("button", { name: "Confirm remove 6 inactive admin-template sessions" });
+  await expect(confirmRemove).toBeVisible();
+  await expect(confirmRemove).toBeFocused();
+  await expect(confirmRemove).toContainText("Remove 6");
+  await expect.poll(async () => page.evaluate(() => Object.keys(JSON.parse(window.localStorage.getItem("agent-halo.deleted-sessions") ?? "{}")))).toEqual([]);
+
+  await confirmRemove.click();
+
+  await expect(page.getByRole("button", { name: "Expand admin-template, 6 sessions" })).toHaveCount(0);
+  await expect.poll(async () => page.evaluate(() => ({
+    deleted: Object.keys(JSON.parse(window.localStorage.getItem("agent-halo.deleted-sessions") ?? "{}")).sort(),
+    sessions: Object.keys(JSON.parse(window.localStorage.getItem("agent-halo.session-events") ?? "{}")).filter((conversationId) => conversationId.startsWith("local-conv-demo-inactive")),
+  }))).toEqual({
+    deleted: [
+      "local-conv-demo-inactive-1",
+      "local-conv-demo-inactive-2",
+      "local-conv-demo-inactive-3",
+      "local-conv-demo-inactive-4",
+      "local-conv-demo-inactive-5",
+      "local-conv-demo-inactive-6",
+    ],
+    sessions: [],
+  });
+});
+
+test("workspace group with a working child never exposes destructive group removal", async ({ page }) => {
+  await seedInactiveGroup(page, true);
+
+  await expect(page.getByRole("button", { name: "Expand admin-template, 6 sessions" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /inactive admin-template sessions/ })).toHaveCount(0);
+  await expect(page.locator('.session-row.session-group[data-status="working"]')).toBeVisible();
+});
+
+test("inactive group removal disarms when leaving the Sessions context", async ({ page }) => {
+  await seedInactiveGroup(page);
+
+  await page.getByRole("button", { name: "Remove 6 inactive admin-template sessions" }).click();
+  await expect(page.getByRole("button", { name: "Confirm remove 6 inactive admin-template sessions" })).toBeVisible();
+
+  await page.getByRole("tab", { name: "Pomodoro" }).click();
+  await page.getByRole("tab", { name: "Sessions" }).click();
+
+  await expect(page.getByRole("button", { name: "Remove 6 inactive admin-template sessions" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Confirm remove 6 inactive admin-template sessions" })).toHaveCount(0);
 });

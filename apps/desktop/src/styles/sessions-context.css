@@ -631,6 +631,21 @@
   background: rgba(255, 255, 255, 0.12);
 }
 
+.session-row .row-remove-group {
+  width: 24px;
+  height: 24px;
+}
+
+.session-row .row-remove-group.is-armed {
+  width: auto;
+  padding: 0 6px;
+  gap: 4px;
+  border-radius: 6px;
+  font-size: 9px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
 .event-list {
   display: none;
 }
