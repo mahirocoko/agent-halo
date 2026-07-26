@@ -131,3 +131,31 @@ test("Usage does not label a status-only provider response as outdated", async (
   await expect(page.getByText("Claude Code usage unavailable.")).toBeVisible();
   await expect(page.locator(".usage-freshness")).toHaveCount(0);
 });
+
+test("Usage hydrates a persisted last-good snapshot before a reload refresh completes", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("agent-halo.usage-snapshots.v1", JSON.stringify({
+      codex: {
+        providerId: "codex",
+        fetchedAt: "2026-07-25T12:00:00Z",
+        plan: "Pro",
+        lines: [{ type: "progress", label: "Session", used: 42, limit: 100 }],
+      },
+    }));
+    (window as typeof window & { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
+      invoke: async (command: string) => {
+        if (command === "notch_metrics") return [184, 36];
+        if (command === "set_keep_awake") return false;
+        if (command === "set_panel_open") return true;
+        throw new Error(`${command} unavailable`);
+      },
+    };
+  });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "Open Agent Halo" }).click();
+  await page.getByRole("tab", { name: "Usage" }).click();
+
+  await expect(page.getByText("58% left")).toBeVisible();
+  await expect(page.locator(".usage-freshness[data-stale='true']")).toContainText("Outdated");
+});

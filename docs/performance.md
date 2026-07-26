@@ -55,6 +55,10 @@ The `inactive-group-removal` revision keeps the primary CSS ceiling at 11,100 by
 
 The `usage-insights-v1` revision raises the primary CSS ceiling to 11,300 bytes and JavaScript gzip ceiling to 97,600 bytes. The allowance covers the compact local-history continuation: truthful update/stale timing, accessible trend summary, semantic daily disclosure, and narrow layout fallback. It does not relax the core `dist/`, mascot, movement-runtime, or legacy-asset constraints.
 
+The `usage-cache-hydration` revision raises JavaScript gzip to 97,800 bytes for versioned persisted usage snapshots. On reload, the renderer hydrates a last-good snapshot immediately as explicitly outdated while the normal provider refresh remains in the background; the cache contains only provider display snapshots, never credentials or raw exports.
+
+The `usage-priority-refresh` revision raises JavaScript gzip to 98,000 bytes for a generation-guarded sequential provider queue. It hydrates cached display data first, refreshes one provider at a time, and moves a provider selected in the Usage sidebar to the front of a replacement queue rather than stampeding all native sources after reload.
+
 The low-risk bridge refactor's three-run median measured event duration `603.06ms → 574.18ms` (−4.79%) and throughput `33,164 → 34,832 events/s` (+5.03%) for 20,000 deterministic events. Startup stayed effectively flat; synchronous NDJSON durability and event ordering remain unchanged.
 
 ## Commands

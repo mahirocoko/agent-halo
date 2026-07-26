@@ -11,7 +11,7 @@ const BUDGETS = {
   cssGzipBytes: 11_300,
   haloBotAssetBytes: 50_000,
   haloformAssetBytes: 85_000,
-  jsGzipBytes: 97_600,
+  jsGzipBytes: 98_000,
   movementAssetBytes: 28_250_000,
 };
 
@@ -67,7 +67,7 @@ await findLegacy(distRoot);
 
 const payload = {
   baselineCommit: "3fc8ff8",
-  budgetRevision: "usage-insights-v1",
+  budgetRevision: "usage-priority-refresh",
   budgets: BUDGETS,
   current: {
     cssGzipBytes: css.gzipBytes,

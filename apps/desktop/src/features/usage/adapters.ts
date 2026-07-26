@@ -13,6 +13,8 @@ import type {
   UsageProviderId,
 } from "./types";
 
+const SNAPSHOT_CACHE_KEY = "agent-halo.usage-snapshots.v1";
+
 export {
   formatAbsoluteTime,
   formatResetLabel,
@@ -221,6 +223,65 @@ export const parseAgentUsageSnapshot = (
             .filter((line) => /%$/.test(line.value))
         : [],
   });
+};
+
+export const createCachedAgentUsageState = (
+  providerId: UsageProviderId,
+  snapshot: IAgentUsageSnapshot,
+  settings: IUsageSettings,
+): IAgentUsageState => {
+  const parsed = parseAgentUsageSnapshot(providerId, snapshot, settings);
+
+  return parsed.metrics.length
+    ? createAgentUsageState(providerId, {
+        ...parsed,
+        status: "error",
+        message: null,
+        stale: true,
+      })
+    : createAgentUsageState(providerId);
+};
+
+export const readCachedUsageSnapshots = (): Partial<
+  Record<UsageProviderId, IAgentUsageSnapshot>
+> => {
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(SNAPSHOT_CACHE_KEY) ?? "null",
+    ) as Partial<Record<UsageProviderId, IAgentUsageSnapshot>> | null;
+
+    if (!parsed || typeof parsed !== "object") {
+      return {};
+    }
+
+    return Object.fromEntries(
+      Object.entries(parsed).filter(
+        ([providerId, snapshot]) =>
+          ["codex", "agy", "claude", "cursor", "grok"].includes(providerId) &&
+          snapshot &&
+          typeof snapshot === "object" &&
+          Array.isArray(snapshot.lines) &&
+          typeof snapshot.fetchedAt === "string",
+      ),
+    ) as Partial<Record<UsageProviderId, IAgentUsageSnapshot>>;
+  } catch {
+    return {};
+  }
+};
+
+export const writeCachedUsageSnapshot = (
+  providerId: UsageProviderId,
+  snapshot: IAgentUsageSnapshot,
+): void => {
+  try {
+    const current = readCachedUsageSnapshots();
+    window.localStorage.setItem(
+      SNAPSHOT_CACHE_KEY,
+      JSON.stringify({ ...current, [providerId]: snapshot }),
+    );
+  } catch {
+    // Current usage remains usable when local storage is unavailable.
+  }
 };
 
 export const retainLastGoodUsage = (

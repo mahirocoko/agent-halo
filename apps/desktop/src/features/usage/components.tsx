@@ -590,10 +590,10 @@ export const AgentUsageList = ({
               aria-controls="usage-provider-panel"
               tabIndex={active === provider.id ? 0 : -1}
               onKeyDown={(event) => handleTabKeyDown(event, provider.id)}
-              onClick={(event) => {
-                event.stopPropagation();
-                setSelectedId(provider.id);
-              }}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setSelectedId(provider.id);
+                }}
               data-tauri-drag-region="false"
               key={provider.id}
               title={provider.label}

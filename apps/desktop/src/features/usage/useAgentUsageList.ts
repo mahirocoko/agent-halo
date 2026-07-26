@@ -1,10 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useRef, useState } from "react";
 import {
+  createCachedAgentUsageState,
   createAgentUsageState,
   createDemoAgentUsage,
   parseAgentUsageSnapshot,
+  readCachedUsageSnapshots,
   retainLastGoodUsage,
+  writeCachedUsageSnapshot,
 } from "./adapters";
 import { USAGE_PROVIDERS } from "./providers";
 import type {
@@ -20,23 +23,32 @@ export interface IAgentUsageListResult {
   usages: Record<UsageProviderId, IAgentUsageState>;
 }
 
-const createInitialUsageStates = (): Record<
+const createInitialUsageStates = (settings: IUsageSettings): Record<
   UsageProviderId,
   IAgentUsageState
-> =>
-  Object.fromEntries(
-    USAGE_PROVIDERS.map((provider) => [
-      provider.id,
-      createAgentUsageState(provider.id),
-    ]),
+> => {
+  const cached = readCachedUsageSnapshots();
+
+  return Object.fromEntries(
+    USAGE_PROVIDERS.map((provider) => {
+      const snapshot = cached[provider.id];
+
+      return [
+        provider.id,
+        snapshot
+          ? createCachedAgentUsageState(provider.id, snapshot, settings)
+          : createAgentUsageState(provider.id),
+      ];
+    }),
   ) as Record<UsageProviderId, IAgentUsageState>;
+};
 
 export const useAgentUsageList = (
   settings: IUsageSettings,
   demoMode: boolean,
 ): IAgentUsageListResult => {
   const settingsRef = useRef(settings);
-  const [usages, setUsages] = useState(createInitialUsageStates);
+  const [usages, setUsages] = useState(() => createInitialUsageStates(settings));
   const [snapshots, setSnapshots] = useState<
     Partial<Record<UsageProviderId, IAgentUsageSnapshot>>
   >({});
@@ -46,7 +58,7 @@ export const useAgentUsageList = (
     settingsRef.current = settings;
   }, [settings]);
 
-  const refreshProvider = async (
+  const fetchProvider = async (
     provider: IUsageProviderConfig,
   ): Promise<void> => {
     if (demoMode) {
@@ -81,6 +93,7 @@ export const useAgentUsageList = (
         settingsRef.current,
       );
       if (next.status === "online") {
+        writeCachedUsageSnapshot(provider.id, snapshot);
         setSnapshots((current) => ({
           ...current,
           [provider.id]: snapshot,
@@ -108,7 +121,7 @@ export const useAgentUsageList = (
 
   const refresh = (): void => {
     for (const provider of USAGE_PROVIDERS) {
-      void refreshProvider(provider);
+      void fetchProvider(provider);
     }
   };
 
