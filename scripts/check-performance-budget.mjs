@@ -8,10 +8,10 @@ const assetRoot = join(distRoot, "assets");
 
 const BUDGETS = {
   coreDistBytes: 575_500,
-  cssGzipBytes: 11_100,
+  cssGzipBytes: 11_300,
   haloBotAssetBytes: 50_000,
   haloformAssetBytes: 85_000,
-  jsGzipBytes: 97_300,
+  jsGzipBytes: 97_600,
   movementAssetBytes: 28_250_000,
 };
 
@@ -67,7 +67,7 @@ await findLegacy(distRoot);
 
 const payload = {
   baselineCommit: "3fc8ff8",
-  budgetRevision: "inactive-group-removal",
+  budgetRevision: "usage-insights-v1",
   budgets: BUDGETS,
   current: {
     cssGzipBytes: css.gzipBytes,

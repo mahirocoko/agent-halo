@@ -4,6 +4,7 @@ import {
   createAgentUsageState,
   createDemoAgentUsage,
   parseAgentUsageSnapshot,
+  retainLastGoodUsage,
 } from "./adapters";
 import { USAGE_PROVIDERS } from "./providers";
 import type {
@@ -74,33 +75,33 @@ export const useAgentUsageList = (
 
     try {
       const snapshot = await invoke<IAgentUsageSnapshot>(provider.command);
-      setSnapshots((current) => ({
-        ...current,
-        [provider.id]: snapshot,
-      }));
+      const next = parseAgentUsageSnapshot(
+        provider.id,
+        snapshot,
+        settingsRef.current,
+      );
+      if (next.status === "online") {
+        setSnapshots((current) => ({
+          ...current,
+          [provider.id]: snapshot,
+        }));
+      }
       setUsages((current) => ({
         ...current,
-        [provider.id]: parseAgentUsageSnapshot(
-          provider.id,
-          snapshot,
-          settingsRef.current,
-        ),
+        [provider.id]: next.status === "error" && next.message
+          ? retainLastGoodUsage(current[provider.id], provider.id, next.message, next)
+          : next,
       }));
     } catch (error) {
-      setSnapshots((current) => {
-        const next = { ...current };
-        delete next[provider.id];
-        return next;
-      });
       setUsages((current) => ({
         ...current,
-        [provider.id]: createAgentUsageState(provider.id, {
-          status: "offline",
-          message:
-            error instanceof Error
-              ? error.message
-              : String(error || `${provider.label} usage unavailable`),
-        }),
+        [provider.id]: retainLastGoodUsage(
+          current[provider.id],
+          provider.id,
+          error instanceof Error
+            ? error.message
+            : String(error || `${provider.label} usage unavailable`),
+        ),
       }));
     }
   };
@@ -139,7 +140,7 @@ export const useAgentUsageList = (
 
       for (const provider of USAGE_PROVIDERS) {
         const snapshot = snapshots[provider.id];
-        if (snapshot) {
+        if (snapshot && current[provider.id].status !== "error") {
           next[provider.id] = parseAgentUsageSnapshot(
             provider.id,
             snapshot,

@@ -132,6 +132,7 @@ export const createAgentUsageState = (
   status: "loading",
   providerId,
   message: null,
+  stale: false,
   fetchedAt: null,
   plan: null,
   metrics: [],
@@ -156,6 +157,10 @@ export const parseAgentUsageSnapshot = (
   settings: IUsageSettings,
 ): IAgentUsageState => {
   const lines = Array.isArray(snapshot.lines) ? snapshot.lines : [];
+  const message = getTextValue(findMetricLine(lines, "Status"));
+  const metrics = lines
+    .filter((line) => line.type === "progress")
+    .map((line) => normalizeMetric(line, settings));
   const knownTextLabels = new Set([
     "rate limit resets",
     "credits",
@@ -166,13 +171,12 @@ export const parseAgentUsageSnapshot = (
   ]);
 
   return createAgentUsageState(providerId, {
-    status: "online",
-    message: getTextValue(findMetricLine(lines, "Status")),
+    status: message ? "error" : "online",
+    message,
+    stale: Boolean(message) && metrics.length > 0,
     fetchedAt: snapshot.fetchedAt ?? new Date().toISOString(),
     plan: snapshot.plan ?? null,
-    metrics: lines
-      .filter((line) => line.type === "progress")
-      .map((line) => normalizeMetric(line, settings)),
+    metrics,
     sessionPercent: getProgressPercent(findMetricLine(lines, "Session")),
     weeklyPercent: getProgressPercent(findMetricLine(lines, "Weekly")),
     reviewsPercent: getProgressPercent(findMetricLine(lines, "Reviews")),
@@ -188,7 +192,7 @@ export const parseAgentUsageSnapshot = (
           line.type === "barChart" && line.label.toLowerCase() === "usage trend",
       ) ?? null,
     dailyTokenRows:
-      providerId === "codex"
+      providerId === "codex" || providerId === "cursor"
         ? lines
             .filter(
               (line) =>
@@ -202,7 +206,7 @@ export const parseAgentUsageSnapshot = (
             .filter((line) => line.value)
         : [],
     modelShares:
-      providerId === "codex"
+      providerId === "codex" || providerId === "cursor"
         ? lines
             .filter(
               (line) =>
@@ -216,6 +220,24 @@ export const parseAgentUsageSnapshot = (
             }))
             .filter((line) => /%$/.test(line.value))
         : [],
+  });
+};
+
+export const retainLastGoodUsage = (
+  previous: IAgentUsageState,
+  providerId: UsageProviderId,
+  error: string,
+  fallback?: IAgentUsageState,
+): IAgentUsageState => {
+  const previousHasData = previous.metrics.length > 0;
+  const source = previousHasData ? previous : fallback ?? previous;
+  const hasLastGoodData = source.metrics.length > 0;
+  return createAgentUsageState(providerId, {
+    ...source,
+    providerId,
+    status: "error",
+    message: error,
+    stale: hasLastGoodData,
   });
 };
 

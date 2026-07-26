@@ -70,35 +70,12 @@ const Meter = ({ metric: value }: IMeterProps) => (
   </div>
 );
 
-interface ITextRow {
-  label: string;
-  value: string | null;
-}
-
-interface ITextRowsProps {
-  rows: ITextRow[];
-}
-
-const TextRows = ({ rows }: ITextRowsProps) => {
-  const visible = rows.filter((row) => row.value);
-
-  return visible.length ? (
-    <div className="usage-text-rows">
-      {visible.map((row) => (
-        <div className="usage-text-row" key={row.label}>
-          <span>{row.label}</span>
-          <strong>{row.value}</strong>
-        </div>
-      ))}
-    </div>
-  ) : null;
-};
-
 interface ITrendProps {
   line: IUsageMetricLine | null;
+  total: string | null;
 }
 
-const Trend = ({ line }: ITrendProps) => {
+const Trend = ({ line, total }: ITrendProps) => {
   const points =
     line?.points?.filter(
       (point) => Number.isFinite(point.value) && point.value >= 0,
@@ -109,14 +86,24 @@ const Trend = ({ line }: ITrendProps) => {
   }
 
   const max = Math.max(...points.map((point) => point.value), 1);
+  const latest = points.at(-1);
+  const highest = points.reduce(
+    (current, point) => (point.value > current.value ? point : current),
+    points[0],
+  );
+  const description = [
+    total ? `Past 30 days ${total}.` : "Past 30 days.",
+    `Latest ${latest?.label}: ${latest?.valueLabel ?? latest?.value}.`,
+    `Highest ${highest.label}: ${highest.valueLabel ?? highest.value}.`,
+  ].join(" ");
 
   return (
-    <div className="usage-trend-card">
-      <div className="usage-trend-head">
-        <span>{line?.label ?? "Usage Trend"}</span>
-        {line?.note ? <small title={line.note}>ⓘ</small> : null}
-      </div>
-      <div className="usage-trend-bars" aria-label="Codex usage trend">
+    <figure className="usage-trend-card">
+      <figcaption className="usage-trend-head">
+        <span>Past 30 days</span>
+        {total ? <strong>{total}</strong> : null}
+      </figcaption>
+      <div className="usage-trend-bars" aria-label={description} role="img">
         {points.map((point, index) => (
           <span
             className="usage-trend-bar"
@@ -129,7 +116,76 @@ const Trend = ({ line }: ITrendProps) => {
           />
         ))}
       </div>
-    </div>
+      {line?.note ? <p className="usage-trend-note">{line.note}</p> : null}
+    </figure>
+  );
+};
+
+interface IProviderInsightsProps {
+  provider: IUsageProviderConfig;
+  usage: IAgentUsageState;
+}
+
+const ProviderInsights = ({ provider, usage }: IProviderInsightsProps) => {
+  const hasHistory = Boolean(
+    usage.today ||
+      usage.yesterday ||
+      usage.last30Days ||
+      usage.usageTrend ||
+      usage.modelShares.length ||
+      usage.dailyTokenRows.length,
+  );
+
+  if (!hasHistory) return null;
+
+  return (
+    <section className="usage-local-history" aria-label={`${provider.label} usage history`}>
+      <div className="usage-local-history-head">
+        <span>{provider.id === "codex" ? "Local history" : "Usage history"}</span>
+        {usage.latestTokenLog ? <small>Latest {usage.latestTokenLog}</small> : null}
+      </div>
+      {usage.today || usage.yesterday ? (
+        <dl className="usage-history-pair">
+          {usage.today ? (
+            <div>
+              <dt>Today</dt>
+              <dd>{usage.today}</dd>
+            </div>
+          ) : null}
+          {usage.yesterday ? (
+            <div>
+              <dt>Yesterday</dt>
+              <dd>{usage.yesterday}</dd>
+            </div>
+          ) : null}
+        </dl>
+      ) : null}
+      <Trend line={usage.usageTrend} total={usage.last30Days} />
+      {usage.modelShares.length ? (
+        <div className="usage-model-shares">
+          <span className="usage-insight-label">Model mix</span>
+          {usage.modelShares.slice(0, 3).map((row) => (
+            <div className="usage-model-share" key={row.label}>
+              <span>{row.label}</span>
+              <strong>{row.value}</strong>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {usage.dailyTokenRows.length ? (
+        <details className="usage-daily-tokens">
+          <summary>Daily detail · {usage.dailyTokenRows.length} days</summary>
+          <dl>
+            {usage.dailyTokenRows.map((row) => (
+              <div className="usage-daily-token" key={row.label}>
+                <dt>{row.label}</dt>
+                <dd>{row.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </details>
+      ) : null}
+    </section>
   );
 };
 
@@ -175,11 +231,23 @@ const ProviderLinks = ({ links }: IProviderLinksProps) => {
 
 interface IProviderDetailProps {
   provider: IUsageProviderConfig;
+  settings: IUsageSettings;
   usage: IAgentUsageState;
 }
 
-const ProviderDetail = ({ provider, usage }: IProviderDetailProps) => {
+const ProviderDetail = ({ provider, settings, usage }: IProviderDetailProps) => {
   const StatusIcon = usage.status === "loading" ? RefreshCw : TriangleAlert;
+  const hasMetrics = usage.metrics.length > 0;
+  const fetchedAt = usage.fetchedAt
+    ? formatAbsoluteTime(usage.fetchedAt, settings.timeFormat)
+    : null;
+  const freshness = usage.stale
+    ? fetchedAt
+      ? `Outdated · ${fetchedAt}`
+      : "Outdated"
+    : usage.status === "online" && fetchedAt
+      ? `Updated ${fetchedAt}`
+      : null;
   const groups = USAGE_METRIC_GROUPS.map((group) => ({
     ...group,
     metrics: usage.metrics.filter((item) => item.groupLabel === group.label),
@@ -193,9 +261,14 @@ const ProviderDetail = ({ provider, usage }: IProviderDetailProps) => {
           {provider.label}
         </span>
         {usage.plan ? <span className="usage-plan">{usage.plan}</span> : null}
+        {freshness ? (
+          <span className="usage-freshness" data-stale={usage.stale}>
+            {freshness}
+          </span>
+        ) : null}
       </div>
       <ProviderLinks links={provider.links} />
-      {usage.status === "online" && usage.metrics.length ? (
+      {hasMetrics ? (
         <>
           {usage.message ? (
             <div className="usage-provider-message usage-provider-note" role="status">
@@ -246,41 +319,8 @@ const ProviderDetail = ({ provider, usage }: IProviderDetailProps) => {
           </span>
         </div>
       )}
-      {provider.id === "codex" && usage.status === "online" ? (
-        <>
-          <TextRows
-            rows={[
-              { label: "Credits", value: usage.credits },
-              { label: "Rate Limit Resets", value: usage.rateLimitResets },
-              { label: "Today", value: usage.today },
-              { label: "Yesterday", value: usage.yesterday },
-              { label: "Latest Token Log", value: usage.latestTokenLog },
-              { label: "Last 30 Days", value: usage.last30Days },
-            ]}
-          />
-          <Trend line={usage.usageTrend} />
-          {usage.dailyTokenRows.length ? (
-            <div className="usage-daily-tokens">
-              <div className="usage-daily-title">Daily Tokens</div>
-              {usage.dailyTokenRows.map((row) => (
-                <div className="usage-daily-token" key={row.label}>
-                  <span>{row.label}</span>
-                  <strong>{row.value}</strong>
-                </div>
-              ))}
-            </div>
-          ) : null}
-          {usage.modelShares.length ? (
-            <div className="usage-model-shares">
-              {usage.modelShares.map((row) => (
-                <div className="usage-model-share" key={row.label}>
-                  <span>{row.label}</span>
-                  <strong>{row.value}</strong>
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </>
+      {["codex", "cursor"].includes(provider.id) && hasMetrics ? (
+        <ProviderInsights provider={provider} usage={usage} />
       ) : null}
       {usage.credits || usage.rateLimitResets ? (
         <div
@@ -562,6 +602,8 @@ export const AgentUsageList = ({
               <span>{provider.label}</span>
               {usages[provider.id]?.status === "online" ? (
                 <><span className="usage-side-dot" aria-hidden="true" /><span className="sr-only">Online</span></>
+              ) : usages[provider.id]?.stale ? (
+                <span className="sr-only">Outdated</span>
               ) : null}
             </button>
           ))}
@@ -592,6 +634,7 @@ export const AgentUsageList = ({
           ) : selected ? (
             <ProviderDetail
               provider={selected}
+              settings={settings}
               usage={usages[selected.id] ?? createAgentUsageState(selected.id)}
             />
           ) : (

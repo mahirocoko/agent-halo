@@ -73,6 +73,7 @@ export interface IAgentUsageState {
   status: "loading" | "online" | "offline" | "error";
   providerId: UsageProviderId;
   message: string | null;
+  stale: boolean;
   fetchedAt: string | null;
   plan: string | null;
   metrics: IUsageMetric[];

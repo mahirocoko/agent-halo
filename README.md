@@ -140,10 +140,11 @@ Currently supported local providers:
 
 Notes:
 
-- Codex history and token trends come from local usage history where available.
+- Codex history and token trends come from local usage history for the resolved local home where available; it is never labelled as a separately selected account until Agent Halo has account-card UI.
+- Codex condenses available local history into Today/Yesterday, a 30-day trend, a short model mix, and an optional daily detail disclosure. The surface labels that data as an estimate from this home.
 - Antigravity usage is read from the local Antigravity/`agy` language server using the same quota-summary surface as `/usage`.
-- Claude Code follows OpenUsage-informed local credential detection and refresh behavior where possible.
-- Provider cards remain capability-aware; credential-present but unusable sessions should surface a status message instead of silently disappearing.
+- Claude Code tries valid local Keychain/file logins before an inference-only environment token and refreshes only back into the source that produced the credential.
+- Provider cards remain capability-aware; a failed refresh preserves last-good metrics with an explicit Outdated/error state instead of silently disappearing.
 
 ## Installation
 

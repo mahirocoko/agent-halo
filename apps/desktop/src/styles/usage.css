@@ -233,6 +233,19 @@
   white-space: nowrap;
 }
 
+.usage-freshness {
+  flex: none;
+  color: var(--text-3);
+  font-size: 10px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.usage-freshness[data-stale="true"] {
+  color: rgba(255, 194, 122, 0.92);
+  font-weight: 700;
+}
+
 .usage-provider-metrics {
   display: flex;
   flex-direction: column;
@@ -411,6 +424,11 @@
   background: rgba(255, 255, 255, 0.08);
 }
 
+.usage-provider-link:focus-visible {
+  outline: 1px solid rgba(255, 157, 61, 0.7);
+  outline-offset: 2px;
+}
+
 .usage-provider-card[data-status="loading"] .usage-provider-message svg {
   color: var(--text-3);
   animation: usage-loading-spin 1s linear infinite;
@@ -446,7 +464,7 @@
   white-space: nowrap;
 }
 
-.usage-text-rows {
+.usage-local-history {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -455,23 +473,55 @@
   border-top: 1px solid rgba(255, 255, 255, 0.07);
 }
 
-.usage-text-row {
+.usage-local-history-head,
+.usage-trend-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   min-width: 0;
   color: var(--text-3);
   font-size: 10px;
+  font-weight: 650;
 }
 
-.usage-text-row strong {
+.usage-local-history-head small {
   min-width: 0;
   overflow: hidden;
-  color: rgba(255, 255, 255, 0.64);
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 9px;
+  font-weight: 500;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.usage-history-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 1px 0 0;
+}
+
+.usage-history-pair div {
+  min-width: 0;
+}
+
+.usage-history-pair dt,
+.usage-insight-label {
+  color: var(--text-3);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.usage-history-pair dd {
+  margin: 3px 0 0;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.76);
   font-size: 10px;
   font-weight: 650;
-  text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -479,25 +529,26 @@
 .usage-trend-card {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-top: 10px;
-  padding-top: 9px;
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  gap: 5px;
+  margin: 3px 0 0;
 }
 
-.usage-trend-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  color: var(--text-3);
+.usage-trend-head strong {
+  min-width: 0;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.72);
   font-size: 10px;
   font-weight: 650;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.usage-trend-head small {
-  color: rgba(255, 255, 255, 0.36);
+.usage-trend-note {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.42);
   font-size: 9px;
+  line-height: 1.25;
 }
 
 .usage-trend-bars {
@@ -520,22 +571,25 @@
   display: flex;
   flex-direction: column;
   gap: 5px;
-  margin-top: 8px;
+  margin-top: 4px;
 }
 
 .usage-daily-tokens {
+  margin-top: 5px;
+  color: var(--text-3);
+  font-size: 10px;
+}
+
+.usage-daily-tokens summary {
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.usage-daily-tokens dl {
   display: flex;
   flex-direction: column;
   gap: 5px;
-  margin-top: 9px;
-  padding-top: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.usage-daily-title {
-  color: var(--text-3);
-  font-size: 10px;
-  font-weight: 650;
+  margin: 7px 0 0;
 }
 
 .usage-daily-token {
@@ -548,7 +602,8 @@
   font-size: 10px;
 }
 
-.usage-daily-token strong {
+.usage-daily-token dd {
+  margin: 0;
   min-width: 0;
   overflow: hidden;
   color: rgba(255, 255, 255, 0.64);
@@ -572,6 +627,32 @@
   color: rgba(255, 255, 255, 0.62);
   font-size: 10px;
   font-weight: 650;
+}
+
+@media (max-width: 520px) {
+  .usage-layout {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    overflow-y: auto;
+  }
+
+  .usage-sidebar {
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0 0 6px;
+    border-right: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .usage-side-tab {
+    flex: 0 0 auto;
+  }
+
+  .usage-side-settings {
+    margin: 0;
+    border-top: 0;
+  }
 }
 
 .usage-refresh {

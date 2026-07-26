@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashMap, HashSet},
     error::Error as StdError,
     fs,
     io::{ErrorKind, Read, Write},
@@ -8,9 +8,13 @@ use std::{
     process::{Command, Stdio},
     sync::{mpsc, Mutex, OnceLock},
     thread,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant},
 };
 
+use base64::{
+    engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD},
+    Engine as _,
+};
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -50,6 +54,8 @@ use objc2::{msg_send, rc::Retained, MainThreadMarker};
 use objc2_app_kit::{NSScreen, NSStatusWindowLevel, NSWindow, NSWindowCollectionBehavior};
 #[cfg(target_os = "macos")]
 use objc2_foundation::{NSArray, NSPoint, NSRect, NSSize, NSString};
+#[cfg(target_os = "macos")]
+use security_framework::passwords::set_generic_password;
 
 const TRAY_SHOW: &str = "show";
 const TRAY_HIDE: &str = "hide";
@@ -62,7 +68,7 @@ const CODEX_REFRESH_URL: &str = "https://auth.openai.com/oauth/token";
 const CODEX_CLIENT_ID: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
 const CODEX_KEYCHAIN_SERVICE: &str = "Codex Auth";
 const CODEX_CREDIT_USD_RATE: f64 = 0.04;
-const CCUSAGE_PACKAGE: &str = "ccusage@20.0.14";
+const CCUSAGE_PACKAGE: &str = "ccusage@20.0.18";
 const CCUSAGE_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
 const CCUSAGE_TIMEOUT: Duration = Duration::from_secs(15);
 const OPENUSAGE_PROXY_CONFIG_PATH: &str = ".openusage/config.json";
@@ -81,6 +87,7 @@ const CURSOR_STATE_DB: &str = "Library/Application Support/Cursor/User/globalSto
 const CURSOR_USAGE_URL: &str =
     "https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage";
 const CURSOR_PLAN_URL: &str = "https://api2.cursor.sh/aiserver.v1.DashboardService/GetPlanInfo";
+const CURSOR_USAGE_EXPORT_URL: &str = "https://cursor.com/api/dashboard/export-usage-events-csv";
 const CURSOR_REFRESH_URL: &str = "https://api2.cursor.sh/oauth/token";
 const CURSOR_CLIENT_ID: &str = "KbZUR41cY7W6zRSdpSUJ7I7mLYBKOCmB";
 const CURSOR_ACCESS_KEYCHAIN_SERVICE: &str = "cursor-access-token";
@@ -177,7 +184,7 @@ struct CodexAuthTokens {
 #[derive(Debug, Clone)]
 enum CodexAuthSource {
     File(PathBuf),
-    Keychain,
+    Keychain(String),
 }
 
 #[derive(Debug, Clone)]
@@ -338,9 +345,11 @@ struct CcusageCacheEntry {
     usage: CcusageDailyUsage,
 }
 
-static CLAUDE_LAST_GOOD_USAGE: OnceLock<Mutex<Option<CodexUsageSnapshot>>> = OnceLock::new();
+static CLAUDE_LAST_GOOD_USAGE: OnceLock<Mutex<HashMap<String, CodexUsageSnapshot>>> =
+    OnceLock::new();
 
 static CODEX_CCUSAGE_CACHE: OnceLock<Mutex<Option<CcusageCacheEntry>>> = OnceLock::new();
+static CODEX_CCUSAGE_IN_FLIGHT: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 
 #[derive(Debug, Deserialize)]
 struct CodexRefreshResponse {
@@ -400,6 +409,24 @@ struct CursorAuthState {
     refresh_token: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CursorSession {
+    user_id: String,
+    cookie_value: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CursorUsageExportDay {
+    date: String,
+    total_tokens: u64,
+    models: BTreeMap<String, u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CursorUsageExport {
+    daily: Vec<CursorUsageExportDay>,
+}
+
 fn letta_mod_path() -> Result<PathBuf, String> {
     let home = std::env::var("HOME").map_err(|_| "HOME is not set".to_string())?;
     Ok(PathBuf::from(home)
@@ -432,34 +459,45 @@ fn codex_usage() -> Result<CodexUsageSnapshot, String> {
     let mut auth_state = load_codex_auth()?;
     let client = usage_client("Codex")?;
 
-    match fetch_codex_usage(&client, &auth_state) {
-        Ok((usage, headers)) => {
-            let reset_credits = fetch_codex_reset_credits_best_effort(&client, &auth_state);
-            let mut snapshot = build_codex_usage_snapshot(usage, &headers, reset_credits.as_ref());
-            append_codex_local_usage(&mut snapshot, &auth_state);
-            Ok(snapshot)
-        }
+    match fetch_codex_usage_snapshot(&client, &auth_state) {
+        Ok(snapshot) => Ok(snapshot),
         Err(CodexUsageFetchError::Auth) => {
+            let previous_fingerprint = codex_auth_fingerprint(&auth_state);
+            auth_state = reload_codex_auth_source(&auth_state)?;
+            if codex_auth_fingerprint(&auth_state) != previous_fingerprint {
+                match fetch_codex_usage_snapshot(&client, &auth_state) {
+                    Ok(snapshot) => return Ok(snapshot),
+                    Err(CodexUsageFetchError::Auth) => {}
+                    Err(error) => return Err(format_codex_usage_error(error)),
+                }
+            }
             refresh_codex_auth(&client, &mut auth_state)?;
-            let (usage, headers) =
-                fetch_codex_usage(&client, &auth_state).map_err(|error| match error {
-                    CodexUsageFetchError::Auth => {
-                        "Codex session expired. Run `codex` to log in again.".to_string()
-                    }
-                    CodexUsageFetchError::RateLimited(_) => {
-                        "Codex usage is rate limited. Try again shortly.".to_string()
-                    }
-                    CodexUsageFetchError::Other(message) => message,
-                })?;
-            let reset_credits = fetch_codex_reset_credits_best_effort(&client, &auth_state);
-            let mut snapshot = build_codex_usage_snapshot(usage, &headers, reset_credits.as_ref());
-            append_codex_local_usage(&mut snapshot, &auth_state);
-            Ok(snapshot)
+            fetch_codex_usage_snapshot(&client, &auth_state).map_err(format_codex_usage_error)
         }
-        Err(CodexUsageFetchError::RateLimited(_)) => {
-            Err("Codex usage is rate limited. Try again shortly.".to_string())
+        Err(error) => Err(format_codex_usage_error(error)),
+    }
+}
+
+fn fetch_codex_usage_snapshot(
+    client: &reqwest::blocking::Client,
+    auth_state: &CodexAuthState,
+) -> Result<CodexUsageSnapshot, CodexUsageFetchError> {
+    let (usage, headers) = fetch_codex_usage(client, auth_state)?;
+    let reset_credits = fetch_codex_reset_credits_best_effort(client, auth_state);
+    let mut snapshot = build_codex_usage_snapshot(usage, &headers, reset_credits.as_ref());
+    append_codex_local_usage(&mut snapshot, auth_state);
+    Ok(snapshot)
+}
+
+fn format_codex_usage_error(error: CodexUsageFetchError) -> String {
+    match error {
+        CodexUsageFetchError::Auth => {
+            "Codex session expired. Run `codex` to log in again.".to_string()
         }
-        Err(CodexUsageFetchError::Other(message)) => Err(message),
+        CodexUsageFetchError::RateLimited(_) => {
+            "Codex usage is rate limited. Try again shortly.".to_string()
+        }
+        CodexUsageFetchError::Other(message) => message,
     }
 }
 
@@ -468,63 +506,74 @@ fn agy_usage() -> Result<CodexUsageSnapshot, String> {
     if let Some(snapshot) = probe_antigravity_ls_usage() {
         return Ok(snapshot);
     }
-    if let Some(snapshot) = probe_antigravity_usage_with_ephemeral_agy() {
-        return Ok(snapshot);
-    }
 
     Err("Antigravity usage unavailable. Start `agy` or Antigravity, then refresh.".to_string())
 }
 
 #[tauri::command]
 fn claude_usage() -> Result<CodexUsageSnapshot, String> {
-    let mut auth = load_claude_auth()
-        .ok_or_else(|| "Claude Code auth not found. Run `claude` to log in.".to_string())?;
+    let candidates = load_claude_auth_candidates();
+    if candidates.is_empty() {
+        return Err("Claude Code auth not found. Run `claude` to log in.".to_string());
+    }
     let client = usage_client("Claude Code")?;
+    let mut last_error = None;
 
-    if !claude_can_fetch_live_usage(&auth) {
-        return Ok(build_claude_status_snapshot(
-            &auth,
-            "Re-login for live usage. Run `claude` and sign in again.".to_string(),
-        ));
-    }
-
-    if claude_needs_refresh(&auth) {
-        if let Err(message) = refresh_claude_token(&client, &mut auth) {
-            return Ok(build_claude_status_snapshot(&auth, message));
+    for mut auth in candidates {
+        if !claude_can_fetch_live_usage(&auth) {
+            last_error =
+                Some("Re-login for live usage. Run `claude` and sign in again.".to_string());
+            continue;
         }
-    }
 
-    match fetch_claude_usage(&client, &auth) {
-        Ok(usage) => Ok(store_claude_last_good(build_claude_usage_snapshot(
-            usage, &auth,
-        ))),
-        Err(CodexUsageFetchError::Auth) => {
+        if claude_needs_refresh(&auth) {
             if let Err(message) = refresh_claude_token(&client, &mut auth) {
-                return Ok(build_claude_status_snapshot(&auth, message));
+                last_error = Some(message);
+                continue;
             }
-            match fetch_claude_usage(&client, &auth) {
-                Ok(usage) => Ok(store_claude_last_good(build_claude_usage_snapshot(
-                    usage, &auth,
-                ))),
-                Err(CodexUsageFetchError::Auth) => Ok(build_claude_status_snapshot(
+        }
+
+        match fetch_claude_usage(&client, &auth) {
+            Ok(usage) => {
+                return Ok(store_claude_last_good(
                     &auth,
-                    "Claude Code session expired. Run `claude` to log in again.".to_string(),
-                )),
-                Err(CodexUsageFetchError::RateLimited(retry_after)) => {
-                    Ok(claude_rate_limited_snapshot(&auth, retry_after))
+                    build_claude_usage_snapshot(usage, &auth),
+                ))
+            }
+            Err(CodexUsageFetchError::Auth) => {
+                if let Err(message) = refresh_claude_token(&client, &mut auth) {
+                    last_error = Some(message);
+                    continue;
                 }
-                Err(CodexUsageFetchError::Other(message)) => {
-                    Ok(build_claude_status_snapshot(&auth, message))
+                match fetch_claude_usage(&client, &auth) {
+                    Ok(usage) => {
+                        return Ok(store_claude_last_good(
+                            &auth,
+                            build_claude_usage_snapshot(usage, &auth),
+                        ))
+                    }
+                    Err(CodexUsageFetchError::Auth) => {
+                        last_error = Some(
+                            "Claude Code session expired. Run `claude` to log in again."
+                                .to_string(),
+                        );
+                    }
+                    Err(CodexUsageFetchError::RateLimited(retry_after)) => {
+                        return Ok(claude_rate_limited_snapshot(&auth, retry_after));
+                    }
+                    Err(CodexUsageFetchError::Other(message)) => last_error = Some(message),
                 }
             }
-        }
-        Err(CodexUsageFetchError::RateLimited(retry_after)) => {
-            Ok(claude_rate_limited_snapshot(&auth, retry_after))
-        }
-        Err(CodexUsageFetchError::Other(message)) => {
-            Ok(build_claude_status_snapshot(&auth, message))
+            Err(CodexUsageFetchError::RateLimited(retry_after)) => {
+                return Ok(claude_rate_limited_snapshot(&auth, retry_after));
+            }
+            Err(CodexUsageFetchError::Other(message)) => last_error = Some(message),
         }
     }
+
+    Err(last_error.unwrap_or_else(|| {
+        "Claude Code usage unavailable. Run `claude` to log in again.".to_string()
+    }))
 }
 
 #[tauri::command]
@@ -562,7 +611,13 @@ fn cursor_usage() -> Result<CodexUsageSnapshot, String> {
                 .and_then(Value::as_str)
                 .map(format_plan_label)
         });
-    build_cursor_usage_snapshot(usage, plan)
+    let mut snapshot = build_cursor_usage_snapshot(usage, plan)?;
+    if let Ok(access_token) = cursor_access_token(&auth) {
+        if let Ok(export) = fetch_cursor_usage_export(&client, &access_token, local_now()) {
+            append_cursor_usage_export(&mut snapshot, &export, local_now());
+        }
+    }
+    Ok(snapshot)
 }
 
 #[tauri::command]
@@ -666,7 +721,7 @@ fn load_codex_auth() -> Result<CodexAuthState, String> {
     if let Some(auth) = load_codex_auth_from_keychain() {
         return Ok(CodexAuthState {
             auth,
-            source: CodexAuthSource::Keychain,
+            source: CodexAuthSource::Keychain(CODEX_KEYCHAIN_SERVICE.to_string()),
         });
     }
 
@@ -858,6 +913,7 @@ fn refresh_codex_auth(
     client: &reqwest::blocking::Client,
     auth_state: &mut CodexAuthState,
 ) -> Result<(), String> {
+    let source_fingerprint = codex_auth_fingerprint(auth_state);
     let refresh_token = auth_state
         .auth
         .tokens
@@ -902,14 +958,88 @@ fn refresh_codex_auth(
         .or_else(|| tokens.refresh_token.clone());
     tokens.id_token = refreshed.id_token.or_else(|| tokens.id_token.clone());
     auth_state.auth.last_refresh = Some(now_iso());
+    save_codex_auth(auth_state, &source_fingerprint)?;
+    Ok(())
+}
 
-    if let CodexAuthSource::File(path) = &auth_state.source {
-        if let Ok(text) = serde_json::to_string_pretty(&auth_state.auth) {
-            let _ = fs::write(path, text);
+fn reload_codex_auth_source(auth_state: &CodexAuthState) -> Result<CodexAuthState, String> {
+    let auth = match &auth_state.source {
+        CodexAuthSource::File(path) => {
+            let text = fs::read_to_string(path).map_err(|error| {
+                format!(
+                    "Failed to re-read Codex auth file {}: {error}",
+                    path.display()
+                )
+            })?;
+            parse_codex_auth_payload(&text)
+                .filter(has_codex_auth_token)
+                .ok_or_else(|| {
+                    format!(
+                        "Codex auth file {} no longer contains valid credentials.",
+                        path.display()
+                    )
+                })?
+        }
+        CodexAuthSource::Keychain(service) => read_keychain_password(service, None)
+            .and_then(|text| parse_codex_auth_payload(&text))
+            .filter(has_codex_auth_token)
+            .ok_or_else(|| {
+                "Codex Keychain credentials are unavailable. Run `codex` to log in again."
+                    .to_string()
+            })?,
+    };
+    Ok(CodexAuthState {
+        auth,
+        source: auth_state.source.clone(),
+    })
+}
+
+fn save_codex_auth(
+    auth_state: &CodexAuthState,
+    expected_source_fingerprint: &str,
+) -> Result<(), String> {
+    if codex_source_fingerprint(auth_state).as_deref() != Some(expected_source_fingerprint) {
+        return Err(
+            "Codex credentials changed while refreshing; retry usage to use the newest login."
+                .to_string(),
+        );
+    }
+    let text = serde_json::to_string_pretty(&auth_state.auth)
+        .map_err(|error| format!("Failed to encode refreshed Codex credentials: {error}"))?;
+    match &auth_state.source {
+        CodexAuthSource::File(path) => fs::write(path, text).map_err(|error| {
+            format!(
+                "Failed to save refreshed Codex credentials to {}: {error}",
+                path.display()
+            )
+        }),
+        CodexAuthSource::Keychain(service) => {
+            write_keychain_password(service, &text).map_err(|error| {
+                format!("Failed to save refreshed Codex Keychain credentials: {error}")
+            })
         }
     }
+}
 
-    Ok(())
+fn codex_source_fingerprint(auth_state: &CodexAuthState) -> Option<String> {
+    reload_codex_auth_source(auth_state)
+        .ok()
+        .map(|state| codex_auth_fingerprint(&state))
+}
+
+fn codex_auth_fingerprint(auth_state: &CodexAuthState) -> String {
+    let mut hasher = Sha256::new();
+    if let Some(tokens) = auth_state.auth.tokens.as_ref() {
+        for value in [
+            &tokens.access_token,
+            &tokens.refresh_token,
+            &tokens.account_id,
+        ] {
+            hasher.update(value.as_deref().unwrap_or_default().as_bytes());
+            hasher.update([0]);
+        }
+    }
+    format!("{:x}", hasher.finalize())
 }
 
 fn build_codex_usage_snapshot(
@@ -1040,9 +1170,7 @@ fn append_codex_local_usage(snapshot: &mut CodexUsageSnapshot, auth_state: &Code
         return;
     };
 
-    let now = time::OffsetDateTime::now_utc();
-    let today_key = local_day_key(now);
-    let yesterday_key = local_day_key(now - time::Duration::days(1));
+    let (today_key, yesterday_key) = codex_history_day_keys(local_now());
     let today = usage
         .daily
         .iter()
@@ -1097,7 +1225,7 @@ fn append_codex_local_usage(snapshot: &mut CodexUsageSnapshot, auth_state: &Code
         snapshot.lines.push(CodexMetricLine::BarChart {
             label: "Usage Trend".to_string(),
             points: chart_points,
-            note: Some("Estimated from local Codex logs for the selected account.".to_string()),
+            note: Some("Estimated from local Codex logs for this home.".to_string()),
             color: Some("#74AA9C".to_string()),
         });
     }
@@ -1113,29 +1241,93 @@ fn append_codex_local_usage(snapshot: &mut CodexUsageSnapshot, auth_state: &Code
 fn codex_ccusage_daily(auth_state: &CodexAuthState) -> Option<CcusageDailyUsage> {
     let key = codex_ccusage_cache_key(auth_state);
     let cache = CODEX_CCUSAGE_CACHE.get_or_init(|| Mutex::new(None));
-    if let Ok(guard) = cache.lock() {
-        if let Some(entry) = guard.as_ref() {
-            if entry.key == key && entry.fetched_at.elapsed() < CCUSAGE_CACHE_TTL {
-                return Some(entry.usage.clone());
+    if let Some(usage) = cached_codex_ccusage_usage(cache, &key) {
+        return Some(usage);
+    }
+
+    let in_flight = CODEX_CCUSAGE_IN_FLIGHT.get_or_init(|| Mutex::new(HashSet::new()));
+    let is_leader = in_flight.lock().ok()?.insert(key.clone());
+    if !is_leader {
+        let deadline = Instant::now() + CCUSAGE_TIMEOUT;
+        loop {
+            if let Some(usage) = cached_codex_ccusage_usage(cache, &key) {
+                return Some(usage);
             }
+            let still_running = in_flight
+                .lock()
+                .ok()
+                .is_some_and(|guard| guard.contains(&key));
+            if !still_running {
+                return codex_ccusage_daily(auth_state);
+            }
+            if Instant::now() >= deadline {
+                return None;
+            }
+            thread::sleep(Duration::from_millis(50));
         }
     }
 
-    let since = codex_ccusage_since_string(30);
-    let home_path = codex_home_for_ccusage(auth_state);
-    let usage = run_ccusage_codex_daily(&since, home_path.as_deref())?;
+    let usage = (|| {
+        let since = codex_ccusage_since_string(30);
+        let home_path = codex_home_for_ccusage(auth_state);
+        run_ccusage_codex_daily(&since, home_path.as_deref())
+    })();
+
+    let Some(usage) = usage else {
+        if let Ok(mut guard) = in_flight.lock() {
+            guard.remove(&key);
+        }
+        return None;
+    };
+    publish_codex_ccusage_usage(cache, in_flight, key, &usage);
+    Some(usage)
+}
+
+fn cached_codex_ccusage_usage(
+    cache: &Mutex<Option<CcusageCacheEntry>>,
+    key: &str,
+) -> Option<CcusageDailyUsage> {
+    cache
+        .lock()
+        .ok()
+        .and_then(|guard| {
+            guard
+                .as_ref()
+                .filter(|entry| entry.key == key && entry.fetched_at.elapsed() < CCUSAGE_CACHE_TTL)
+                .cloned()
+        })
+        .map(|entry| entry.usage)
+}
+
+fn publish_codex_ccusage_usage(
+    cache: &Mutex<Option<CcusageCacheEntry>>,
+    in_flight: &Mutex<HashSet<String>>,
+    key: String,
+    usage: &CcusageDailyUsage,
+) {
     if let Ok(mut guard) = cache.lock() {
         *guard = Some(CcusageCacheEntry {
-            key,
+            key: key.clone(),
             fetched_at: Instant::now(),
             usage: usage.clone(),
         });
     }
-    Some(usage)
+    if let Ok(mut guard) = in_flight.lock() {
+        guard.remove(&key);
+    }
 }
 
 fn codex_ccusage_cache_key(auth_state: &CodexAuthState) -> String {
-    codex_home_for_ccusage(auth_state).unwrap_or_else(|| "default".to_string())
+    let home = codex_home_for_ccusage(auth_state).unwrap_or_else(|| "default".to_string());
+    let account = auth_state
+        .auth
+        .tokens
+        .as_ref()
+        .and_then(|tokens| tokens.account_id.as_deref())
+        .map(str::trim)
+        .filter(|account| !account.is_empty())
+        .unwrap_or("unresolved");
+    format!("{home}\u{0}{account}")
 }
 
 fn codex_home_for_ccusage(auth_state: &CodexAuthState) -> Option<String> {
@@ -1147,7 +1339,7 @@ fn codex_home_for_ccusage(auth_state: &CodexAuthState) -> Option<String> {
     }
     match &auth_state.source {
         CodexAuthSource::File(path) => path.parent().map(|path| path.to_string_lossy().to_string()),
-        CodexAuthSource::Keychain => None,
+        CodexAuthSource::Keychain(_) => None,
     }
 }
 
@@ -1350,12 +1542,30 @@ fn enriched_cli_path() -> String {
 }
 
 fn codex_ccusage_since_string(days_back: i64) -> String {
-    let since = time::OffsetDateTime::now_utc() - time::Duration::days(days_back);
+    codex_ccusage_since_string_at(local_now(), days_back)
+}
+
+fn codex_ccusage_since_string_at(now: time::OffsetDateTime, days_back: i64) -> String {
+    let since = now - time::Duration::days(days_back);
     format!(
         "{:04}{:02}{:02}",
         since.year(),
         u8::from(since.month()),
         since.day()
+    )
+}
+
+fn local_now() -> time::OffsetDateTime {
+    let now = time::OffsetDateTime::now_utc();
+    time::UtcOffset::current_local_offset()
+        .map(|offset| now.to_offset(offset))
+        .unwrap_or(now)
+}
+
+fn codex_history_day_keys(now: time::OffsetDateTime) -> (String, String) {
+    (
+        local_day_key(now),
+        local_day_key(now - time::Duration::days(1)),
     )
 }
 
@@ -1835,6 +2045,48 @@ fn read_keychain_password(service: &str, account: Option<&str>) -> Option<String
     }
 }
 
+fn write_keychain_password(service: &str, value: &str) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let account = keychain_account_for_service(service)?;
+        set_generic_password(service, &account, value.as_bytes())
+            .map_err(|error| format!("Keychain update failed: {error}"))
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (service, value);
+        Err("Keychain writes require macOS".to_string())
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn keychain_account_for_service(service: &str) -> Result<String, String> {
+    let output = Command::new("security")
+        .args(["find-generic-password", "-s", service])
+        .output()
+        .map_err(|error| format!("could not inspect Keychain item: {error}"))?;
+    if !output.status.success() {
+        return Err(
+            "Keychain item is unavailable; run the provider CLI to log in again.".to_string(),
+        );
+    }
+    let metadata = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    metadata
+        .lines()
+        .find_map(|line| line.trim().strip_prefix("\"acct\"<blob>=\""))
+        .and_then(|value| value.strip_suffix('"'))
+        .filter(|account| !account.is_empty())
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| {
+            "Keychain item account is unavailable; refusing to overwrite credentials.".to_string()
+        })
+}
+
 fn parse_json_or_hex<T: for<'de> Deserialize<'de>>(text: &str) -> Option<T> {
     if let Ok(value) = serde_json::from_str::<T>(text) {
         return Some(value);
@@ -1901,18 +2153,22 @@ fn progress_metric(
     }
 }
 
-fn load_claude_auth() -> Option<ClaudeAuthState> {
+fn load_claude_auth_candidates() -> Vec<ClaudeAuthState> {
     let oauth_config = claude_oauth_config();
-    let stored = load_stored_claude_auth(&oauth_config);
-    let env_access_token = env_text("CLAUDE_CODE_OAUTH_TOKEN");
-    let Some(env_access_token) = env_access_token else {
-        return stored;
-    };
+    claude_auth_candidates_from(
+        load_stored_claude_auths(&oauth_config),
+        env_text("CLAUDE_CODE_OAUTH_TOKEN"),
+        oauth_config,
+    )
+}
 
-    let mut credentials = stored
-        .as_ref()
-        .map(|state| state.credentials.clone())
-        .unwrap_or(ClaudeCredentialsFile {
+fn claude_auth_candidates_from(
+    mut candidates: Vec<ClaudeAuthState>,
+    env_access_token: Option<String>,
+    oauth_config: ClaudeOauthConfig,
+) -> Vec<ClaudeAuthState> {
+    if let Some(env_access_token) = env_access_token {
+        let mut credentials = ClaudeCredentialsFile {
             claude_ai_oauth: Some(ClaudeOauth {
                 access_token: None,
                 refresh_token: None,
@@ -1921,31 +2177,31 @@ fn load_claude_auth() -> Option<ClaudeAuthState> {
                 rate_limit_tier: None,
                 scopes: None,
             }),
+        };
+        if let Some(oauth) = credentials.claude_ai_oauth.as_mut() {
+            oauth.access_token = Some(env_access_token);
+        }
+        candidates.push(ClaudeAuthState {
+            credentials,
+            service_name: None,
+            file_path: None,
+            inference_only: true,
+            oauth_config,
         });
-    let oauth = credentials.claude_ai_oauth.get_or_insert(ClaudeOauth {
-        access_token: None,
-        refresh_token: None,
-        expires_at: None,
-        subscription_type: None,
-        rate_limit_tier: None,
-        scopes: None,
-    });
-    oauth.access_token = Some(env_access_token);
-
-    Some(ClaudeAuthState {
-        credentials,
-        service_name: stored.as_ref().and_then(|state| state.service_name.clone()),
-        file_path: stored.as_ref().and_then(|state| state.file_path.clone()),
-        inference_only: true,
-        oauth_config,
-    })
+    }
+    candidates
 }
 
-fn load_stored_claude_auth(oauth_config: &ClaudeOauthConfig) -> Option<ClaudeAuthState> {
-    load_claude_keychain_auth(oauth_config).or_else(|| load_claude_file_auth(oauth_config))
+fn load_stored_claude_auths(oauth_config: &ClaudeOauthConfig) -> Vec<ClaudeAuthState> {
+    let mut candidates = load_claude_keychain_auths(oauth_config);
+    if let Some(file_auth) = load_claude_file_auth(oauth_config) {
+        candidates.push(file_auth);
+    }
+    candidates
 }
 
-fn load_claude_keychain_auth(oauth_config: &ClaudeOauthConfig) -> Option<ClaudeAuthState> {
+fn load_claude_keychain_auths(oauth_config: &ClaudeOauthConfig) -> Vec<ClaudeAuthState> {
+    let mut candidates = Vec::new();
     for service in claude_keychain_service_candidates(oauth_config) {
         let Some(text) = read_keychain_password(&service, None) else {
             continue;
@@ -1956,7 +2212,7 @@ fn load_claude_keychain_auth(oauth_config: &ClaudeOauthConfig) -> Option<ClaudeA
         if !claude_credentials_have_access_token(&credentials) {
             continue;
         }
-        return Some(ClaudeAuthState {
+        candidates.push(ClaudeAuthState {
             credentials,
             service_name: Some(service),
             file_path: None,
@@ -1964,7 +2220,7 @@ fn load_claude_keychain_auth(oauth_config: &ClaudeOauthConfig) -> Option<ClaudeA
             oauth_config: oauth_config.clone(),
         });
     }
-    None
+    candidates
 }
 
 fn load_claude_file_auth(oauth_config: &ClaudeOauthConfig) -> Option<ClaudeAuthState> {
@@ -2161,6 +2417,8 @@ fn refresh_claude_token(
     client: &reqwest::blocking::Client,
     auth: &mut ClaudeAuthState,
 ) -> Result<(), String> {
+    *auth = reload_claude_auth_source(auth)?;
+    let source_fingerprint = claude_auth_fingerprint(auth);
     let oauth = auth
         .credentials
         .claude_ai_oauth
@@ -2203,27 +2461,107 @@ fn refresh_claude_token(
         oauth.expires_at =
             Some((time::OffsetDateTime::now_utc().unix_timestamp() + expires_in) * 1000);
     }
-    save_claude_auth(auth);
+    save_claude_auth(auth, &source_fingerprint)?;
     Ok(())
 }
 
-fn save_claude_auth(auth: &ClaudeAuthState) {
-    let Ok(text) = serde_json::to_string(&auth.credentials) else {
-        return;
-    };
-    if let Some(path) = &auth.file_path {
-        let _ = fs::write(path, text);
+fn reload_claude_auth_source(auth: &ClaudeAuthState) -> Result<ClaudeAuthState, String> {
+    let credentials = if let Some(path) = &auth.file_path {
+        let text = fs::read_to_string(path).map_err(|error| {
+            format!(
+                "Failed to re-read Claude Code credentials {}: {error}",
+                path.display()
+            )
+        })?;
+        parse_json_or_hex::<ClaudeCredentialsFile>(&text)
+            .filter(claude_credentials_have_access_token)
+            .ok_or_else(|| {
+                format!(
+                    "Claude Code credentials {} no longer contain a valid access token.",
+                    path.display()
+                )
+            })?
     } else if let Some(service) = &auth.service_name {
-        #[cfg(target_os = "macos")]
-        {
-            let _ = Command::new("security")
-                .args(["delete-generic-password", "-s", service])
-                .output();
-            let _ = Command::new("security")
-                .args(["add-generic-password", "-s", service, "-w", &text])
-                .output();
+        read_keychain_password(service, None)
+            .and_then(|text| parse_json_or_hex::<ClaudeCredentialsFile>(&text))
+            .filter(claude_credentials_have_access_token)
+            .ok_or_else(|| {
+                "Claude Code Keychain credentials are unavailable. Run `claude` to log in again."
+                    .to_string()
+            })?
+    } else {
+        return Err(
+            "Claude Code environment token cannot be refreshed for live usage.".to_string(),
+        );
+    };
+
+    Ok(ClaudeAuthState {
+        credentials,
+        service_name: auth.service_name.clone(),
+        file_path: auth.file_path.clone(),
+        inference_only: auth.inference_only,
+        oauth_config: auth.oauth_config.clone(),
+    })
+}
+
+fn save_claude_auth(
+    auth: &ClaudeAuthState,
+    expected_source_fingerprint: &str,
+) -> Result<(), String> {
+    if auth.inference_only {
+        return Err(
+            "Claude Code environment token cannot be refreshed for live usage.".to_string(),
+        );
+    }
+    if claude_source_fingerprint(auth).as_deref() != Some(expected_source_fingerprint) {
+        return Err("Claude Code credentials changed while refreshing; retry usage to use the newest login.".to_string());
+    }
+    let text = serde_json::to_string(&auth.credentials)
+        .map_err(|error| format!("Failed to encode refreshed Claude Code credentials: {error}"))?;
+    if let Some(path) = &auth.file_path {
+        fs::write(path, text).map_err(|error| {
+            format!(
+                "Failed to save refreshed Claude Code credentials to {}: {error}",
+                path.display()
+            )
+        })?;
+    } else if let Some(service) = &auth.service_name {
+        write_keychain_password(service, &text).map_err(|error| {
+            format!("Failed to save refreshed Claude Code Keychain credentials: {error}")
+        })?;
+    } else {
+        return Err("Claude Code credential source is unavailable for persistence.".to_string());
+    }
+    Ok(())
+}
+
+fn claude_source_fingerprint(auth: &ClaudeAuthState) -> Option<String> {
+    let credentials = if let Some(path) = &auth.file_path {
+        fs::read_to_string(path)
+            .ok()
+            .and_then(|text| parse_json_or_hex::<ClaudeCredentialsFile>(&text))
+    } else if let Some(service) = &auth.service_name {
+        read_keychain_password(service, None)
+            .and_then(|text| parse_json_or_hex::<ClaudeCredentialsFile>(&text))
+    } else {
+        None
+    }?;
+    Some(claude_credentials_fingerprint(&credentials))
+}
+
+fn claude_credentials_fingerprint(credentials: &ClaudeCredentialsFile) -> String {
+    let mut hasher = Sha256::new();
+    if let Some(oauth) = credentials.claude_ai_oauth.as_ref() {
+        for value in [&oauth.access_token, &oauth.refresh_token] {
+            hasher.update(value.as_deref().unwrap_or_default().as_bytes());
+            hasher.update([0]);
         }
     }
+    format!("{:x}", hasher.finalize())
+}
+
+fn claude_auth_fingerprint(auth: &ClaudeAuthState) -> String {
+    claude_credentials_fingerprint(&auth.credentials)
 }
 
 fn build_claude_usage_snapshot(usage: Value, auth: &ClaudeAuthState) -> CodexUsageSnapshot {
@@ -2283,10 +2621,13 @@ fn build_claude_usage_snapshot(usage: Value, auth: &ClaudeAuthState) -> CodexUsa
     }
 }
 
-fn store_claude_last_good(snapshot: CodexUsageSnapshot) -> CodexUsageSnapshot {
-    let cache = CLAUDE_LAST_GOOD_USAGE.get_or_init(|| Mutex::new(None));
+fn store_claude_last_good(
+    auth: &ClaudeAuthState,
+    snapshot: CodexUsageSnapshot,
+) -> CodexUsageSnapshot {
+    let cache = CLAUDE_LAST_GOOD_USAGE.get_or_init(|| Mutex::new(HashMap::new()));
     if let Ok(mut guard) = cache.lock() {
-        *guard = Some(snapshot.clone());
+        guard.insert(claude_auth_fingerprint(auth), snapshot.clone());
     }
     snapshot
 }
@@ -2295,23 +2636,22 @@ fn claude_rate_limited_snapshot(
     auth: &ClaudeAuthState,
     retry_after_seconds: Option<u64>,
 ) -> CodexUsageSnapshot {
-    if let Some(mut snapshot) = read_claude_last_good() {
+    if let Some(mut snapshot) = read_claude_last_good(auth) {
         snapshot.lines.push(CodexMetricLine::Text {
             label: "Status".to_string(),
             value: claude_rate_limit_message(retry_after_seconds, true),
         });
-        snapshot.fetched_at = now_iso();
         return snapshot;
     }
     build_claude_status_snapshot(auth, claude_rate_limit_message(retry_after_seconds, false))
 }
 
-fn read_claude_last_good() -> Option<CodexUsageSnapshot> {
+fn read_claude_last_good(auth: &ClaudeAuthState) -> Option<CodexUsageSnapshot> {
     CLAUDE_LAST_GOOD_USAGE
-        .get_or_init(|| Mutex::new(None))
+        .get_or_init(|| Mutex::new(HashMap::new()))
         .lock()
         .ok()
-        .and_then(|guard| guard.clone())
+        .and_then(|guard| guard.get(&claude_auth_fingerprint(auth)).cloned())
 }
 
 fn claude_rate_limit_message(retry_after_seconds: Option<u64>, has_cached_usage: bool) -> String {
@@ -2427,6 +2767,353 @@ fn cursor_access_token(auth: &CursorAuthState) -> Result<String, String> {
         .ok_or_else(|| {
             "Cursor access token missing. Sign in via Cursor app or run `agent login`.".to_string()
         })
+}
+
+fn cursor_session_from_access_token(access_token: &str) -> Option<CursorSession> {
+    let payload = access_token.split('.').nth(1)?;
+    let decoded = URL_SAFE_NO_PAD
+        .decode(payload)
+        .or_else(|_| URL_SAFE.decode(payload))
+        .ok()?;
+    let payload = serde_json::from_slice::<Value>(&decoded).ok()?;
+    let subject = payload.get("sub")?.as_str()?.trim();
+    let mut parts = subject.split('|');
+    let first = parts.next()?.trim();
+    let user_id = parts.next().unwrap_or(first).trim();
+    if user_id.is_empty() {
+        return None;
+    }
+    Some(CursorSession {
+        user_id: user_id.to_string(),
+        cookie_value: format!("{user_id}%3A%3A{access_token}"),
+    })
+}
+
+fn fetch_cursor_usage_export(
+    client: &reqwest::blocking::Client,
+    access_token: &str,
+    now: time::OffsetDateTime,
+) -> Result<CursorUsageExport, ()> {
+    let session = cursor_session_from_access_token(access_token).ok_or(())?;
+    let end_date = now.unix_timestamp_nanos() / 1_000_000;
+    let start_date = (now - time::Duration::days(30)).unix_timestamp_nanos() / 1_000_000;
+    let response = client
+        .get(CURSOR_USAGE_EXPORT_URL)
+        .query(&[
+            ("startDate", start_date.to_string()),
+            ("endDate", end_date.to_string()),
+            ("strategy", "tokens".to_string()),
+        ])
+        .header(
+            reqwest::header::COOKIE,
+            format!("WorkosCursorSessionToken={}", session.cookie_value),
+        )
+        .header(reqwest::header::ACCEPT, "text/csv")
+        .send()
+        .map_err(|_| ())?;
+    if !response.status().is_success() {
+        return Err(());
+    }
+    let csv = response.text().map_err(|_| ())?;
+    parse_cursor_usage_export(&csv, now.offset()).map_err(|_| ())
+}
+
+fn parse_cursor_usage_export(
+    csv: &str,
+    local_offset: time::UtcOffset,
+) -> Result<CursorUsageExport, ()> {
+    const REQUIRED_COLUMNS: [&str; 6] = [
+        "Date",
+        "Model",
+        "Input (w/ Cache Write)",
+        "Input (w/o Cache Write)",
+        "Cache Read",
+        "Output Tokens",
+    ];
+
+    let rows = parse_cursor_csv_rows(csv)?;
+    let Some(header) = rows.first() else {
+        return Err(());
+    };
+    let header = header
+        .iter()
+        .map(|value| value.trim().trim_start_matches('\u{feff}').to_string())
+        .collect::<Vec<_>>();
+    if header.len() != header.iter().collect::<HashSet<_>>().len() {
+        return Err(());
+    }
+    let mut columns = BTreeMap::new();
+    for required in REQUIRED_COLUMNS {
+        let Some(index) = header.iter().position(|value| value == required) else {
+            return Err(());
+        };
+        columns.insert(required, index);
+    }
+
+    let mut daily: BTreeMap<String, CursorUsageExportDay> = BTreeMap::new();
+    for row in rows.iter().skip(1) {
+        if row.len() != header.len() {
+            continue;
+        }
+        let Some(date) = cursor_export_day_key(&row[columns["Date"]], local_offset) else {
+            continue;
+        };
+        let model = row[columns["Model"]].trim();
+        let Some(tokens) = [
+            "Input (w/ Cache Write)",
+            "Input (w/o Cache Write)",
+            "Cache Read",
+            "Output Tokens",
+        ]
+        .iter()
+        .map(|column| parse_cursor_token_value(&row[columns[*column]]))
+        .try_fold(0_u64, |total, value| total.checked_add(value?)) else {
+            continue;
+        };
+        if model.is_empty() {
+            continue;
+        }
+        let day = daily
+            .entry(date.clone())
+            .or_insert_with(|| CursorUsageExportDay {
+                date,
+                total_tokens: 0,
+                models: BTreeMap::new(),
+            });
+        let Some(total_tokens) = day.total_tokens.checked_add(tokens) else {
+            continue;
+        };
+        let model_tokens = day.models.get(model).copied().unwrap_or(0);
+        let Some(model_tokens) = model_tokens.checked_add(tokens) else {
+            continue;
+        };
+        day.total_tokens = total_tokens;
+        day.models.insert(model.to_string(), model_tokens);
+    }
+    Ok(CursorUsageExport {
+        daily: daily.into_values().collect(),
+    })
+}
+
+fn parse_cursor_csv_rows(csv: &str) -> Result<Vec<Vec<String>>, ()> {
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum State {
+        Start,
+        Unquoted,
+        Quoted,
+        QuoteClosed,
+    }
+
+    let mut rows = Vec::new();
+    let mut row = Vec::new();
+    let mut field = String::new();
+    let mut state = State::Start;
+    let mut characters = csv.chars().peekable();
+    while let Some(character) = characters.next() {
+        if state == State::Quoted {
+            if character == '"' {
+                if characters.peek() == Some(&'"') {
+                    field.push('"');
+                    characters.next();
+                } else {
+                    state = State::QuoteClosed;
+                }
+            } else {
+                field.push(character);
+            }
+            continue;
+        }
+        match (state, character) {
+            (State::Start, '"') => state = State::Quoted,
+            (State::Start, ',') => {
+                row.push(std::mem::take(&mut field));
+            }
+            (State::Start, '\r' | '\n') => {
+                if character == '\r' && characters.peek() == Some(&'\n') {
+                    characters.next();
+                }
+                row.push(std::mem::take(&mut field));
+                if row.iter().any(|value| !value.is_empty()) {
+                    rows.push(std::mem::take(&mut row));
+                } else {
+                    row.clear();
+                }
+            }
+            (State::Start, value) => {
+                field.push(value);
+                state = State::Unquoted;
+            }
+            (State::Unquoted, ',') => {
+                row.push(std::mem::take(&mut field));
+                state = State::Start;
+            }
+            (State::Unquoted, '\r' | '\n') => {
+                if character == '\r' && characters.peek() == Some(&'\n') {
+                    characters.next();
+                }
+                row.push(std::mem::take(&mut field));
+                if row.iter().any(|value| !value.is_empty()) {
+                    rows.push(std::mem::take(&mut row));
+                } else {
+                    row.clear();
+                }
+                state = State::Start;
+            }
+            (State::Unquoted, '"') => return Err(()),
+            (State::Unquoted, value) => field.push(value),
+            (State::QuoteClosed, ',') => {
+                row.push(std::mem::take(&mut field));
+                state = State::Start;
+            }
+            (State::QuoteClosed, '\r' | '\n') => {
+                if character == '\r' && characters.peek() == Some(&'\n') {
+                    characters.next();
+                }
+                row.push(std::mem::take(&mut field));
+                if row.iter().any(|value| !value.is_empty()) {
+                    rows.push(std::mem::take(&mut row));
+                } else {
+                    row.clear();
+                }
+                state = State::Start;
+            }
+            (State::QuoteClosed, _) => return Err(()),
+            (State::Quoted, _) => unreachable!(),
+        }
+    }
+    if state == State::Quoted {
+        return Err(());
+    }
+    if !field.is_empty() || !row.is_empty() || state == State::QuoteClosed {
+        row.push(field);
+        if row.iter().any(|value| !value.is_empty()) {
+            rows.push(row);
+        }
+    }
+    Ok(rows)
+}
+
+fn parse_cursor_token_value(value: &str) -> Option<u64> {
+    let value = value.trim();
+    if value.is_empty() {
+        return Some(0);
+    }
+    let groups = value.split(',').collect::<Vec<_>>();
+    if groups.len() > 1
+        && (groups[0].is_empty()
+            || groups[0].len() > 3
+            || !groups[0].bytes().all(|byte| byte.is_ascii_digit())
+            || groups[1..]
+                .iter()
+                .any(|group| group.len() != 3 || !group.bytes().all(|byte| byte.is_ascii_digit())))
+    {
+        return None;
+    }
+    let digits = groups.concat();
+    if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    digits.parse().ok()
+}
+
+fn cursor_export_day_key(value: &str, local_offset: time::UtcOffset) -> Option<String> {
+    let value = value.trim();
+    if let Ok(timestamp) =
+        time::OffsetDateTime::parse(value, &time::format_description::well_known::Rfc3339)
+    {
+        return Some(local_day_key(timestamp.to_offset(local_offset)));
+    }
+    let date = value.get(..10)?;
+    let year = date.get(..4)?.parse::<i32>().ok()?;
+    let month = date.get(5..7)?.parse::<u8>().ok()?;
+    let day = date.get(8..10)?.parse::<u8>().ok()?;
+    let month = time::Month::try_from(month).ok()?;
+    time::Date::from_calendar_date(year, month, day).ok()?;
+    Some(date.to_string())
+}
+
+fn append_cursor_usage_export(
+    snapshot: &mut CodexUsageSnapshot,
+    export: &CursorUsageExport,
+    now: time::OffsetDateTime,
+) {
+    let (today_key, yesterday_key) = codex_history_day_keys(now);
+    let today = export.daily.iter().find(|day| day.date == today_key);
+    let yesterday = export.daily.iter().find(|day| day.date == yesterday_key);
+    snapshot.lines.push(CodexMetricLine::Text {
+        label: "Today".to_string(),
+        value: format_cursor_tokens(today.map(|day| day.total_tokens).unwrap_or(0)),
+    });
+    snapshot.lines.push(CodexMetricLine::Text {
+        label: "Yesterday".to_string(),
+        value: format_cursor_tokens(yesterday.map(|day| day.total_tokens).unwrap_or(0)),
+    });
+    let total_tokens = export
+        .daily
+        .iter()
+        .fold(0_u64, |total, day| total.saturating_add(day.total_tokens));
+    snapshot.lines.push(CodexMetricLine::Text {
+        label: "Last 30 Days".to_string(),
+        value: format_cursor_tokens(total_tokens),
+    });
+
+    let mut points = export
+        .daily
+        .iter()
+        .map(|day| CodexBarChartPoint {
+            label: cursor_day_display_label(&day.date),
+            value: day.total_tokens as f64,
+            value_label: format_cursor_tokens(day.total_tokens),
+        })
+        .collect::<Vec<_>>();
+    if points.len() > 31 {
+        points = points.split_off(points.len() - 31);
+    }
+    if !points.is_empty() {
+        snapshot.lines.push(CodexMetricLine::BarChart {
+            label: "Usage Trend".to_string(),
+            points,
+            note: Some("From your Cursor usage export.".to_string()),
+            color: Some("#74AA9C".to_string()),
+        });
+    }
+
+    let mut models = BTreeMap::<String, u64>::new();
+    for day in &export.daily {
+        for (model, tokens) in &day.models {
+            *models.entry(model.clone()).or_default() += tokens;
+        }
+    }
+    let model_total = models
+        .values()
+        .fold(0_u64, |total, tokens| total.saturating_add(*tokens));
+    let mut shares = models.into_iter().collect::<Vec<_>>();
+    shares.sort_by(|(left_model, left_tokens), (right_model, right_tokens)| {
+        right_tokens
+            .cmp(left_tokens)
+            .then_with(|| left_model.cmp(right_model))
+    });
+    for (model, tokens) in shares.into_iter().take(5) {
+        if model_total == 0 || tokens == 0 {
+            continue;
+        }
+        snapshot.lines.push(CodexMetricLine::Text {
+            label: model,
+            value: format_percent_label((tokens as f64 / model_total as f64) * 100.0),
+        });
+    }
+}
+
+fn format_cursor_tokens(tokens: u64) -> String {
+    format!("{} tokens", format_compact_number(tokens as f64))
+}
+
+fn cursor_day_display_label(date: &str) -> String {
+    format!(
+        "{}/{}",
+        date[5..7].trim_start_matches('0'),
+        date[8..10].trim_start_matches('0')
+    )
 }
 
 fn fetch_cursor_json(
@@ -2690,118 +3377,6 @@ fn probe_antigravity_ls_usage() -> Option<CodexUsageSnapshot> {
     None
 }
 
-fn probe_antigravity_usage_with_ephemeral_agy() -> Option<CodexUsageSnapshot> {
-    let agy_path = find_agy_binary()?;
-    let tmux_path = find_tmux_binary()?;
-    let session = format!(
-        "agent-halo-agy-usage-{}-{}",
-        std::process::id(),
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .ok()?
-            .as_millis()
-    );
-    let cwd = std::env::current_dir()
-        .ok()
-        .filter(|path| path.is_dir())
-        .or_else(home_dir)?;
-    let command = format!(
-        "exec {} --dangerously-skip-permissions",
-        shell_quote(agy_path.to_string_lossy().as_ref())
-    );
-    let status = Command::new(&tmux_path)
-        .args([
-            "new-session",
-            "-d",
-            "-s",
-            &session,
-            "-c",
-            cwd.to_string_lossy().as_ref(),
-            &command,
-        ])
-        .status()
-        .ok()?;
-    if !status.success() {
-        return None;
-    }
-
-    let deadline = Instant::now() + Duration::from_secs(12);
-    let mut snapshot = None;
-
-    while Instant::now() < deadline {
-        snapshot = probe_antigravity_ls_usage();
-        if snapshot.is_some() {
-            break;
-        }
-        thread::sleep(Duration::from_millis(350));
-    }
-
-    let _ = Command::new(&tmux_path)
-        .args(["kill-session", "-t", &session])
-        .status();
-    snapshot
-}
-
-fn find_agy_binary() -> Option<PathBuf> {
-    if let Some(path) = std::env::var_os("AGENT_HALO_AGY_PATH").map(PathBuf::from) {
-        if path.is_file() {
-            return Some(path);
-        }
-    }
-
-    let mut candidates = Vec::new();
-    if let Some(home) = home_dir() {
-        candidates.push(home.join(".local/bin/agy"));
-        candidates.push(home.join(".bun/bin/agy"));
-    }
-    candidates.push(PathBuf::from("/opt/homebrew/bin/agy"));
-    candidates.push(PathBuf::from("/usr/local/bin/agy"));
-
-    for candidate in candidates {
-        if candidate.is_file() {
-            return Some(candidate);
-        }
-    }
-
-    let output = Command::new("sh")
-        .args(["-lc", "command -v agy"])
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let path = String::from_utf8(output.stdout).ok()?;
-    let path = PathBuf::from(path.trim());
-    path.is_file().then_some(path)
-}
-
-fn find_tmux_binary() -> Option<PathBuf> {
-    for candidate in [
-        PathBuf::from("/opt/homebrew/bin/tmux"),
-        PathBuf::from("/usr/local/bin/tmux"),
-        PathBuf::from("/usr/bin/tmux"),
-    ] {
-        if candidate.is_file() {
-            return Some(candidate);
-        }
-    }
-
-    let output = Command::new("sh")
-        .args(["-lc", "command -v tmux"])
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let path = String::from_utf8(output.stdout).ok()?;
-    let path = PathBuf::from(path.trim());
-    path.is_file().then_some(path)
-}
-
-fn shell_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "'\\''"))
-}
-
 fn home_dir() -> Option<PathBuf> {
     std::env::var_os("HOME")
         .map(PathBuf::from)
@@ -3043,60 +3618,59 @@ fn build_antigravity_quota_summary_lines(response: &Value) -> Vec<CodexMetricLin
         return Vec::new();
     };
 
-    let mut lines = Vec::new();
-    for group in groups {
-        let group_label = group
-            .get("displayName")
-            .and_then(Value::as_str)
-            .map(normalize_antigravity_group_name)
-            .unwrap_or_else(|| "Antigravity models".to_string());
-        let Some(buckets) = group.get("buckets").and_then(Value::as_array) else {
+    const BUCKETS: [(&str, &str, u64); 4] = [
+        ("gemini-5h", "Gemini 5h", 5 * 60 * 60 * 1000),
+        ("gemini-weekly", "Gemini Weekly", 7 * 24 * 60 * 60 * 1000),
+        ("3p-5h", "Claude and GPT 5h", 5 * 60 * 60 * 1000),
+        (
+            "3p-weekly",
+            "Claude and GPT Weekly",
+            7 * 24 * 60 * 60 * 1000,
+        ),
+    ];
+    let mut resolved = BTreeMap::new();
+
+    for bucket in groups
+        .iter()
+        .filter_map(|group| group.get("buckets").and_then(Value::as_array))
+        .flatten()
+    {
+        let Some(id) = bucket.get("bucketId").and_then(Value::as_str) else {
             continue;
         };
-        for bucket in buckets {
-            let limit_label = bucket
-                .get("displayName")
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .unwrap_or("Limit");
-            let remaining = value_to_f64(bucket.get("remainingFraction"))
-                .unwrap_or(0.0)
-                .clamp(0.0, 1.0);
-            let reset_time = bucket
-                .get("resetTime")
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .map(ToOwned::to_owned);
-
-            lines.push(CodexMetricLine::Progress {
-                label: format!("{group_label} {limit_label}"),
-                used: ((1.0 - remaining) * 100.0).round().clamp(0.0, 100.0),
+        let Some((_, label, period_duration_ms)) = BUCKETS.iter().find(|(key, _, _)| *key == id)
+        else {
+            continue;
+        };
+        if resolved.contains_key(id) {
+            continue;
+        }
+        let Some(remaining) = value_to_f64(bucket.get("remainingFraction")) else {
+            continue;
+        };
+        let reset_time = bucket
+            .get("resetTime")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned);
+        resolved.insert(
+            id,
+            CodexMetricLine::Progress {
+                label: (*label).to_string(),
+                used: ((1.0 - remaining.clamp(0.0, 1.0)) * 100.0).round(),
                 limit: 100.0,
                 format: CodexProgressFormat::Percent,
                 resets_at: reset_time,
-                period_duration_ms: Some(if limit_label.to_lowercase().contains("five") {
-                    5 * 60 * 60 * 1000
-                } else {
-                    7 * 24 * 60 * 60 * 1000
-                }),
-            });
-        }
+                period_duration_ms: Some(*period_duration_ms),
+            },
+        );
     }
 
-    lines
-}
-
-fn normalize_antigravity_group_name(name: &str) -> String {
-    let lower = name.to_lowercase();
-    if lower.contains("gemini") {
-        "Gemini models".to_string()
-    } else if lower.contains("claude") || lower.contains("gpt") {
-        "Claude and GPT models".to_string()
-    } else {
-        name.trim().to_string()
-    }
+    BUCKETS
+        .iter()
+        .filter_map(|(id, _, _)| resolved.remove(*id))
+        .collect()
 }
 
 fn build_antigravity_config_lines(configs: &[Value]) -> Vec<CodexMetricLine> {
@@ -4713,5 +5287,243 @@ mod display_selection_tests {
 
         assert_eq!(preferred_display_index(&displays, Some(&preference)), None);
         assert_eq!(preferred_display_index(&displays, None), None);
+    }
+
+    fn claude_auth(access_token: &str, refresh_token: &str) -> ClaudeAuthState {
+        ClaudeAuthState {
+            credentials: ClaudeCredentialsFile {
+                claude_ai_oauth: Some(ClaudeOauth {
+                    access_token: Some(access_token.to_string()),
+                    refresh_token: Some(refresh_token.to_string()),
+                    expires_at: None,
+                    subscription_type: None,
+                    rate_limit_tier: None,
+                    scopes: Some(vec!["user:profile".to_string()]),
+                }),
+            },
+            service_name: Some("Claude Code-credentials".to_string()),
+            file_path: None,
+            inference_only: false,
+            oauth_config: ClaudeOauthConfig {
+                usage_url: CLAUDE_USAGE_URL.to_string(),
+                refresh_url: CLAUDE_REFRESH_URL.to_string(),
+                client_id: CLAUDE_CLIENT_ID.to_string(),
+                oauth_file_suffix: String::new(),
+            },
+        }
+    }
+
+    #[test]
+    fn claude_environment_token_is_a_fallback_not_a_stored_login_override() {
+        let stored = claude_auth("stored-access", "stored-refresh");
+        let candidates = claude_auth_candidates_from(
+            vec![stored.clone()],
+            Some("environment-access".to_string()),
+            stored.oauth_config.clone(),
+        );
+
+        assert_eq!(candidates.len(), 2);
+        assert_eq!(
+            claude_access_token(&candidates[0]).as_deref(),
+            Ok("stored-access")
+        );
+        assert!(!candidates[0].inference_only);
+        assert_eq!(
+            claude_access_token(&candidates[1]).as_deref(),
+            Ok("environment-access")
+        );
+        assert!(candidates[1].inference_only);
+    }
+
+    #[test]
+    fn claude_last_good_cache_is_credential_scoped() {
+        let first = claude_auth("first-access", "first-refresh");
+        let second = claude_auth("second-access", "second-refresh");
+        let snapshot = CodexUsageSnapshot {
+            provider_id: "claude".to_string(),
+            display_name: "Claude Code".to_string(),
+            plan: Some("Max".to_string()),
+            lines: vec![],
+            fetched_at: now_iso(),
+        };
+
+        store_claude_last_good(&first, snapshot);
+        assert!(read_claude_last_good(&first).is_some());
+        assert!(read_claude_last_good(&second).is_none());
+    }
+
+    #[test]
+    fn claude_rate_limit_keeps_the_last_good_timestamp() {
+        let auth = claude_auth("first-access", "first-refresh");
+        let snapshot = CodexUsageSnapshot {
+            provider_id: "claude".to_string(),
+            display_name: "Claude Code".to_string(),
+            plan: Some("Max".to_string()),
+            lines: vec![],
+            fetched_at: "2026-07-25T12:00:00Z".to_string(),
+        };
+
+        store_claude_last_good(&auth, snapshot);
+        let rate_limited = claude_rate_limited_snapshot(&auth, Some(60));
+
+        assert_eq!(rate_limited.fetched_at, "2026-07-25T12:00:00Z");
+        assert!(rate_limited
+            .lines
+            .iter()
+            .any(|line| matches!(line, CodexMetricLine::Text { label, .. } if label == "Status")));
+    }
+
+    #[test]
+    fn codex_history_cache_identity_includes_account_and_home() {
+        let base_auth = CodexAuthFile {
+            openai_api_key: None,
+            tokens: Some(CodexAuthTokens {
+                access_token: Some("access".to_string()),
+                refresh_token: Some("refresh".to_string()),
+                id_token: None,
+                account_id: Some("account-a".to_string()),
+            }),
+            last_refresh: None,
+        };
+        let first = CodexAuthState {
+            auth: base_auth.clone(),
+            source: CodexAuthSource::File(PathBuf::from("/tmp/codex-a/auth.json")),
+        };
+        let mut other_account = base_auth;
+        other_account.tokens.as_mut().unwrap().account_id = Some("account-b".to_string());
+        let second = CodexAuthState {
+            auth: other_account,
+            source: CodexAuthSource::File(PathBuf::from("/tmp/codex-a/auth.json")),
+        };
+
+        assert_ne!(
+            codex_ccusage_cache_key(&first),
+            codex_ccusage_cache_key(&second)
+        );
+    }
+
+    #[test]
+    fn codex_history_day_keys_follow_the_given_local_offset() {
+        let now = time::Date::from_calendar_date(2026, time::Month::July, 25)
+            .unwrap()
+            .with_hms(0, 30, 0)
+            .unwrap()
+            .assume_offset(time::UtcOffset::from_hms(7, 0, 0).unwrap());
+        let (today, yesterday) = codex_history_day_keys(now);
+
+        assert_eq!(today, "2026-07-25");
+        assert_eq!(yesterday, "2026-07-24");
+        assert_eq!(codex_ccusage_since_string_at(now, 30), "20260625");
+    }
+
+    #[test]
+    fn ccusage_runner_stays_on_the_replay_safe_pinned_version() {
+        assert_eq!(CCUSAGE_PACKAGE, "ccusage@20.0.18");
+    }
+
+    #[test]
+    fn ccusage_publication_caches_before_releasing_waiters() {
+        let cache = Mutex::new(None);
+        let in_flight = Mutex::new(HashSet::from(["account-key".to_string()]));
+        let usage = CcusageDailyUsage { daily: vec![] };
+
+        publish_codex_ccusage_usage(&cache, &in_flight, "account-key".to_string(), &usage);
+
+        assert!(cached_codex_ccusage_usage(&cache, "account-key").is_some());
+        assert!(!in_flight.lock().unwrap().contains("account-key"));
+    }
+
+    #[test]
+    fn cursor_session_uses_workos_jwt_subject() {
+        let payload = URL_SAFE_NO_PAD.encode(r#"{"sub":"workos|user-42"}"#);
+        let access_token = format!("header.{payload}.signature");
+
+        let session = cursor_session_from_access_token(&access_token).unwrap();
+
+        assert_eq!(session.user_id, "user-42");
+        assert_eq!(session.cookie_value, format!("user-42%3A%3A{access_token}"));
+        assert!(cursor_session_from_access_token("not-a-jwt").is_none());
+    }
+
+    #[test]
+    fn cursor_export_parser_handles_quoted_rows_and_skips_bad_tokens() {
+        let csv = concat!(
+            "Date,Model,Input (w/ Cache Write),Input (w/o Cache Write),Cache Read,Output Tokens\n",
+            "2026-07-24T23:30:00Z,\"gpt, test\",1,\"2,000\",3,4\n",
+            "2026-07-25T01:30:00Z,bad-model,invalid,2,3,4\n",
+            "2026-07-25T01:30:00Z,claude,5,,7,8\n"
+        );
+        let offset = time::UtcOffset::from_hms(7, 0, 0).unwrap();
+
+        let export = parse_cursor_usage_export(csv, offset).unwrap();
+
+        assert_eq!(export.daily.len(), 1);
+        assert_eq!(export.daily[0].date, "2026-07-25");
+        assert_eq!(export.daily[0].total_tokens, 2_028);
+        assert_eq!(export.daily[0].models["gpt, test"], 2_008);
+        assert_eq!(export.daily[0].models["claude"], 20);
+        assert!(parse_cursor_usage_export("Date,Model\n", offset).is_err());
+        assert!(parse_cursor_usage_export("Date,Model,Input (w/ Cache Write),Input (w/o Cache Write),Cache Read,Output Tokens\n\"unterminated", offset).is_err());
+    }
+
+    #[test]
+    fn cursor_export_aggregation_appends_history_without_pricing() {
+        let export = CursorUsageExport {
+            daily: vec![
+                CursorUsageExportDay {
+                    date: "2026-07-24".to_string(),
+                    total_tokens: 400,
+                    models: BTreeMap::from([("claude".to_string(), 400)]),
+                },
+                CursorUsageExportDay {
+                    date: "2026-07-25".to_string(),
+                    total_tokens: 600,
+                    models: BTreeMap::from([("claude".to_string(), 100), ("gpt".to_string(), 500)]),
+                },
+            ],
+        };
+        let now = time::Date::from_calendar_date(2026, time::Month::July, 25)
+            .unwrap()
+            .with_hms(12, 0, 0)
+            .unwrap()
+            .assume_offset(time::UtcOffset::UTC);
+        let mut snapshot = CodexUsageSnapshot {
+            provider_id: "cursor".to_string(),
+            display_name: "Cursor".to_string(),
+            plan: None,
+            lines: vec![],
+            fetched_at: now_iso(),
+        };
+
+        append_cursor_usage_export(&mut snapshot, &export, now);
+
+        assert!(snapshot.lines.iter().any(|line| matches!(line, CodexMetricLine::Text { label, value } if label == "Today" && value == "600 tokens")));
+        assert!(snapshot.lines.iter().any(|line| matches!(line, CodexMetricLine::Text { label, value } if label == "Yesterday" && value == "400 tokens")));
+        assert!(snapshot.lines.iter().any(|line| matches!(line, CodexMetricLine::Text { label, value } if label == "Last 30 Days" && value == "1K tokens")));
+        assert!(snapshot.lines.iter().any(|line| matches!(line, CodexMetricLine::BarChart { label, points, .. } if label == "Usage Trend" && points.len() == 2)));
+        assert!(snapshot.lines.iter().any(|line| matches!(line, CodexMetricLine::Text { label, value } if label == "gpt" && value == "50%")));
+    }
+
+    #[test]
+    fn antigravity_summary_uses_only_exact_supported_bucket_ids() {
+        let response = serde_json::json!({
+            "groups": [{ "buckets": [
+                { "bucketId": "gemini-5h", "displayName": "Renamed", "remainingFraction": 0.8 },
+                { "bucketId": "3p-weekly", "remainingFraction": 0.4 },
+                { "bucketId": "gemini-image-5h", "remainingFraction": 0.1 },
+                { "bucketId": "gemini-weekly" }
+            ] }]
+        });
+
+        let lines = build_antigravity_quota_summary_lines(&response);
+        let labels = lines
+            .iter()
+            .map(|line| match line {
+                CodexMetricLine::Progress { label, .. } => label.as_str(),
+                _ => unreachable!(),
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(labels, ["Gemini 5h", "Claude and GPT Weekly"]);
     }
 }
