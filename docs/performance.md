@@ -57,7 +57,9 @@ The `usage-insights-v1` revision raises the primary CSS ceiling to 11,300 bytes 
 
 The `usage-cache-hydration` revision raises JavaScript gzip to 97,800 bytes for versioned persisted usage snapshots. On reload, the renderer hydrates a last-good snapshot immediately as explicitly outdated while the normal provider refresh remains in the background; the cache contains only provider display snapshots, never credentials or raw exports.
 
-The `usage-priority-refresh` revision raises JavaScript gzip to 98,000 bytes for a generation-guarded sequential provider queue. It hydrates cached display data first, refreshes one provider at a time, and moves a provider selected in the Usage sidebar to the front of a replacement queue rather than stampeding all native sources after reload.
+The `usage-codex-reset-details` revision raises the CSS gzip ceiling to 11,350 bytes for the compact Codex `Rate Limit Resets` and `Credits` value rows. These rows restore the measured reset-credit contract from the provider snapshot without adding claim actions or expiry timelines to Agent Halo's read-only Usage surface.
+
+The `usage-native-background-v1` revision keeps the cache-first renderer behavior while dispatching the blocking Codex, Antigravity, Claude, and Cursor provider commands through Tauri's blocking worker pool. Provider refreshes may still run concurrently, but HTTP, language-server, SQLite, and `ccusage` work no longer executes on the renderer invoke path.
 
 The low-risk bridge refactor's three-run median measured event duration `603.06ms → 574.18ms` (−4.79%) and throughput `33,164 → 34,832 events/s` (+5.03%) for 20,000 deterministic events. Startup stayed effectively flat; synchronous NDJSON durability and event ordering remain unchanged.
 

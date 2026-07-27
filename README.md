@@ -136,13 +136,13 @@ Currently supported local providers:
 - Antigravity
 - Claude Code
 - Cursor
-- Grok
 
 Notes:
 
 - Codex history and token trends come from local usage history for the resolved local home where available; it is never labelled as a separately selected account until Agent Halo has account-card UI.
 - Codex condenses available local history into Today/Yesterday, a 30-day trend, a short model mix, and an optional daily detail disclosure. The surface labels that data as an estimate from this home.
-- Antigravity usage is read from the local Antigravity/`agy` language server using the same quota-summary surface as `/usage`.
+- Antigravity usage first reads the local Antigravity/`agy` language server, then falls back to Cloud Code with the existing `gemini`/`antigravity` Keychain credential when the language server is unavailable or not signed in.
+- If an Antigravity refresh token must be refreshed, Agent Halo reads the installed-app OAuth client metadata from `AGENT_HALO_AGY_GOOGLE_CLIENT_ID`/`AGENT_HALO_AGY_GOOGLE_CLIENT_SECRET` or the local ignored file `~/.config/agent-halo/agy-google-oauth.json`; these values must never be committed.
 - Claude Code tries valid local Keychain/file logins before an inference-only environment token and refreshes only back into the source that produced the credential.
 - Provider cards remain capability-aware; a failed refresh preserves last-good metrics with an explicit Outdated/error state instead of silently disappearing.
 

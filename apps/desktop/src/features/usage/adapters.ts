@@ -257,7 +257,7 @@ export const readCachedUsageSnapshots = (): Partial<
     return Object.fromEntries(
       Object.entries(parsed).filter(
         ([providerId, snapshot]) =>
-          ["codex", "agy", "claude", "cursor", "grok"].includes(providerId) &&
+          ["codex", "agy", "claude", "cursor"].includes(providerId) &&
           snapshot &&
           typeof snapshot === "object" &&
           Array.isArray(snapshot.lines) &&

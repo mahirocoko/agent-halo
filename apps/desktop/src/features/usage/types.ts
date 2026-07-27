@@ -1,4 +1,4 @@
-export type UsageProviderId = "codex" | "agy" | "claude" | "cursor" | "grok";
+export type UsageProviderId = "codex" | "agy" | "claude" | "cursor";
 export type UsageMode = "left" | "used";
 export type UsageResetMode = "relative" | "absolute";
 export type UsageTimeFormat = "auto" | "12h" | "24h";
@@ -12,7 +12,7 @@ export interface IUsageProviderLink {
 export interface IUsageProviderConfig {
   id: UsageProviderId;
   label: string;
-  command: "codex_usage" | "agy_usage" | "claude_usage" | "cursor_usage" | "grok_usage";
+  command: "codex_usage" | "agy_usage" | "claude_usage" | "cursor_usage";
   iconPath: string;
   color: string;
   links?: IUsageProviderLink[];

@@ -429,6 +429,36 @@
   outline-offset: 2px;
 }
 
+.usage-value-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 9px 0 0;
+  padding-top: 9px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.usage-value-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  color: var(--text-3);
+  font-size: 10px;
+}
+
+.usage-value-row dd {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.72);
+  font-weight: 650;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .usage-provider-card[data-status="loading"] .usage-provider-message svg {
   color: var(--text-3);
   animation: usage-loading-spin 1s linear infinite;
@@ -445,10 +475,6 @@
   flex-wrap: wrap;
   gap: 5px;
   margin-top: 8px;
-}
-
-.usage-provider-chips[data-hidden="true"] {
-  display: none;
 }
 
 .usage-chip {

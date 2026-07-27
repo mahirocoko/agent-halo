@@ -227,6 +227,24 @@ export const SetupPanel = ({ capabilities, canUseNativeControls, completionPetEn
     if (pet !== "halo-bot") setLoadoutPickerOpen(false);
   }, [pet]);
 
+  const handleSetupKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
+    if (event.key !== "Escape") return;
+    if (petPickerOpen) {
+      event.preventDefault();
+      event.stopPropagation();
+      closePetPicker();
+    } else if (loadoutPickerOpen) {
+      event.preventDefault();
+      event.stopPropagation();
+      setLoadoutPickerOpen(false);
+      window.requestAnimationFrame(() => loadoutPickerTriggerRef.current?.focus());
+    } else if (displayPickerOpen) {
+      event.preventDefault();
+      event.stopPropagation();
+      closeDisplayPicker();
+    }
+  };
+
   useEffect(() => {
     if (!displayPickerOpen || displayLoading) return;
     const selectedIndex = Math.max(0, displays.findIndex((display) => display.id === displayFocusTarget));
@@ -241,7 +259,7 @@ export const SetupPanel = ({ capabilities, canUseNativeControls, completionPetEn
   }, []);
 
   return (
-    <div className="setup-body">
+    <div className="setup-body" onKeyDown={handleSetupKeyDown}>
       <div className="setup-layout">
         <div className="setup-sidebar" role="tablist" aria-label="Setup sections" aria-orientation={compactNavigation ? "horizontal" : "vertical"}>
           <button className="setup-side-tab" id="setup-tab-connection" type="button" role="tab" aria-selected={activeCategory === "connection"} aria-controls="setup-panel-connection" tabIndex={activeCategory === "connection" ? 0 : -1} data-active={activeCategory === "connection"} onClick={() => selectCategory("connection")} onKeyDown={(event) => handleCategoryKeyDown(event, "connection")}><PlugZap size={12} strokeWidth={2.2} /><span>Connection</span></button>

@@ -229,6 +229,27 @@ const ProviderLinks = ({ links }: IProviderLinksProps) => {
   );
 };
 
+interface IUsageValueRowsProps {
+  rows: Array<{ label: string; value: string | null }>;
+}
+
+const UsageValueRows = ({ rows }: IUsageValueRowsProps) => {
+  const visibleRows = rows.filter((row) => row.value);
+
+  if (!visibleRows.length) return null;
+
+  return (
+    <dl className="usage-value-rows" aria-label="Usage details">
+      {visibleRows.map((row) => (
+        <div className="usage-value-row" key={row.label}>
+          <dt>{row.label}</dt>
+          <dd>{row.value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+};
+
 interface IProviderDetailProps {
   provider: IUsageProviderConfig;
   settings: IUsageSettings;
@@ -315,18 +336,25 @@ const ProviderDetail = ({ provider, settings, usage }: IProviderDetailProps) => 
           <span>
             {usage.status === "loading"
               ? `Checking ${provider.label}`
+              : usage.status === "online"
+                ? "No quota data from current source"
               : usage.message ?? `${provider.label} usage unavailable`}
           </span>
         </div>
       )}
+      {provider.id === "codex" ? (
+        <UsageValueRows
+          rows={[
+            { label: "Rate Limit Resets", value: usage.rateLimitResets },
+            { label: "Credits", value: usage.credits },
+          ]}
+        />
+      ) : null}
       {["codex", "cursor"].includes(provider.id) && hasMetrics ? (
         <ProviderInsights provider={provider} usage={usage} />
       ) : null}
-      {usage.credits || usage.rateLimitResets ? (
-        <div
-          className="usage-provider-chips"
-          data-hidden={provider.id === "codex"}
-        >
+      {provider.id !== "codex" && (usage.credits || usage.rateLimitResets) ? (
+        <div className="usage-provider-chips">
           {usage.credits ? (
             <span className="usage-chip" title="Credits">
               {usage.credits}

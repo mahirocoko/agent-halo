@@ -12,7 +12,7 @@ use std::{
 };
 
 use base64::{
-    engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD},
+    engine::general_purpose::{STANDARD, URL_SAFE, URL_SAFE_NO_PAD},
     Engine as _,
 };
 use tauri::{
@@ -73,6 +73,18 @@ const CCUSAGE_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
 const CCUSAGE_TIMEOUT: Duration = Duration::from_secs(15);
 const OPENUSAGE_PROXY_CONFIG_PATH: &str = ".openusage/config.json";
 const AGY_LS_SERVICE: &str = "exa.language_server_pb.LanguageServerService";
+const AGY_KEYCHAIN_SERVICE: &str = "gemini";
+const AGY_KEYCHAIN_ACCOUNT: &str = "antigravity";
+const AGY_CLOUD_CODE_BASE_URLS: [&str; 2] = [
+    "https://daily-cloudcode-pa.googleapis.com",
+    "https://cloudcode-pa.googleapis.com",
+];
+const AGY_CLOUD_QUOTA_SUMMARY_PATH: &str = "/v1internal:retrieveUserQuotaSummary";
+const AGY_CLOUD_LOAD_CODE_ASSIST_PATH: &str = "/v1internal:loadCodeAssist";
+const AGY_GOOGLE_OAUTH_URL: &str = "https://oauth2.googleapis.com/token";
+const AGY_GOOGLE_CLIENT_ID_ENV: &str = "AGENT_HALO_AGY_GOOGLE_CLIENT_ID";
+const AGY_GOOGLE_CLIENT_SECRET_ENV: &str = "AGENT_HALO_AGY_GOOGLE_CLIENT_SECRET";
+const AGY_GOOGLE_OAUTH_CONFIG_PATH: &str = ".config/agent-halo/agy-google-oauth.json";
 const CLAUDE_USAGE_URL: &str = "https://api.anthropic.com/api/oauth/usage";
 const CLAUDE_REFRESH_URL: &str = "https://platform.claude.com/v1/oauth/token";
 const CLAUDE_CLIENT_ID: &str = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
@@ -92,9 +104,6 @@ const CURSOR_REFRESH_URL: &str = "https://api2.cursor.sh/oauth/token";
 const CURSOR_CLIENT_ID: &str = "KbZUR41cY7W6zRSdpSUJ7I7mLYBKOCmB";
 const CURSOR_ACCESS_KEYCHAIN_SERVICE: &str = "cursor-access-token";
 const CURSOR_REFRESH_KEYCHAIN_SERVICE: &str = "cursor-refresh-token";
-const GROK_AUTH_PATH: &str = ".grok/auth.json";
-const GROK_BILLING_URL: &str = "https://cli-chat-proxy.grok.com/v1/billing";
-const GROK_SETTINGS_URL: &str = "https://cli-chat-proxy.grok.com/v1/settings";
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -163,8 +172,6 @@ fn preferred_display_index(
                 .position(|display| display.fingerprint == preference.fingerprint)
         })
 }
-const GROK_TOKEN_AUTH_HEADER: &str = "xai-grok-cli";
-
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct CodexAuthFile {
     #[serde(rename = "OPENAI_API_KEY")]
@@ -266,6 +273,7 @@ struct CodexUsageEnvelope {
 #[derive(Debug, Deserialize)]
 struct CodexAdditionalRateLimit {
     limit_name: Option<String>,
+    metered_feature: Option<String>,
     rate_limit: Option<CodexRateLimit>,
 }
 
@@ -286,6 +294,19 @@ struct CodexRateLimitWindow {
     reset_at: Option<Value>,
     reset_after_seconds: Option<Value>,
     limit_window_seconds: Option<Value>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CodexWindowKind {
+    Session,
+    Weekly,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct CodexWindowCandidate<'a> {
+    window: Option<&'a CodexRateLimitWindow>,
+    header_percent: Option<f64>,
+    fallback_kind: CodexWindowKind,
 }
 
 #[derive(Debug, Deserialize)]
@@ -404,9 +425,16 @@ struct OAuthRefreshResponse {
 }
 
 #[derive(Debug, Clone)]
+enum CursorAuthSource {
+    Sqlite,
+    Keychain,
+}
+
+#[derive(Debug, Clone)]
 struct CursorAuthState {
     access_token: Option<String>,
     refresh_token: Option<String>,
+    source: CursorAuthSource,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -455,27 +483,63 @@ fn set_keep_awake(state: tauri::State<'_, KeepAwakeState>, active: bool) -> Resu
 }
 
 #[tauri::command]
-fn codex_usage() -> Result<CodexUsageSnapshot, String> {
-    let mut auth_state = load_codex_auth()?;
+async fn codex_usage() -> Result<CodexUsageSnapshot, String> {
+    tauri::async_runtime::spawn_blocking(codex_usage_blocking)
+        .await
+        .map_err(|error| format!("Codex usage task failed: {error}"))?
+}
+
+fn codex_usage_blocking() -> Result<CodexUsageSnapshot, String> {
+    let auth_candidates = load_codex_auth_candidates()?;
     let client = usage_client("Codex")?;
 
-    match fetch_codex_usage_snapshot(&client, &auth_state) {
-        Ok(snapshot) => Ok(snapshot),
-        Err(CodexUsageFetchError::Auth) => {
-            let previous_fingerprint = codex_auth_fingerprint(&auth_state);
-            auth_state = reload_codex_auth_source(&auth_state)?;
-            if codex_auth_fingerprint(&auth_state) != previous_fingerprint {
+    let mut last_auth_error = None;
+    for mut auth_state in auth_candidates {
+        if codex_access_token_needs_refresh(&auth_state) {
+            if let Err(message) = refresh_codex_auth(&client, &mut auth_state) {
+                last_auth_error = Some(message);
+                continue;
+            }
+        }
+
+        match fetch_codex_usage_snapshot(&client, &auth_state) {
+            Ok(snapshot) => return Ok(snapshot),
+            Err(CodexUsageFetchError::Auth) => {
+                let previous_fingerprint = codex_auth_fingerprint(&auth_state);
+                let refreshed_source = match reload_codex_auth_source(&auth_state) {
+                    Ok(source) => source,
+                    Err(message) => {
+                        last_auth_error = Some(message);
+                        continue;
+                    }
+                };
+                if codex_auth_fingerprint(&refreshed_source) != previous_fingerprint {
+                    match fetch_codex_usage_snapshot(&client, &refreshed_source) {
+                        Ok(snapshot) => return Ok(snapshot),
+                        Err(CodexUsageFetchError::Auth) => {}
+                        Err(error) => return Err(format_codex_usage_error(error)),
+                    }
+                }
+                auth_state = refreshed_source;
+                if let Err(message) = refresh_codex_auth(&client, &mut auth_state) {
+                    last_auth_error = Some(message);
+                    continue;
+                }
                 match fetch_codex_usage_snapshot(&client, &auth_state) {
                     Ok(snapshot) => return Ok(snapshot),
-                    Err(CodexUsageFetchError::Auth) => {}
+                    Err(CodexUsageFetchError::Auth) => {
+                        last_auth_error =
+                            Some(format_codex_usage_error(CodexUsageFetchError::Auth));
+                    }
                     Err(error) => return Err(format_codex_usage_error(error)),
                 }
             }
-            refresh_codex_auth(&client, &mut auth_state)?;
-            fetch_codex_usage_snapshot(&client, &auth_state).map_err(format_codex_usage_error)
+            Err(error) => return Err(format_codex_usage_error(error)),
         }
-        Err(error) => Err(format_codex_usage_error(error)),
     }
+
+    Err(last_auth_error
+        .unwrap_or_else(|| "Codex session expired. Run `codex` to log in again.".to_string()))
 }
 
 fn fetch_codex_usage_snapshot(
@@ -502,16 +566,59 @@ fn format_codex_usage_error(error: CodexUsageFetchError) -> String {
 }
 
 #[tauri::command]
-fn agy_usage() -> Result<CodexUsageSnapshot, String> {
+async fn agy_usage() -> Result<CodexUsageSnapshot, String> {
+    tauri::async_runtime::spawn_blocking(agy_usage_blocking)
+        .await
+        .map_err(|error| format!("Antigravity usage task failed: {error}"))?
+}
+
+fn agy_usage_blocking() -> Result<CodexUsageSnapshot, String> {
     if let Some(snapshot) = probe_antigravity_ls_usage() {
         return Ok(snapshot);
     }
 
-    Err("Antigravity usage unavailable. Start `agy` or Antigravity, then refresh.".to_string())
+    let client = usage_client("Antigravity")?;
+    let mut has_local_credentials = false;
+    if let Some(mut auth) = load_antigravity_auth() {
+        has_local_credentials = true;
+        if auth.access_token.is_none() {
+            let _ = refresh_antigravity_auth(&client, &mut auth);
+        }
+        match fetch_antigravity_cloud_snapshot(&client, &auth) {
+            Ok(Some(snapshot)) => return Ok(snapshot),
+            Err(AntigravityCloudError::Auth) => {
+                if refresh_antigravity_auth(&client, &mut auth).is_ok() {
+                    if let Ok(Some(snapshot)) = fetch_antigravity_cloud_snapshot(&client, &auth) {
+                        return Ok(snapshot);
+                    }
+                }
+            }
+            Ok(None) | Err(AntigravityCloudError::Unavailable) => {}
+        }
+    }
+
+    if !discover_antigravity_ls_processes().is_empty() {
+        return Err(if has_local_credentials {
+            "Agy is running, but its local session did not return usage. Check that Agy is signed in, then refresh.".to_string()
+        } else {
+            "Agy is running, but its session is not signed in. Sign in to Agy or Antigravity, then refresh.".to_string()
+        });
+    }
+    Err(if has_local_credentials {
+        "Antigravity usage is temporarily unavailable. Local credentials were found, but Cloud Code did not return quota data. Try again shortly.".to_string()
+    } else {
+        "Antigravity usage unavailable. Start `agy` or Antigravity, then refresh.".to_string()
+    })
 }
 
 #[tauri::command]
-fn claude_usage() -> Result<CodexUsageSnapshot, String> {
+async fn claude_usage() -> Result<CodexUsageSnapshot, String> {
+    tauri::async_runtime::spawn_blocking(claude_usage_blocking)
+        .await
+        .map_err(|error| format!("Claude usage task failed: {error}"))?
+}
+
+fn claude_usage_blocking() -> Result<CodexUsageSnapshot, String> {
     let candidates = load_claude_auth_candidates();
     if candidates.is_empty() {
         return Err("Claude Code auth not found. Run `claude` to log in.".to_string());
@@ -577,7 +684,13 @@ fn claude_usage() -> Result<CodexUsageSnapshot, String> {
 }
 
 #[tauri::command]
-fn cursor_usage() -> Result<CodexUsageSnapshot, String> {
+async fn cursor_usage() -> Result<CodexUsageSnapshot, String> {
+    tauri::async_runtime::spawn_blocking(cursor_usage_blocking)
+        .await
+        .map_err(|error| format!("Cursor usage task failed: {error}"))?
+}
+
+fn cursor_usage_blocking() -> Result<CodexUsageSnapshot, String> {
     let mut auth = load_cursor_auth().ok_or_else(|| {
         "Cursor auth not found. Sign in via Cursor app or run `agent login`.".to_string()
     })?;
@@ -621,36 +734,6 @@ fn cursor_usage() -> Result<CodexUsageSnapshot, String> {
 }
 
 #[tauri::command]
-fn grok_usage() -> Result<CodexUsageSnapshot, String> {
-    let token =
-        load_grok_token().ok_or_else(|| "Grok not logged in. Run `grok login`.".to_string())?;
-    let client = usage_client("Grok")?;
-    let billing = client
-        .get(GROK_BILLING_URL)
-        .bearer_auth(&token)
-        .header("X-XAI-Token-Auth", GROK_TOKEN_AUTH_HEADER)
-        .header(reqwest::header::ACCEPT, "application/json")
-        .send()
-        .map_err(|error| format_http_send_error("Grok billing", &error))?;
-    if billing.status() == reqwest::StatusCode::UNAUTHORIZED
-        || billing.status() == reqwest::StatusCode::FORBIDDEN
-    {
-        return Err("Grok auth expired. Run `grok login` again.".to_string());
-    }
-    if !billing.status().is_success() {
-        return Err(format!(
-            "Grok billing request failed (HTTP {})",
-            billing.status().as_u16()
-        ));
-    }
-    let billing = billing
-        .json::<Value>()
-        .map_err(|error| format!("Grok billing response invalid: {error}"))?;
-    let plan = fetch_grok_plan(&client, &token);
-    build_grok_usage_snapshot(billing, plan)
-}
-
-#[tauri::command]
 fn open_external_url(url: String) -> Result<(), String> {
     let trimmed = url.trim();
     if !(trimmed.starts_with("https://") || trimmed.starts_with("http://")) {
@@ -691,7 +774,8 @@ enum CodexUsageFetchError {
     Other(String),
 }
 
-fn load_codex_auth() -> Result<CodexAuthState, String> {
+fn load_codex_auth_candidates() -> Result<Vec<CodexAuthState>, String> {
+    let mut candidates = Vec::new();
     let mut api_key_auth_state: Option<CodexAuthState> = None;
 
     for path in codex_auth_paths()? {
@@ -704,9 +788,9 @@ fn load_codex_auth() -> Result<CodexAuthState, String> {
         })?;
         if let Some(auth) = parse_codex_auth_payload(&text) {
             if has_codex_oauth_token(&auth) {
-                return Ok(CodexAuthState {
-                    auth,
-                    source: CodexAuthSource::File(path),
+                candidates.push(CodexAuthState {
+                    auth: auth.clone(),
+                    source: CodexAuthSource::File(path.clone()),
                 });
             }
             if has_codex_api_key(&auth) && api_key_auth_state.is_none() {
@@ -719,17 +803,21 @@ fn load_codex_auth() -> Result<CodexAuthState, String> {
     }
 
     if let Some(auth) = load_codex_auth_from_keychain() {
-        return Ok(CodexAuthState {
+        candidates.push(CodexAuthState {
             auth,
             source: CodexAuthSource::Keychain(CODEX_KEYCHAIN_SERVICE.to_string()),
         });
     }
 
     if let Some(auth_state) = api_key_auth_state {
-        return Ok(auth_state);
+        candidates.push(auth_state);
     }
 
-    Err("Codex auth not found. Run `codex` to authenticate.".to_string())
+    if candidates.is_empty() {
+        Err("Codex auth not found. Run `codex` to authenticate.".to_string())
+    } else {
+        Ok(candidates)
+    }
 }
 
 fn codex_auth_paths() -> Result<Vec<PathBuf>, String> {
@@ -832,6 +920,31 @@ fn codex_access_token(auth_state: &CodexAuthState) -> Result<String, String> {
         .filter(|token| !token.is_empty())
         .map(ToOwned::to_owned)
         .ok_or_else(|| "Codex access token missing. Run `codex` to authenticate.".to_string())
+}
+
+fn codex_access_token_needs_refresh(auth_state: &CodexAuthState) -> bool {
+    let Some(token) = auth_state
+        .auth
+        .tokens
+        .as_ref()
+        .and_then(|tokens| tokens.access_token.as_deref())
+    else {
+        return false;
+    };
+    let Some(expires_at) = jwt_expiry_seconds(token) else {
+        return false;
+    };
+    expires_at <= time::OffsetDateTime::now_utc().unix_timestamp() + 5 * 60
+}
+
+fn jwt_expiry_seconds(token: &str) -> Option<i64> {
+    let payload = token.split('.').nth(1)?;
+    let decoded = URL_SAFE_NO_PAD
+        .decode(payload)
+        .or_else(|_| URL_SAFE.decode(payload))
+        .ok()?;
+    let payload = serde_json::from_slice::<Value>(&decoded).ok()?;
+    value_to_i64(payload.get("exp"))
 }
 
 fn fetch_codex_usage(
@@ -1048,71 +1161,24 @@ fn build_codex_usage_snapshot(
     reset_credits: Option<&CodexResetCreditsEnvelope>,
 ) -> CodexUsageSnapshot {
     let mut lines = Vec::new();
-    let primary = read_percent_header(headers, "x-codex-primary-used-percent").or_else(|| {
-        usage
-            .rate_limit
-            .as_ref()
-            .and_then(|limit| limit.primary_window.as_ref())
-            .and_then(|window| value_to_f64(window.used_percent.as_ref()))
-    });
-    let secondary = read_percent_header(headers, "x-codex-secondary-used-percent").or_else(|| {
-        usage
-            .rate_limit
-            .as_ref()
-            .and_then(|limit| limit.secondary_window.as_ref())
-            .and_then(|window| value_to_f64(window.used_percent.as_ref()))
-    });
-
-    if let Some(value) = primary {
-        let window = usage
-            .rate_limit
-            .as_ref()
-            .and_then(|limit| limit.primary_window.as_ref());
-        lines.push(progress_line(
-            "Session",
-            value,
-            window,
-            Some(5 * 60 * 60 * 1000),
-        ));
-    }
-    if let Some(value) = secondary {
-        let window = usage
-            .rate_limit
-            .as_ref()
-            .and_then(|limit| limit.secondary_window.as_ref());
-        lines.push(progress_line(
-            "Weekly",
-            value,
-            window,
-            Some(7 * 24 * 60 * 60 * 1000),
-        ));
-    }
+    lines.extend(codex_classified_window_lines(
+        usage.rate_limit.as_ref(),
+        (
+            read_percent_header(headers, "x-codex-primary-used-percent"),
+            read_percent_header(headers, "x-codex-secondary-used-percent"),
+        ),
+        ("Session", "Weekly"),
+    ));
     if let Some(additional_limits) = usage.additional_rate_limits.as_ref() {
-        for entry in additional_limits {
-            let Some(limit) = entry.rate_limit.as_ref() else {
-                continue;
-            };
-            let label = codex_additional_limit_label(entry.limit_name.as_deref());
-            if let Some(window) = limit.primary_window.as_ref() {
-                if let Some(value) = value_to_f64(window.used_percent.as_ref()) {
-                    lines.push(progress_line(
-                        &label,
-                        value,
-                        Some(window),
-                        Some(5 * 60 * 60 * 1000),
-                    ));
-                }
-            }
-            if let Some(window) = limit.secondary_window.as_ref() {
-                if let Some(value) = value_to_f64(window.used_percent.as_ref()) {
-                    lines.push(progress_line(
-                        &format!("{label} Weekly"),
-                        value,
-                        Some(window),
-                        Some(7 * 24 * 60 * 60 * 1000),
-                    ));
-                }
-            }
+        if let Some(entry) = additional_limits
+            .iter()
+            .find(|entry| is_codex_spark_entry(entry))
+        {
+            lines.extend(codex_classified_window_lines(
+                entry.rate_limit.as_ref(),
+                (None, None),
+                ("Spark", "Spark Weekly"),
+            ));
         }
     }
     if let Some(window) = usage
@@ -1782,23 +1848,6 @@ fn format_percent_label(percent: f64) -> String {
     }
 }
 
-fn codex_additional_limit_label(limit_name: Option<&str>) -> String {
-    let Some(name) = limit_name.map(str::trim).filter(|value| !value.is_empty()) else {
-        return "Model".to_string();
-    };
-    let short = name
-        .strip_prefix("GPT-")
-        .and_then(|value| value.split_once("-Codex-"))
-        .map(|(_, suffix)| suffix)
-        .unwrap_or(name)
-        .trim();
-    if short.is_empty() {
-        "Model".to_string()
-    } else {
-        short.to_string()
-    }
-}
-
 fn read_codex_reset_credits(
     usage: &CodexUsageEnvelope,
     dedicated: Option<&CodexResetCreditsEnvelope>,
@@ -1870,6 +1919,94 @@ fn format_relative_time(target: time::OffsetDateTime) -> String {
     } else {
         format!("{value}{unit} ago")
     }
+}
+
+fn is_codex_spark_entry(entry: &CodexAdditionalRateLimit) -> bool {
+    [
+        entry.limit_name.as_deref(),
+        entry.metered_feature.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    .map(str::trim)
+    .any(|value| value.to_ascii_lowercase().contains("spark"))
+}
+
+fn codex_window_kind(window: Option<&CodexRateLimitWindow>) -> Option<CodexWindowKind> {
+    match value_to_u64(window?.limit_window_seconds.as_ref())? {
+        18_000 => Some(CodexWindowKind::Session),
+        604_800 => Some(CodexWindowKind::Weekly),
+        _ => None,
+    }
+}
+
+fn codex_classified_window_lines(
+    rate_limit: Option<&CodexRateLimit>,
+    header_percents: (Option<f64>, Option<f64>),
+    labels: (&str, &str),
+) -> Vec<CodexMetricLine> {
+    let mut candidates = Vec::new();
+    if let Some(rate_limit) = rate_limit {
+        let primary_window = rate_limit.primary_window.as_ref();
+        if primary_window.is_some() || header_percents.0.is_some() {
+            candidates.push(CodexWindowCandidate {
+                window: primary_window,
+                header_percent: header_percents.0,
+                fallback_kind: CodexWindowKind::Session,
+            });
+        }
+        let secondary_window = rate_limit.secondary_window.as_ref();
+        if secondary_window.is_some() || header_percents.1.is_some() {
+            candidates.push(CodexWindowCandidate {
+                window: secondary_window,
+                header_percent: header_percents.1,
+                fallback_kind: CodexWindowKind::Weekly,
+            });
+        }
+    } else {
+        if header_percents.0.is_some() {
+            candidates.push(CodexWindowCandidate {
+                window: None,
+                header_percent: header_percents.0,
+                fallback_kind: CodexWindowKind::Session,
+            });
+        }
+        if header_percents.1.is_some() {
+            candidates.push(CodexWindowCandidate {
+                window: None,
+                header_percent: header_percents.1,
+                fallback_kind: CodexWindowKind::Weekly,
+            });
+        }
+    }
+
+    [
+        (CodexWindowKind::Session, labels.0, 5 * 60 * 60 * 1000),
+        (CodexWindowKind::Weekly, labels.1, 7 * 24 * 60 * 60 * 1000),
+    ]
+    .into_iter()
+    .filter_map(|(kind, label, fallback_duration_ms)| {
+        let candidate = candidates
+            .iter()
+            .find(|candidate| codex_window_kind(candidate.window) == Some(kind))
+            .or_else(|| {
+                candidates.iter().find(|candidate| {
+                    codex_window_kind(candidate.window).is_none() && candidate.fallback_kind == kind
+                })
+            })?;
+        let used = candidate.header_percent.or_else(|| {
+            candidate
+                .window
+                .and_then(|window| value_to_f64(window.used_percent.as_ref()))
+        })?;
+        Some(progress_line(
+            label,
+            used,
+            candidate.window,
+            Some(fallback_duration_ms),
+        ))
+    })
+    .collect()
 }
 
 fn progress_line(
@@ -2737,6 +2874,45 @@ fn read_cursor_state_value(key: &str) -> Option<String> {
         .filter(|text| !text.is_empty())
 }
 
+fn write_cursor_state_value(key: &str, value: &str) -> Result<(), String> {
+    let db = home_path(CURSOR_STATE_DB)
+        .ok_or_else(|| "Cursor state database path unavailable.".to_string())?;
+    if !db.exists() {
+        return Err("Cursor state database is unavailable.".to_string());
+    }
+    let escaped_key = key.replace('\'', "''");
+    let escaped_value = value.replace('\'', "''");
+    let sql = format!(
+        "INSERT OR REPLACE INTO ItemTable(key, value) VALUES ('{escaped_key}', '{escaped_value}');"
+    );
+    let mut child = Command::new("sqlite3")
+        .arg(db)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| format!("Failed to open Cursor state database: {error}"))?;
+    child
+        .stdin
+        .take()
+        .ok_or_else(|| "Failed to open Cursor state database input.".to_string())?
+        .write_all(sql.as_bytes())
+        .map_err(|error| format!("Failed to write Cursor state database update: {error}"))?;
+    let output = child
+        .wait_with_output()
+        .map_err(|error| format!("Failed to save Cursor state database: {error}"))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        Err(if detail.is_empty() {
+            "Cursor state database update failed.".to_string()
+        } else {
+            format!("Cursor state database update failed: {detail}")
+        })
+    }
+}
+
 fn load_cursor_auth() -> Option<CursorAuthState> {
     let sqlite_access = read_cursor_state_value("cursorAuth/accessToken");
     let sqlite_refresh = read_cursor_state_value("cursorAuth/refreshToken");
@@ -2744,6 +2920,7 @@ fn load_cursor_auth() -> Option<CursorAuthState> {
         return Some(CursorAuthState {
             access_token: sqlite_access,
             refresh_token: sqlite_refresh,
+            source: CursorAuthSource::Sqlite,
         });
     }
 
@@ -2753,6 +2930,7 @@ fn load_cursor_auth() -> Option<CursorAuthState> {
         return Some(CursorAuthState {
             access_token,
             refresh_token,
+            source: CursorAuthSource::Keychain,
         });
     }
     None
@@ -2787,6 +2965,20 @@ fn cursor_session_from_access_token(access_token: &str) -> Option<CursorSession>
         user_id: user_id.to_string(),
         cookie_value: format!("{user_id}%3A%3A{access_token}"),
     })
+}
+
+fn persist_cursor_token(source: &CursorAuthSource, key: &str, token: &str) -> Result<(), String> {
+    match source {
+        CursorAuthSource::Sqlite => write_cursor_state_value(key, token),
+        CursorAuthSource::Keychain => {
+            let service = if key == "cursorAuth/refreshToken" {
+                CURSOR_REFRESH_KEYCHAIN_SERVICE
+            } else {
+                CURSOR_ACCESS_KEYCHAIN_SERVICE
+            };
+            write_keychain_password(service, token)
+        }
+    }
 }
 
 fn fetch_cursor_usage_export(
@@ -3182,8 +3374,14 @@ fn refresh_cursor_token(
             "Cursor session expired. Sign in via Cursor app or run `agent login`.".to_string(),
         );
     }
-    auth.access_token =
-        maybe_string(body.get("access_token")).or_else(|| auth.access_token.clone());
+    if let Some(access_token) = maybe_string(body.get("access_token")) {
+        persist_cursor_token(&auth.source, "cursorAuth/accessToken", &access_token)?;
+        auth.access_token = Some(access_token);
+    }
+    if let Some(refresh_token) = maybe_string(body.get("refresh_token")) {
+        persist_cursor_token(&auth.source, "cursorAuth/refreshToken", &refresh_token)?;
+        auth.refresh_token = Some(refresh_token);
+    }
     Ok(())
 }
 
@@ -3271,83 +3469,253 @@ fn unix_millis_to_iso(ms: i64) -> Option<String> {
         .flatten()
 }
 
-fn load_grok_token() -> Option<String> {
-    let path = home_path(GROK_AUTH_PATH)?;
-    let auth = serde_json::from_str::<Value>(&fs::read_to_string(path).ok()?).ok()?;
-    auth.as_object()?.values().find_map(|entry| {
-        entry
-            .get("key")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|token| !token.is_empty())
-            .map(ToOwned::to_owned)
-    })
-}
-
-fn fetch_grok_plan(client: &reqwest::blocking::Client, token: &str) -> Option<String> {
-    let response = client
-        .get(GROK_SETTINGS_URL)
-        .bearer_auth(token)
-        .header("X-XAI-Token-Auth", GROK_TOKEN_AUTH_HEADER)
-        .header(reqwest::header::ACCEPT, "application/json")
-        .send()
-        .ok()?;
-    if !response.status().is_success() {
-        return None;
-    }
-    maybe_string(
-        response
-            .json::<Value>()
-            .ok()?
-            .get("subscription_tier_display"),
-    )
-}
-
-fn build_grok_usage_snapshot(
-    billing: Value,
-    plan: Option<String>,
-) -> Result<CodexUsageSnapshot, String> {
-    let config = billing
-        .get("config")
-        .ok_or_else(|| "Grok billing response invalid.".to_string())?;
-    let used = value_to_f64(config.get("used").and_then(|value| value.get("val")))
-        .ok_or_else(|| "Grok usage data unavailable.".to_string())?;
-    let limit = value_to_f64(
-        config
-            .get("monthlyLimit")
-            .and_then(|value| value.get("val")),
-    )
-    .ok_or_else(|| "Grok usage data unavailable.".to_string())?;
-    let on_demand =
-        value_to_f64(config.get("onDemandCap").and_then(|value| value.get("val"))).unwrap_or(0.0);
-    if limit <= 0.0 {
-        return Err("Grok usage limit unavailable.".to_string());
-    }
-    let reset = maybe_string(config.get("billingPeriodEnd"));
-    Ok(CodexUsageSnapshot {
-        provider_id: "grok".to_string(),
-        display_name: "Grok".to_string(),
-        plan,
-        lines: vec![
-            progress_metric("Credits used", (used / limit) * 100.0, reset, None),
-            CodexMetricLine::Text {
-                label: "Pay as you go".to_string(),
-                value: if on_demand > 0.0 {
-                    format!("{} cap", on_demand.floor() as i64)
-                } else {
-                    "Disabled".to_string()
-                },
-            },
-        ],
-        fetched_at: now_iso(),
-    })
-}
-
 #[derive(Debug, Clone)]
 struct AntigravityLsDiscovery {
     pid: String,
     csrf: String,
     extension_port: Option<u16>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct AntigravityAuth {
+    access_token: Option<String>,
+    refresh_token: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AntigravityCloudError {
+    Auth,
+    Unavailable,
+}
+
+fn load_antigravity_auth() -> Option<AntigravityAuth> {
+    let raw = read_keychain_password(AGY_KEYCHAIN_SERVICE, Some(AGY_KEYCHAIN_ACCOUNT))?;
+    let text = unwrap_go_keyring(&raw)?;
+    let value = serde_json::from_str::<Value>(&text).ok();
+    let access_token = value
+        .as_ref()
+        .and_then(|value| {
+            find_antigravity_auth_string(
+                value,
+                &[
+                    "access_token",
+                    "accessToken",
+                    "token",
+                    "id_token",
+                    "idToken",
+                    "bearerToken",
+                    "auth_token",
+                    "authToken",
+                ],
+            )
+        })
+        .or_else(|| {
+            let text = text.strip_prefix("Bearer ").unwrap_or(&text).trim();
+            (!text.is_empty()).then(|| text.to_string())
+        });
+    let refresh_token = value
+        .as_ref()
+        .and_then(|value| find_antigravity_auth_string(value, &["refresh_token", "refreshToken"]));
+    if access_token.is_none() && refresh_token.is_none() {
+        return None;
+    }
+    Some(AntigravityAuth {
+        access_token,
+        refresh_token,
+    })
+}
+
+fn unwrap_go_keyring(raw: &str) -> Option<String> {
+    let text = raw.trim();
+    let text = if let Some(encoded) = text.strip_prefix("go-keyring-base64:") {
+        let decoded = STANDARD.decode(encoded.trim()).ok()?;
+        String::from_utf8(decoded).ok()?
+    } else {
+        text.to_string()
+    };
+    let text = text.trim();
+    (!text.is_empty()).then(|| text.to_string())
+}
+
+fn find_antigravity_auth_string(value: &Value, keys: &[&str]) -> Option<String> {
+    if let Some(object) = value.as_object() {
+        let source = object
+            .get("token")
+            .and_then(Value::as_object)
+            .unwrap_or(object);
+        for key in keys {
+            if let Some(value) = source
+                .get(*key)
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            {
+                return Some(value.to_string());
+            }
+        }
+        for key in ["tokens", "oauth", "oauth2", "credentials", "auth"] {
+            if let Some(nested) = object.get(key) {
+                if let Some(value) = find_antigravity_auth_string(nested, keys) {
+                    return Some(value);
+                }
+            }
+        }
+    }
+    value
+        .as_str()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn fetch_antigravity_cloud_json(
+    client: &reqwest::blocking::Client,
+    path: &str,
+    token: &str,
+    user_agent: &str,
+    body: &Value,
+) -> Result<Value, AntigravityCloudError> {
+    for base_url in AGY_CLOUD_CODE_BASE_URLS {
+        let response = client
+            .post(format!("{base_url}{path}"))
+            .header(reqwest::header::ACCEPT, "application/json")
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .header(reqwest::header::AUTHORIZATION, format!("Bearer {token}"))
+            .header(reqwest::header::USER_AGENT, user_agent)
+            .json(body)
+            .send();
+        let Ok(response) = response else {
+            continue;
+        };
+        if response.status() == reqwest::StatusCode::UNAUTHORIZED
+            || response.status() == reqwest::StatusCode::FORBIDDEN
+        {
+            return Err(AntigravityCloudError::Auth);
+        }
+        if !response.status().is_success() {
+            continue;
+        }
+        return response
+            .json::<Value>()
+            .map_err(|_| AntigravityCloudError::Unavailable);
+    }
+    Err(AntigravityCloudError::Unavailable)
+}
+
+fn fetch_antigravity_cloud_snapshot(
+    client: &reqwest::blocking::Client,
+    auth: &AntigravityAuth,
+) -> Result<Option<CodexUsageSnapshot>, AntigravityCloudError> {
+    let token = auth
+        .access_token
+        .as_deref()
+        .filter(|token| !token.trim().is_empty())
+        .ok_or(AntigravityCloudError::Auth)?;
+    let response = fetch_antigravity_cloud_json(
+        client,
+        AGY_CLOUD_QUOTA_SUMMARY_PATH,
+        token,
+        "antigravity",
+        &serde_json::json!({}),
+    )?;
+    let Some(lines) = build_antigravity_quota_summary_lines(&response) else {
+        return Ok(None);
+    };
+    let plan = fetch_antigravity_cloud_json(
+        client,
+        AGY_CLOUD_LOAD_CODE_ASSIST_PATH,
+        token,
+        "agy",
+        &serde_json::json!({}),
+    )
+    .ok()
+    .and_then(|value| read_antigravity_cloud_plan(&value));
+    Ok(Some(CodexUsageSnapshot {
+        provider_id: "agy".to_string(),
+        display_name: "Antigravity".to_string(),
+        plan,
+        lines,
+        fetched_at: now_iso(),
+    }))
+}
+
+fn read_antigravity_cloud_plan(value: &Value) -> Option<String> {
+    value
+        .get("paidTier")
+        .and_then(|tier| tier.get("name"))
+        .and_then(Value::as_str)
+        .map(format_plan_label)
+        .or_else(|| {
+            value
+                .get("currentTier")
+                .and_then(|tier| tier.get("name"))
+                .and_then(Value::as_str)
+                .map(format_plan_label)
+        })
+}
+
+fn refresh_antigravity_auth(
+    client: &reqwest::blocking::Client,
+    auth: &mut AntigravityAuth,
+) -> Result<(), AntigravityCloudError> {
+    let refresh_token = auth
+        .refresh_token
+        .as_deref()
+        .map(str::trim)
+        .filter(|token| !token.is_empty())
+        .ok_or(AntigravityCloudError::Auth)?;
+    let (client_id, client_secret) =
+        load_antigravity_oauth_client().ok_or(AntigravityCloudError::Unavailable)?;
+    let response = client
+        .post(AGY_GOOGLE_OAUTH_URL)
+        .form(&[
+            ("client_id", client_id.as_str()),
+            ("client_secret", client_secret.as_str()),
+            ("refresh_token", refresh_token),
+            ("grant_type", "refresh_token"),
+        ])
+        .send()
+        .map_err(|_| AntigravityCloudError::Unavailable)?;
+    if response.status().is_success() {
+        let body = response
+            .json::<Value>()
+            .map_err(|_| AntigravityCloudError::Unavailable)?;
+        auth.access_token = body
+            .get("access_token")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|token| !token.is_empty())
+            .map(ToOwned::to_owned);
+        return auth
+            .access_token
+            .as_ref()
+            .map(|_| ())
+            .ok_or(AntigravityCloudError::Unavailable);
+    }
+    if response.status().is_client_error() {
+        Err(AntigravityCloudError::Auth)
+    } else {
+        Err(AntigravityCloudError::Unavailable)
+    }
+}
+
+fn load_antigravity_oauth_client() -> Option<(String, String)> {
+    let client_id = env_text(AGY_GOOGLE_CLIENT_ID_ENV);
+    let client_secret = env_text(AGY_GOOGLE_CLIENT_SECRET_ENV);
+    if let (Some(client_id), Some(client_secret)) = (client_id, client_secret) {
+        return Some((client_id, client_secret));
+    }
+
+    let path = home_path(AGY_GOOGLE_OAUTH_CONFIG_PATH)?;
+    let text = fs::read_to_string(path).ok()?;
+    let value = serde_json::from_str::<Value>(&text).ok()?;
+    parse_antigravity_oauth_client(&value)
+}
+
+fn parse_antigravity_oauth_client(value: &Value) -> Option<(String, String)> {
+    let client_id = maybe_string(value.get("client_id"))?;
+    let client_secret = maybe_string(value.get("client_secret"))?;
+    Some((client_id, client_secret))
 }
 
 fn probe_antigravity_ls_usage() -> Option<CodexUsageSnapshot> {
@@ -3579,10 +3947,7 @@ fn fetch_antigravity_quota_summary_snapshot(
 ) -> Option<CodexUsageSnapshot> {
     let data = call_antigravity_ls(client, scheme, port, csrf, "RetrieveUserQuotaSummary")?;
     let response = data.get("response")?;
-    let lines = build_antigravity_quota_summary_lines(response);
-    if lines.is_empty() {
-        return None;
-    }
+    let lines = build_antigravity_quota_summary_lines(response)?;
     let plan = call_antigravity_ls(client, scheme, port, csrf, "GetUserStatus")
         .and_then(|status| read_antigravity_user_status_plan(&status));
 
@@ -3613,10 +3978,9 @@ fn read_antigravity_user_status_plan(data: &Value) -> Option<String> {
         })
 }
 
-fn build_antigravity_quota_summary_lines(response: &Value) -> Vec<CodexMetricLine> {
-    let Some(groups) = response.get("groups").and_then(Value::as_array) else {
-        return Vec::new();
-    };
+fn build_antigravity_quota_summary_lines(response: &Value) -> Option<Vec<CodexMetricLine>> {
+    let response = response.get("response").unwrap_or(response);
+    let groups = response.get("groups").and_then(Value::as_array)?;
 
     const BUCKETS: [(&str, &str, u64); 4] = [
         ("gemini-5h", "Gemini 5h", 5 * 60 * 60 * 1000),
@@ -3667,10 +4031,12 @@ fn build_antigravity_quota_summary_lines(response: &Value) -> Vec<CodexMetricLin
         );
     }
 
-    BUCKETS
-        .iter()
-        .filter_map(|(id, _, _)| resolved.remove(*id))
-        .collect()
+    Some(
+        BUCKETS
+            .iter()
+            .filter_map(|(id, _, _)| resolved.remove(*id))
+            .collect(),
+    )
 }
 
 fn build_antigravity_config_lines(configs: &[Value]) -> Vec<CodexMetricLine> {
@@ -5003,7 +5369,6 @@ pub fn run() {
             display_state,
             drag_completion_pet,
             focus_terminal,
-            grok_usage,
             install_agent_halo_mod,
             hide_completion_pet,
             notch_metrics,
@@ -5505,6 +5870,77 @@ mod display_selection_tests {
     }
 
     #[test]
+    fn codex_reset_credits_prefer_dedicated_expiries_and_fallback_to_embedded_count() {
+        let usage: CodexUsageEnvelope = serde_json::from_value(serde_json::json!({
+            "rate_limit_reset_credits": { "available_count": 1 }
+        }))
+        .unwrap();
+        let dedicated: CodexResetCreditsEnvelope = serde_json::from_value(serde_json::json!({
+            "available_count": 2,
+            "credits": [
+                { "status": "available", "expires_at": "2026-08-03T12:00:00Z" },
+                { "status": "consumed", "expires_at": "2026-08-01T12:00:00Z" },
+                { "expires_at": "2026-08-01T09:00:00Z" }
+            ]
+        }))
+        .unwrap();
+
+        let (available, expiries) = read_codex_reset_credits(&usage, Some(&dedicated)).unwrap();
+
+        assert_eq!(available, 2);
+        assert_eq!(expiries.len(), 2);
+        assert!(
+            format_reset_credit_value(available, &expiries).starts_with("2 available · expires ")
+        );
+
+        let malformed_dedicated: CodexResetCreditsEnvelope = serde_json::from_value(
+            serde_json::json!({ "available_count": "unknown", "credits": [] }),
+        )
+        .unwrap();
+        assert_eq!(
+            read_codex_reset_credits(&usage, Some(&malformed_dedicated)).map(|(count, _)| count),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn codex_mapping_classifies_windows_and_only_surfaces_spark() {
+        let usage: CodexUsageEnvelope = serde_json::from_value(serde_json::json!({
+            "rate_limit": {
+                "primary_window": { "used_percent": 10, "limit_window_seconds": 604800 },
+                "secondary_window": { "used_percent": 20, "limit_window_seconds": 18000 }
+            },
+            "additional_rate_limits": [
+                {
+                    "limit_name": "GPT-5.4-Codex",
+                    "rate_limit": { "primary_window": { "used_percent": 30 } }
+                },
+                {
+                    "metered_feature": "GPT-5.3-Codex-Spark",
+                    "rate_limit": {
+                        "primary_window": { "used_percent": 40, "limit_window_seconds": 18000 },
+                        "secondary_window": { "used_percent": 50, "limit_window_seconds": 604800 }
+                    }
+                }
+            ]
+        }))
+        .unwrap();
+
+        let snapshot = build_codex_usage_snapshot(usage, &reqwest::header::HeaderMap::new(), None);
+        let labels = snapshot
+            .lines
+            .iter()
+            .filter_map(|line| match line {
+                CodexMetricLine::Progress { label, .. } => Some(label.as_str()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(labels, ["Session", "Weekly", "Spark", "Spark Weekly"]);
+        assert!(!labels.iter().any(|label| label.contains("5.4")));
+    }
+
+    #[test]
     fn antigravity_summary_uses_only_exact_supported_bucket_ids() {
         let response = serde_json::json!({
             "groups": [{ "buckets": [
@@ -5515,7 +5951,7 @@ mod display_selection_tests {
             ] }]
         });
 
-        let lines = build_antigravity_quota_summary_lines(&response);
+        let lines = build_antigravity_quota_summary_lines(&response).unwrap();
         let labels = lines
             .iter()
             .map(|line| match line {
@@ -5525,5 +5961,70 @@ mod display_selection_tests {
             .collect::<Vec<_>>();
 
         assert_eq!(labels, ["Gemini 5h", "Claude and GPT Weekly"]);
+    }
+
+    #[test]
+    fn antigravity_valid_empty_summary_is_authoritative_no_data() {
+        let response = serde_json::json!({ "groups": [] });
+
+        assert!(matches!(
+            build_antigravity_quota_summary_lines(&response),
+            Some(lines) if lines.is_empty()
+        ));
+        assert!(build_antigravity_quota_summary_lines(&serde_json::json!({})).is_none());
+    }
+
+    #[test]
+    fn antigravity_cloud_auth_unwraps_the_agy_keychain_shape() {
+        let payload = r#"{"token":{"access_token":"access","refresh_token":"refresh"}}"#;
+        let wrapped = format!("go-keyring-base64:{}", STANDARD.encode(payload));
+        let text = unwrap_go_keyring(&wrapped).unwrap();
+        let value: Value = serde_json::from_str(&text).unwrap();
+
+        assert_eq!(
+            find_antigravity_auth_string(&value, &["access_token"]),
+            Some("access".to_string())
+        );
+        assert_eq!(
+            find_antigravity_auth_string(&value, &["refresh_token"]),
+            Some("refresh".to_string())
+        );
+    }
+
+    #[test]
+    fn antigravity_oauth_client_reads_local_config_shape_without_bundled_secret() {
+        let value = serde_json::json!({
+            "client_id": "local-client-id",
+            "client_secret": "local-client-secret"
+        });
+
+        assert_eq!(
+            parse_antigravity_oauth_client(&value),
+            Some((
+                "local-client-id".to_string(),
+                "local-client-secret".to_string()
+            ))
+        );
+        assert!(parse_antigravity_oauth_client(&serde_json::json!({
+            "client_id": "local-client-id"
+        }))
+        .is_none());
+    }
+
+    #[test]
+    fn antigravity_cloud_summary_accepts_the_bare_remote_envelope() {
+        let response = serde_json::json!({
+            "response": { "groups": [{ "buckets": [
+                { "bucketId": "gemini-5h", "remainingFraction": 0.75 }
+            ] }] }
+        });
+
+        let lines = build_antigravity_quota_summary_lines(&response).unwrap();
+
+        assert!(matches!(
+            lines.first(),
+            Some(CodexMetricLine::Progress { label, used, .. })
+                if label == "Gemini 5h" && *used == 25.0
+        ));
     }
 }

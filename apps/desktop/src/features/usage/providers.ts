@@ -44,14 +44,6 @@ export const USAGE_PROVIDERS: IUsageProviderConfig[] = [
       { label: "Dashboard", url: "https://www.cursor.com/dashboard" },
     ],
   },
-  {
-    id: "grok",
-    label: "Grok",
-    command: "grok_usage",
-    iconPath: "/provider-icons/grok.svg",
-    color: "#d9d9d9",
-    links: [{ label: "Usage", url: "https://grok.com/?_s=usage" }],
-  },
 ];
 
 export const USAGE_METRIC_GROUPS: IUsageMetricGroup[] = [
