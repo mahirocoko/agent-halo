@@ -45,6 +45,24 @@ export interface IRuntimeChildMetrics {
   topProcesses: IRuntimeChildProcess[];
 }
 
+export type LocalServiceKind = "http" | "tcp";
+
+export interface ILocalService {
+  processId: number;
+  processName: string;
+  bindAddress: string;
+  port: number;
+  kind: LocalServiceKind;
+  url: string | null;
+}
+
+export interface ILocalServicesSnapshot {
+  sampledAtMs: number;
+  status: "ok" | "unsupported" | "error" | string;
+  error: string | null;
+  services: ILocalService[];
+}
+
 export interface IRuntimeUsageSnapshot {
   conversationId: string;
   processId: number;
@@ -66,6 +84,9 @@ export interface IRuntimeSessionView extends IRuntimeUsageTarget {
 
 export interface IRuntimeMonitorView {
   rows: IRuntimeSessionView[];
+  services: ILocalService[];
+  servicesError: string | null;
+  servicesLoading: boolean;
   endedCount: number;
   omittedCount: number;
   loading: boolean;

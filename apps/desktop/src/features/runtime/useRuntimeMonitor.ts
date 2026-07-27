@@ -1,8 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { buildRuntimeSessionViews, buildRuntimeUsageTargets, createDemoRuntimeSnapshots, isTerminalRuntimeStatus, runtimeTargetKey, selectRuntimeSamplingTargets } from "./model";
+import { buildRuntimeSessionViews, buildRuntimeUsageTargets, createDemoLocalServices, createDemoRuntimeSnapshots, isTerminalRuntimeStatus, runtimeTargetKey, selectRuntimeSamplingTargets } from "./model";
 import { mergeRuntimeEndedIdentities, readRuntimeEndedIdentities, reconcileRuntimeEndedIdentities, writeRuntimeEndedIdentities } from "./persistence";
-import type { IRuntimeMonitorView, IRuntimeNativeTarget, IRuntimeTargetSource, IRuntimeUsageSnapshot, IRuntimeUsageTarget } from "./types";
+import type { ILocalService, ILocalServicesSnapshot, IRuntimeMonitorView, IRuntimeNativeTarget, IRuntimeTargetSource, IRuntimeUsageSnapshot, IRuntimeUsageTarget } from "./types";
 
 const ACTIVE_REFRESH_MS = 5_000;
 
@@ -25,11 +25,15 @@ export const useRuntimeMonitor = ({ active, canUseNativeControls, demoMode, regi
   const targetKeyRef = useRef(targetKey);
   targetKeyRef.current = targetKey;
   const refreshingRef = useRef(false);
+  const servicesLoadingRef = useRef(false);
   const requestVersionRef = useRef(0);
   const [snapshots, setSnapshots] = useState<IRuntimeUsageSnapshot[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sampledAtMs, setSampledAtMs] = useState<number | null>(null);
+  const [services, setServices] = useState<ILocalService[]>([]);
+  const [servicesLoading, setServicesLoading] = useState(false);
+  const [servicesError, setServicesError] = useState<string | null>(null);
   const [refreshNonce, setRefreshNonce] = useState(0);
 
   useEffect(() => {
@@ -68,11 +72,45 @@ export const useRuntimeMonitor = ({ active, canUseNativeControls, demoMode, regi
     setError(null);
   }, []);
 
+  const refreshServices = useCallback(async (requestVersion: number) => {
+    if (demoMode) {
+      if (requestVersionRef.current === requestVersion) {
+        setServices(createDemoLocalServices());
+        setServicesError(null);
+      }
+      return;
+    }
+    if (!canUseNativeControls) {
+      setServices([]);
+      setServicesError("Local services need the native Agent Halo app");
+      return;
+    }
+    if (servicesLoadingRef.current) return;
+
+    servicesLoadingRef.current = true;
+    setServicesLoading(true);
+    try {
+      const snapshot = await invoke<ILocalServicesSnapshot>("local_services");
+      if (requestVersionRef.current !== requestVersion) return;
+      setServices(snapshot.services);
+      setServicesError(snapshot.error);
+    } catch (reason) {
+      if (requestVersionRef.current === requestVersion) {
+        setServices([]);
+        setServicesError(reason instanceof Error ? reason.message : "Could not inspect local services");
+      }
+    } finally {
+      servicesLoadingRef.current = false;
+      setServicesLoading(false);
+    }
+  }, [canUseNativeControls, demoMode]);
+
   const refresh = useCallback(async () => {
     const requestVersion = requestVersionRef.current + 1;
     requestVersionRef.current = requestVersion;
     const requestTargetKey = targetKeyRef.current;
     const current = targetsRef.current;
+    void refreshServices(requestVersion);
     if (current.length === 0) {
       setSnapshots([]);
       setSampledAtMs(null);
@@ -104,7 +142,7 @@ export const useRuntimeMonitor = ({ active, canUseNativeControls, demoMode, regi
       setLoading(false);
       if (requestVersionRef.current !== requestVersion || targetKeyRef.current !== requestTargetKey) setRefreshNonce((currentNonce) => currentNonce + 1);
     }
-  }, [acceptSnapshots, canUseNativeControls, demoMode]);
+  }, [acceptSnapshots, canUseNativeControls, demoMode, refreshServices]);
 
   useEffect(() => {
     if (!active) return undefined;
@@ -115,6 +153,9 @@ export const useRuntimeMonitor = ({ active, canUseNativeControls, demoMode, regi
 
   return {
     rows: useMemo(() => buildRuntimeSessionViews(targets, snapshots), [snapshots, targets]),
+    services,
+    servicesError,
+    servicesLoading,
     endedCount,
     omittedCount,
     loading,

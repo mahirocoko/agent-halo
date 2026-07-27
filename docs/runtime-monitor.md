@@ -1,6 +1,6 @@
 # Runtime Monitor
 
-Runtime Monitor is a read-only local view of CPU and memory pressure for open Letta Code processes and all bounded descendant child processes.
+Runtime Monitor is a read-only local view of CPU and memory pressure for open Letta Code processes and all bounded descendant child processes, plus locally listening TCP/web services.
 
 ## Contract
 
@@ -12,6 +12,21 @@ Letta mod event runtime.sourcePid
 ```
 
 The monitor never kills, suspends, renices, or ends a process. It does not enable `sessionActions.endSession` and does not use Letta's internal app-server process-control protocol.
+
+The Runtime tab also includes a separate **Local services** inventory. It is a native desktop observation lane, not a bridge event or Letta session field:
+
+```text
+macOS TCP LISTEN sockets
+  -> bounded process/port records
+  -> short local HTTP probe
+  -> Runtime tab service rows
+```
+
+- Sampling runs only while the Runtime tab is visible, on the same 5-second refresh cadence as process pressure.
+- macOS reads structured `lsof` listener output and keeps only process name, PID, bind address, port, and whether a bounded `HEAD` probe received an HTTP response. Each discovery pass has a 1.5-second total budget and a 256 KiB listener-output cap.
+- HTTP listeners expose an `Open in browser` action through the existing safe `http(s)` URL command. The action opens the URL; it never starts, stops, or controls the service.
+- The inventory is capped at 64 listeners, is held in renderer/native memory only, and is never written to the bridge snapshot, NDJSON log, or persistent storage.
+- Other platforms report an explicit unsupported state. The list may include ordinary local TCP services as well as dev servers; command arguments and request contents are never collected.
 
 ## Process identity
 
@@ -70,7 +85,7 @@ A future notification lane should require a sustained window and remain opt-in. 
 - Sampling stays inside the local Tauri app.
 - Runtime samples are held in renderer/native memory only and are not appended to Agent Halo NDJSON.
 - Ended-identity tombstones contain only the strong local runtime identity and timestamp, are bounded to 512 entries in localStorage, and carry no CPU/memory samples.
-- The UI exposes process names for at most five largest descendants, never full command-line arguments.
+- Letta runtime metrics expose process names for at most five largest descendants, never full command-line arguments; Local services exposes only the capped listener process names described above.
 - No remote telemetry or hosted service is involved.
 
 ## Verification

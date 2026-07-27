@@ -32,11 +32,13 @@ use std::os::unix::{
 };
 
 mod keep_awake;
+mod local_services;
 mod notification;
 mod pet_window;
 mod runtime_usage;
 
 use keep_awake::KeepAwakeState;
+use local_services::local_services;
 use notification::{
     cancel_pomodoro_notification, notification_permission_state, request_notification_permission,
     schedule_pomodoro_notification, PomodoroNotificationState,
@@ -5371,6 +5373,7 @@ pub fn run() {
             focus_terminal,
             install_agent_halo_mod,
             hide_completion_pet,
+            local_services,
             notch_metrics,
             notification_permission_state,
             open_external_url,

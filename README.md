@@ -31,7 +31,7 @@ The current app now spans session presence, a floating Completion Pet, Pomodoro,
 | **Pomodoro** | Local Focus/Short/Long phases, custom durations and cadence, pause/restart/reset/skip, persisted deadlines, and silent macOS alerts |
 | **Movement Break** | Explicit 10-squat challenge using one local camera stream, a white shoulder line, fixed green target, live progress, and bundled offline pose inference |
 | **Usage** | Local quota/token views for known AI providers, including truthful unavailable/offline diagnostics |
-| **Runtime** | Read-only Letta host and subprocess CPU/memory pressure with strong PID identity and no kill controls |
+| **Runtime** | Read-only Letta host/subprocess CPU and memory pressure plus local TCP/web-service inventory, with no process controls |
 | **Setup** | Connection/mod install, global Pet choice and size, Completion Pet/Movement settings, keep-awake, and target-display selection |
 
 ## What Agent Halo does
@@ -40,6 +40,7 @@ The current app now spans session presence, a floating Completion Pet, Pomodoro,
 - Keeps recent conversations in workspace groups, including distinct subagent/default lanes, sticky completed rows, per-session context, and guarded clear/dismiss behavior.
 - Focuses the exact Herdr pane when trusted runtime identity is present, then falls back to native Ghostty cwd/title/session matching.
 - Tracks local AI usage and read-only Letta/subprocess pressure without hiding known providers or exposing process controls.
+- Lists locally listening TCP services, identifies HTTP dev servers with a bounded probe, and opens detected web endpoints without controlling the process.
 - Runs an independent local Pomodoro with customizable phases, persisted deadlines, collapsed countdown, silent notifications, and a separate Completion Pet.
 - Offers an opt-in 10-squat Movement Break only after an explicit Pet action; preview and shoulder tracking use one local stream and bundled offline assets.
 - Keeps the display awake only while genuine visible Letta work is active.
@@ -50,7 +51,7 @@ Agent Halo intentionally stays local. It uses the public Letta Code mod surface,
 
 ## Current status
 
-Agent Halo is an actively used personal macOS app, not a public packaged release. The bridge, native overlay, multi-session model, Completion Pet, Pomodoro/Movement flow, Usage, Runtime, display placement, keep-awake, and setup/install paths are implemented and covered by browser/native regression checks.
+Agent Halo is an actively used personal macOS app, not a public packaged release. The bridge, native overlay, multi-session model, Completion Pet, Pomodoro/Movement flow, Usage, Runtime, display placement, keep-awake, and setup/install paths are implemented and covered by browser/native regression checks. The local-service lane additionally has parser/native compile coverage and browser demo coverage; a live installed-app smoke test is still required to validate macOS `lsof`/HTTP probing.
 
 The project still moves quickly. Session/process controls remain intentionally conservative: Agent Halo will not invent an “end session” or kill-process feature before Letta exposes a stable scoped API.
 

@@ -36,6 +36,17 @@
   gap: 6px;
 }
 
+.runtime-service-row {
+  display: grid;
+  padding: 7px 2px;
+  border-bottom: 1px solid var(--hair);
+}
+
+.runtime-service-kind {
+  color: var(--text-3);
+  font-size: 9px;
+}
+
 .runtime-alert-count {
   display: inline-flex;
   align-items: center;

@@ -45,7 +45,6 @@ import { readUsageSettings, writeUsageSettings } from "./features/usage/adapters
 import { AgentUsageList } from "./features/usage/components";
 import type { IUsageSettings } from "./features/usage/types";
 import { useAgentUsageList } from "./features/usage/useAgentUsageList";
-import { RuntimePanel } from "./features/runtime/components";
 import { useRuntimeMonitor } from "./features/runtime/useRuntimeMonitor";
 import { readMovementBreakEnabled, writeMovementBreakEnabled } from "./features/movement/preferences";
 import "./styles.css";
@@ -59,6 +58,10 @@ const PET_SURFACE = SEARCH_PARAMS.get("surface") === "pet";
 const PetApp = lazy(async () => {
   const module = await import("./features/pet/PetApp");
   return { default: module.PetApp };
+});
+const RuntimePanel = lazy(async () => {
+  const module = await import("./features/runtime/components");
+  return { default: module.RuntimePanel };
 });
 const DEFAULT_CAMERA_NOTCH_WIDTH = 184;
 const DEFAULT_CLOSED_NOTCH_HEIGHT = 36;
@@ -1465,7 +1468,9 @@ const App = () => {
               ) : activeMainTab === "usage" ? (
                 <AgentUsageList usages={agentUsages} onRefresh={refreshAgentUsage} settings={usageSettings} onSettingsChange={updateUsageSettings} />
               ) : activeMainTab === "runtime" ? (
-                <RuntimePanel monitor={runtimeMonitor} />
+                <Suspense fallback={<div className="empty-text small">Loading Runtime…</div>}>
+                  <RuntimePanel monitor={runtimeMonitor} />
+                </Suspense>
               ) : sessions.length === 0 ? (
                 <div className="empty-state">
                   <div className="empty-glyph">◌</div>

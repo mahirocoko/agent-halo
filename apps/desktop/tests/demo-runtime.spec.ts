@@ -13,7 +13,11 @@ test("runtime tab separates Letta host pressure from child processes", async ({ 
   await page.getByRole("tab", { name: "Runtime" }).click();
 
   await expect(page.getByRole("tabpanel", { name: "Runtime" })).toBeVisible();
-  await expect(page.getByText("Local host and child-process pressure")).toBeVisible();
+  await expect(page.getByText("Local services and process pressure")).toBeVisible();
+  await expect(page.getByText("Local services", { exact: true })).toBeVisible();
+  await expect(page.locator(".runtime-service-row")).toHaveCount(3);
+  await expect(page.locator('.runtime-service-row[data-service-kind="http"]')).toContainText("5173");
+  await expect(page.locator(".runtime-service-open")).toHaveCount(1);
   await expect(page.locator(".runtime-row")).toHaveCount(3);
   await expect(page.locator(".runtime-row[data-pressure=critical]")).toHaveCount(2);
   await expect(page.locator(".runtime-row[data-pressure=unavailable]")).toHaveCount(1);
@@ -23,7 +27,7 @@ test("runtime tab separates Letta host pressure from child processes", async ({ 
   await expect(page.locator(".runtime-row").first()).toContainText("Subprocesses");
   await expect(page.locator(".runtime-pressure-label").first()).toBeVisible();
   await expect(page.locator(".runtime-row").first()).toContainText("PID");
-  await expect(page.getByText("Read-only · 100% CPU equals one logical core · no process controls")).toBeVisible();
+  await expect(page.getByText("Read-only · local listener names/PIDs only · 100% CPU equals one logical core · no process controls")).toBeVisible();
 
   await page.locator(".runtime-row[data-pressure=unavailable]").getByRole("button").click();
   await expect(page.locator(".runtime-row")).toHaveCount(2);
@@ -38,6 +42,18 @@ test("runtime tab separates Letta host pressure from child processes", async ({ 
   await expect(page.locator(".runtime-row")).toHaveCount(3);
   await expect(page.getByText("1 ended hidden")).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.localStorage.getItem("agent-halo.runtime-ended-identities"))).toBe(endedBeforeReload);
+});
+
+test("detected HTTP services expose a keyboard-reachable browser action", async ({ page }) => {
+  page.on("popup", (popup) => void popup.close());
+  await page.goto("/?demo=1&demoScenario=multi");
+  await page.getByRole("tab", { name: "Runtime" }).click();
+
+  const openService = page.getByRole("button", { name: "Open node on port 5173" });
+  await openService.focus();
+  await expect(openService).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(openService).toBeFocused();
 });
 
 test("runtime ended identities are strongly keyed and bounded", async ({ page }) => {
@@ -157,4 +173,6 @@ test("runtime list stays readable at narrow width and reduced motion", async ({ 
   expect(rowBox!.x + rowBox!.width).toBeLessThanOrEqual(panelBox!.x + panelBox!.width + 1);
   expect(toolbarBox!.x).toBeGreaterThanOrEqual(panelBox!.x);
   expect(toolbarBox!.x + toolbarBox!.width).toBeLessThanOrEqual(panelBox!.x + panelBox!.width + 1);
+  expect(await panel.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+  await expect(page.getByRole("button", { name: "Open node on port 5173" })).toBeVisible();
 });

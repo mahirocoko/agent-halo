@@ -1,5 +1,5 @@
 import type { IAgentHaloEventRuntime } from "@agent-halo/protocol";
-import type { IRuntimeSessionView, IRuntimeTargetSource, IRuntimeUsageSnapshot, IRuntimeUsageTarget, RuntimePressureLevel } from "./types";
+import type { ILocalService, IRuntimeSessionView, IRuntimeTargetSource, IRuntimeUsageSnapshot, IRuntimeUsageTarget, RuntimePressureLevel } from "./types";
 
 const GIB = 1024 ** 3;
 const RECENT_SHARED_PROCESS_MS = 10 * 60_000;
@@ -129,6 +129,40 @@ export const formatRuntimeBytes = (bytes: number | null | undefined): string => 
 
 export const formatRuntimeCpu = (value: number | null | undefined): string =>
   value == null || !Number.isFinite(value) ? "—" : `${Math.round(value)}%`;
+
+export const formatLocalServiceEndpoint = (service: Pick<ILocalService, "bindAddress" | "port">): string => {
+  const host = service.bindAddress.includes(":") && !service.bindAddress.startsWith("[")
+    ? `[${service.bindAddress}]`
+    : service.bindAddress;
+  return `${host}:${service.port}`;
+};
+
+export const createDemoLocalServices = (): ILocalService[] => [
+  {
+    processId: 40_680,
+    processName: "node",
+    bindAddress: "127.0.0.1",
+    port: 5173,
+    kind: "http",
+    url: "http://127.0.0.1:5173",
+  },
+  {
+    processId: 1_637,
+    processName: "redis-server",
+    bindAddress: "127.0.0.1",
+    port: 6379,
+    kind: "tcp",
+    url: null,
+  },
+  {
+    processId: 1_645,
+    processName: "postgres",
+    bindAddress: "::1",
+    port: 5432,
+    kind: "tcp",
+    url: null,
+  },
+];
 
 export const createDemoRuntimeSnapshots = (targets: IRuntimeUsageTarget[]): IRuntimeUsageSnapshot[] =>
   targets.map((target, index) => {
