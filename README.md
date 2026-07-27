@@ -142,9 +142,39 @@ Notes:
 - Codex history and token trends come from local usage history for the resolved local home where available; it is never labelled as a separately selected account until Agent Halo has account-card UI.
 - Codex condenses available local history into Today/Yesterday, a 30-day trend, a short model mix, and an optional daily detail disclosure. The surface labels that data as an estimate from this home.
 - Antigravity usage first reads the local Antigravity/`agy` language server, then falls back to Cloud Code with the existing `gemini`/`antigravity` Keychain credential when the language server is unavailable or not signed in.
-- If an Antigravity refresh token must be refreshed, Agent Halo reads the installed-app OAuth client metadata from `AGENT_HALO_AGY_GOOGLE_CLIENT_ID`/`AGENT_HALO_AGY_GOOGLE_CLIENT_SECRET` or the local ignored file `~/.config/agent-halo/agy-google-oauth.json`; these values must never be committed.
+- If an Antigravity refresh token must be refreshed, Agent Halo reads locally supplied OAuth client metadata from `AGENT_HALO_AGY_GOOGLE_CLIENT_ID`/`AGENT_HALO_AGY_GOOGLE_CLIENT_SECRET` or the local ignored file `~/.config/agent-halo/agy-google-oauth.json`; these values must never be committed.
 - Claude Code tries valid local Keychain/file logins before an inference-only environment token and refreshes only back into the source that produced the credential.
 - Provider cards remain capability-aware; a failed refresh preserves last-good metrics with an explicit Outdated/error state instead of silently disappearing.
+
+### Antigravity OAuth refresh setup (local only)
+
+The existing `gemini`/`antigravity` Keychain access token is enough for normal Cloud Code reads. This extra setup is needed only when Agent Halo must exchange an Antigravity `refresh_token` for a new access token. The OAuth client ID and secret are installed-app client metadata, but GitHub Push Protection still treats the values as credentials; never place them in tracked source, a committed `.env`, logs, prompts, screenshots, or chat messages.
+
+An AI or operator working on the user's Mac may create the ignored local config when both values are already available from an authorized local environment or provider installation. The setup must not print the values:
+
+```bash
+test -n "${AGENT_HALO_AGY_GOOGLE_CLIENT_ID:-}" \
+  && test -n "${AGENT_HALO_AGY_GOOGLE_CLIENT_SECRET:-}" \
+  || { echo "Set the two AGY OAuth variables from an authorized local source first." >&2; exit 1; }
+
+umask 077
+/usr/bin/python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+path = Path.home() / ".config" / "agent-halo" / "agy-google-oauth.json"
+path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+path.write_text(json.dumps({
+    "client_id": os.environ["AGENT_HALO_AGY_GOOGLE_CLIENT_ID"],
+    "client_secret": os.environ["AGENT_HALO_AGY_GOOGLE_CLIENT_SECRET"],
+}) + "\n")
+path.chmod(0o600)
+print(path)
+PY
+```
+
+If no authorized local source is available, stop and ask the user to set the variables or create that file themselves. Do not invent values, ask the user to paste a secret into chat, or commit the local file. The app can still use a currently valid Keychain access token without this refresh configuration.
 
 ## Installation
 
