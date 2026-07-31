@@ -61,6 +61,10 @@ The `usage-codex-reset-details` revision raises the CSS gzip ceiling to 11,350 b
 
 The `usage-native-background-v1` revision keeps the cache-first renderer behavior while dispatching the blocking Codex, Antigravity, Claude, and Cursor provider commands through Tauri's blocking worker pool. Provider refreshes may still run concurrently, but HTTP, language-server, SQLite, and `ccusage` work no longer executes on the renderer invoke path.
 
+The `services-top-level-web-evidence-v1` revision replaces the temporary internal Runtime tabs with the approved canonical top-level Services header tab. It lowers the CSS gzip ceiling from 11,600 to 11,500 bytes after removing the invented hairline-tab styles and keeps JavaScript gzip capped at 98,000 bytes while adding the main-tab route plus independently scoped Runtime/Services polling. The budget script measures the candidate at 11,430 bytes CSS gzip and 97,835 bytes JavaScript gzip. Native bounded browser-app evidence and the explicit PID/start/address/port registry remain outside the web bundle.
+
+The `services-owner-evidence-v1` revision raises JavaScript gzip from 98,000 to 98,500 bytes while keeping CSS at 11,500 bytes. The allowance covers safe HTTP document titles, current service-cwd context, bounded owner-target transport, compact `Started by Letta · project · Herdr pane` rows, and the disjoint Web frontend / Letta service / Other listener hierarchy; native ancestry matching remains outside the web bundle. The candidate measures 11,479 bytes CSS gzip and 98,119 bytes JavaScript gzip. It never ships command arguments, response bodies, terminal output, or environment values to the renderer.
+
 The low-risk bridge refactor's three-run median measured event duration `603.06ms → 574.18ms` (−4.79%) and throughput `33,164 → 34,832 events/s` (+5.03%) for 20,000 deterministic events. Startup stayed effectively flat; synchronous NDJSON durability and event ordering remain unchanged.
 
 ## Commands

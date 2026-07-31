@@ -199,7 +199,7 @@ export const MovementChallenge = ({ busy, cameraPreviewEnabled, demoPoseEnabled,
       <footer className="movement-actions">
         {terminalFailure ? <button type="button" onClick={onRetry} disabled={busy}><RotateCcw size={13} strokeWidth={2.3} />Try again</button> : null}
         {terminalFailure ? <button className="is-primary" type="button" onClick={onStartBreak} disabled={busy}><Play size={13} strokeWidth={2.3} />Start break</button> : null}
-        {!terminalFailure && !complete ? <button type="button" onClick={onCancel} disabled={busy}>Cancel</button> : null}
+        {!terminalFailure && !complete ? <button className="is-danger" type="button" onClick={onCancel} disabled={busy}>Cancel</button> : null}
         <span className="movement-safety">Camera stops when this closes</span>
       </footer>
     </section>

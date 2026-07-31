@@ -2,17 +2,18 @@ import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { buildRuntimeSessionViews, buildRuntimeUsageTargets, createDemoLocalServices, createDemoRuntimeSnapshots, isTerminalRuntimeStatus, runtimeTargetKey, selectRuntimeSamplingTargets } from "./model";
 import { mergeRuntimeEndedIdentities, readRuntimeEndedIdentities, reconcileRuntimeEndedIdentities, writeRuntimeEndedIdentities } from "./persistence";
-import type { ILocalService, ILocalServicesSnapshot, IRuntimeMonitorView, IRuntimeNativeTarget, IRuntimeTargetSource, IRuntimeUsageSnapshot, IRuntimeUsageTarget } from "./types";
+import type { ILocalService, ILocalServiceOwnerTarget, ILocalServicesSnapshot, IRuntimeMonitorView, IRuntimeNativeTarget, IRuntimeTargetSource, IRuntimeUsageSnapshot, IRuntimeUsageTarget } from "./types";
 
 const ACTIVE_REFRESH_MS = 5_000;
 
 interface IUseRuntimeMonitorOptions extends IRuntimeTargetSource {
-  active: boolean;
+  processActive: boolean;
+  servicesActive: boolean;
   canUseNativeControls: boolean;
   demoMode: boolean;
 }
 
-export const useRuntimeMonitor = ({ active, canUseNativeControls, demoMode, registry, sessions }: IUseRuntimeMonitorOptions): IRuntimeMonitorView => {
+export const useRuntimeMonitor = ({ canUseNativeControls, demoMode, processActive, registry, servicesActive, sessions }: IUseRuntimeMonitorOptions): IRuntimeMonitorView => {
   const allTargets = useMemo(() => buildRuntimeUsageTargets({ registry, sessions }), [registry, sessions]);
   const [endedIdentities, setEndedIdentities] = useState<Map<string, number>>(readRuntimeEndedIdentities);
   const eligibleTargets = useMemo(() => allTargets.filter((target) => !endedIdentities.has(runtimeTargetKey(target))), [allTargets, endedIdentities]);
@@ -26,7 +27,8 @@ export const useRuntimeMonitor = ({ active, canUseNativeControls, demoMode, regi
   targetKeyRef.current = targetKey;
   const refreshingRef = useRef(false);
   const servicesLoadingRef = useRef(false);
-  const requestVersionRef = useRef(0);
+  const processRequestVersionRef = useRef(0);
+  const servicesRequestVersionRef = useRef(0);
   const [snapshots, setSnapshots] = useState<IRuntimeUsageSnapshot[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -72,9 +74,12 @@ export const useRuntimeMonitor = ({ active, canUseNativeControls, demoMode, regi
     setError(null);
   }, []);
 
-  const refreshServices = useCallback(async (requestVersion: number) => {
+  const refreshServices = useCallback(async () => {
+    if (servicesLoadingRef.current) return;
+    const requestVersion = servicesRequestVersionRef.current + 1;
+    servicesRequestVersionRef.current = requestVersion;
     if (demoMode) {
-      if (requestVersionRef.current === requestVersion) {
+      if (servicesRequestVersionRef.current === requestVersion) {
         setServices(createDemoLocalServices());
         setServicesError(null);
       }
@@ -85,17 +90,22 @@ export const useRuntimeMonitor = ({ active, canUseNativeControls, demoMode, regi
       setServicesError("Local services need the native Agent Halo app");
       return;
     }
-    if (servicesLoadingRef.current) return;
-
     servicesLoadingRef.current = true;
     setServicesLoading(true);
     try {
-      const snapshot = await invoke<ILocalServicesSnapshot>("local_services");
-      if (requestVersionRef.current !== requestVersion) return;
+      const ownerTargets: ILocalServiceOwnerTarget[] = targetsRef.current.map(({ conversationId, processId, sourceStartedAtMs, project, herdrPaneId }) => ({
+        conversationId,
+        processId,
+        expectedStartTimeMs: sourceStartedAtMs,
+        project,
+        herdrPaneId,
+      }));
+      const snapshot = await invoke<ILocalServicesSnapshot>("local_services", { ownerTargets });
+      if (servicesRequestVersionRef.current !== requestVersion) return;
       setServices(snapshot.services);
       setServicesError(snapshot.error);
     } catch (reason) {
-      if (requestVersionRef.current === requestVersion) {
+      if (servicesRequestVersionRef.current === requestVersion) {
         setServices([]);
         setServicesError(reason instanceof Error ? reason.message : "Could not inspect local services");
       }
@@ -105,12 +115,11 @@ export const useRuntimeMonitor = ({ active, canUseNativeControls, demoMode, regi
     }
   }, [canUseNativeControls, demoMode]);
 
-  const refresh = useCallback(async () => {
-    const requestVersion = requestVersionRef.current + 1;
-    requestVersionRef.current = requestVersion;
+  const refreshProcesses = useCallback(async () => {
+    const requestVersion = processRequestVersionRef.current + 1;
+    processRequestVersionRef.current = requestVersion;
     const requestTargetKey = targetKeyRef.current;
     const current = targetsRef.current;
-    void refreshServices(requestVersion);
     if (current.length === 0) {
       setSnapshots([]);
       setSampledAtMs(null);
@@ -119,7 +128,7 @@ export const useRuntimeMonitor = ({ active, canUseNativeControls, demoMode, regi
     }
     if (demoMode) {
       const next = createDemoRuntimeSnapshots(current);
-      if (requestVersionRef.current === requestVersion && targetKeyRef.current === requestTargetKey) acceptSnapshots(next, current);
+      if (processRequestVersionRef.current === requestVersion && targetKeyRef.current === requestTargetKey) acceptSnapshots(next, current);
       return;
     }
     if (!canUseNativeControls) {
@@ -134,22 +143,29 @@ export const useRuntimeMonitor = ({ active, canUseNativeControls, demoMode, regi
     try {
       const nativeTargets: IRuntimeNativeTarget[] = current.map(({ conversationId, runtimeEventId, processId, sourceStartedAtMs, cwd }) => ({ conversationId, eventId: runtimeEventId, processId, expectedStartTimeMs: sourceStartedAtMs, cwd }));
       const next = await invoke<IRuntimeUsageSnapshot[]>("runtime_usage", { targets: nativeTargets });
-      if (requestVersionRef.current === requestVersion && targetKeyRef.current === requestTargetKey) acceptSnapshots(next, current);
+      if (processRequestVersionRef.current === requestVersion && targetKeyRef.current === requestTargetKey) acceptSnapshots(next, current);
     } catch (reason) {
-      if (requestVersionRef.current === requestVersion && targetKeyRef.current === requestTargetKey) setError(reason instanceof Error ? reason.message : "Could not sample local Letta processes");
+      if (processRequestVersionRef.current === requestVersion && targetKeyRef.current === requestTargetKey) setError(reason instanceof Error ? reason.message : "Could not sample local Letta processes");
     } finally {
       refreshingRef.current = false;
       setLoading(false);
-      if (requestVersionRef.current !== requestVersion || targetKeyRef.current !== requestTargetKey) setRefreshNonce((currentNonce) => currentNonce + 1);
+      if (processRequestVersionRef.current !== requestVersion || targetKeyRef.current !== requestTargetKey) setRefreshNonce((currentNonce) => currentNonce + 1);
     }
-  }, [acceptSnapshots, canUseNativeControls, demoMode, refreshServices]);
+  }, [acceptSnapshots, canUseNativeControls, demoMode]);
 
   useEffect(() => {
-    if (!active) return undefined;
-    void refresh();
-    const timer = window.setInterval(() => void refresh(), ACTIVE_REFRESH_MS);
+    if (!processActive) return undefined;
+    void refreshProcesses();
+    const timer = window.setInterval(() => void refreshProcesses(), ACTIVE_REFRESH_MS);
     return () => window.clearInterval(timer);
-  }, [active, refresh, refreshNonce, targetKey]);
+  }, [processActive, refreshNonce, refreshProcesses, targetKey]);
+
+  useEffect(() => {
+    if (!servicesActive) return undefined;
+    void refreshServices();
+    const timer = window.setInterval(() => void refreshServices(), ACTIVE_REFRESH_MS);
+    return () => window.clearInterval(timer);
+  }, [refreshServices, servicesActive]);
 
   return {
     rows: useMemo(() => buildRuntimeSessionViews(targets, snapshots), [snapshots, targets]),
@@ -161,6 +177,7 @@ export const useRuntimeMonitor = ({ active, canUseNativeControls, demoMode, regi
     loading,
     error,
     sampledAtMs,
-    refresh: () => void refresh(),
+    refreshProcesses: () => void refreshProcesses(),
+    refreshServices: () => void refreshServices(),
   };
 };

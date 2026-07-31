@@ -1,6 +1,6 @@
 # Runtime Monitor
 
-Runtime Monitor is a read-only local view of CPU and memory pressure for open Letta Code processes and all bounded descendant child processes, plus locally listening TCP/web services.
+Runtime Monitor is a read-only local view of CPU and memory pressure for open Letta Code processes and all bounded descendant child processes. Local listener discovery lives beside it as the separate top-level Services tab.
 
 ## Contract
 
@@ -13,20 +13,49 @@ Letta mod event runtime.sourcePid
 
 The monitor never kills, suspends, renices, or ends a process. It does not enable `sessionActions.endSession` and does not use Letta's internal app-server process-control protocol.
 
-The Runtime tab also includes a separate **Local services** inventory. It is a native desktop observation lane, not a bridge event or Letta session field:
+The top-level **Services** tab is a separate native desktop observation lane, not a bridge event or Letta session field:
 
 ```text
 macOS TCP LISTEN sockets
   -> bounded process/port records
-  -> short local HTTP probe
-  -> Runtime tab service rows
+  -> short local HTTP/browser-app title/anatomy probes
+  -> listener cwd + bounded parent ancestry
+  -> exact trusted Letta PID/start match + session-carried Herdr pane
+  -> Services tab Detected web frontends / Letta services / Other listeners groups
 ```
 
-- Sampling runs only while the Runtime tab is visible, on the same 5-second refresh cadence as process pressure.
-- macOS reads structured `lsof` listener output and keeps only process name, PID, bind address, port, and whether a bounded `HEAD` probe received an HTTP response. Each discovery pass has a 1.5-second total budget and a 256 KiB listener-output cap.
-- HTTP listeners expose an `Open in browser` action through the existing safe `http(s)` URL command. The action opens the URL; it never starts, stops, or controls the service.
+- Runtime process sampling runs only while the Runtime tab is visible. Listener discovery runs only while Services is visible. Each lane refreshes independently every 5 seconds and owns its own status, error, refresh action, footnote, and existing outer sheet scrollbar; neither creates a nested scroller. Services receives at most 64 trusted owner targets from the current session registry.
+- macOS reads structured `lsof` listener output and keeps only process name, PID, bind address, port, current cwd, whether a bounded root `GET` received an HTTP response, a safe document title, and whether strong web-frontend evidence was confirmed. Each discovery pass has a 1.5-second total budget, an 8 KiB per-response cap, and a 256 KiB listener-output cap.
+- Web-frontend classification is fail-closed and does not guess from ports or process names. The same probes apply to every listener, including Node, Bun, Python, and unknown runtimes. Automatic evidence is either a framework-specific Vite/Next development response or a successful root HTML document with browser-app anatomy such as a module script plus stylesheet, a known Next/Nuxt marker, a root mount plus external script, or a bundled `/assets/` stylesheet plus JavaScript `modulepreload` visible before late streamed hydration. This catches large SSR documents whose scripts arrive after the bounded prefix without promoting a generic styled HTML page or downloading the whole document. A Python directory listing, generic HTML/error page, arbitrary JavaScript endpoint, API, or AirTunes response remains an ordinary HTTP service.
+- Strongly evidenced web frontends appear first in **Detected web frontends** with the green dot. A non-web listener with exact trusted Letta ancestry appears next in **Letta services** with a neutral dot. Remaining HTTP/TCP listeners appear under **Other listeners**. A listener that is both a web frontend and Letta-started stays in the first group and retains its `Started by Letta` detail, so rows are never duplicated and green never means merely “Letta opened it” or “a TCP port answered.” Group labels and `HTTP`/`TCP` text keep color from being the only signal.
+- Successful HTML roots may expose a whitespace-normalized, control-free title capped at 120 characters. Services uses that title as the primary label unless it is a generic `Directory listing`/`Index of` title; the process name stays visible beside the endpoint.
+- Each listener may expose its current cwd basename. The full local cwd is hover context. `Started by Letta · <project> · <pane>` appears only when the listener's bounded live parent ancestry contains a trusted Letta PID whose native process start matches within two seconds. The optional Herdr pane comes from that same matched session event. PID reuse, stale/missing ancestry, a process re-parented to `launchd`, or malformed labels produces no owner claim rather than a guess.
+- Every HTTP listener still exposes an inset 24px `Open in browser` action through the existing safe `http(s)` URL command, whether or not it is recognized as a web frontend. The action opens the URL; it never starts, stops, or controls the service.
 - The inventory is capped at 64 listeners, is held in renderer/native memory only, and is never written to the bridge snapshot, NDJSON log, or persistent storage.
-- Other platforms report an explicit unsupported state. The list may include ordinary local TCP services as well as dev servers; command arguments and request contents are never collected.
+- Other platforms report an explicit unsupported state. The list may include ordinary local TCP services as well as browser apps; command arguments, terminal output, environment variables, and response bodies are never exposed.
+
+### Explicit web frontend registry
+
+Projects that Agent Halo does not recognize automatically may authoritatively register a current local listener through `~/.config/agent-halo/local-web-frontends.v1.json`:
+
+```json
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "processId": 87203,
+      "processStartedAtMs": 1785475200000,
+      "bindAddress": "127.0.0.1",
+      "port": 4173,
+      "expiresAtMs": 1785475800000
+    }
+  ]
+}
+```
+
+The registry is positive-only and never downgrades strong automatic evidence. An entry matches only the exact live PID, process-start time within 2 seconds, normalized bind address, and port. Expiry must be in the future but no more than 15 minutes ahead, so a producer refreshes the file while its service is alive. Agent Halo never creates, rewrites, or deletes this file.
+
+The reader fails closed: the file must be a current-user regular file opened without following symlinks, use private permissions (`0600` recommended), stay under 32 KiB, declare schema version 1, and contain at most 32 validated non-duplicate entries. Missing or stale entries are ignored. An unsafe/malformed registry is ignored as classification evidence and surfaced as a Services diagnostic while normal listener discovery continues. Producers must write a same-directory temporary file with mode `0600` and atomically rename it into place.
 
 ## Process identity
 
@@ -85,7 +114,7 @@ A future notification lane should require a sustained window and remain opt-in. 
 - Sampling stays inside the local Tauri app.
 - Runtime samples are held in renderer/native memory only and are not appended to Agent Halo NDJSON.
 - Ended-identity tombstones contain only the strong local runtime identity and timestamp, are bounded to 512 entries in localStorage, and carry no CPU/memory samples.
-- Letta runtime metrics expose process names for at most five largest descendants, never full command-line arguments; Local services exposes only the capped listener process names described above.
+- Letta runtime metrics expose process names for at most five largest descendants, never full command-line arguments; Services exposes the capped listener identity, safe title/cwd context, and exact matched session ancestry described above, and reads only the bounded explicit registry identity fields.
 - No remote telemetry or hosted service is involved.
 
 ## Verification

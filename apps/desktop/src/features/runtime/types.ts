@@ -10,6 +10,7 @@ export interface IRuntimeUsageTarget {
   cwd: string | null;
   project: string;
   workspace: string;
+  herdrPaneId: string | null;
   sessionStatus: ISessionSummary["status"];
   lastActivityAt: string;
   relatedConversationCount: number;
@@ -22,6 +23,14 @@ export interface IRuntimeNativeTarget {
   processId: number;
   expectedStartTimeMs: number;
   cwd: string | null;
+}
+
+export interface ILocalServiceOwnerTarget {
+  conversationId: string;
+  processId: number;
+  expectedStartTimeMs: number;
+  project: string;
+  herdrPaneId: string | null;
 }
 
 export interface IRuntimeProcessMetrics {
@@ -47,13 +56,23 @@ export interface IRuntimeChildMetrics {
 
 export type LocalServiceKind = "http" | "tcp";
 
+export interface ILocalServiceOwner {
+  conversationId: string;
+  project: string;
+  herdrPaneId: string | null;
+}
+
 export interface ILocalService {
   processId: number;
   processName: string;
   bindAddress: string;
   port: number;
   kind: LocalServiceKind;
+  webFrontend: boolean;
+  httpTitle: string | null;
   url: string | null;
+  cwd: string | null;
+  owner: ILocalServiceOwner | null;
 }
 
 export interface ILocalServicesSnapshot {
@@ -92,7 +111,8 @@ export interface IRuntimeMonitorView {
   loading: boolean;
   error: string | null;
   sampledAtMs: number | null;
-  refresh: () => void;
+  refreshProcesses: () => void;
+  refreshServices: () => void;
 }
 
 export interface IRuntimeTargetSource {

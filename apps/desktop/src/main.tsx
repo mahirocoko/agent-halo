@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { Activity, BarChart3, Check, ChevronLeft, Focus, List, Settings, Timer, Trash2, X } from "lucide-react";
+import { Activity, BarChart3, Check, ChevronLeft, Focus, List, Server, Settings, Timer, Trash2, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createRoot } from "react-dom/client";
 import type { AgentHaloPresenceStatus } from "@agent-halo/protocol";
@@ -59,9 +59,13 @@ const PetApp = lazy(async () => {
   const module = await import("./features/pet/PetApp");
   return { default: module.PetApp };
 });
-const RuntimePanel = lazy(async () => {
+const RuntimeProcessesPanel = lazy(async () => {
   const module = await import("./features/runtime/components");
-  return { default: module.RuntimePanel };
+  return { default: module.RuntimeProcessesPanel };
+});
+const LocalServicesPanel = lazy(async () => {
+  const module = await import("./features/runtime/components");
+  return { default: module.LocalServicesPanel };
 });
 const DEFAULT_CAMERA_NOTCH_WIDTH = 184;
 const DEFAULT_CLOSED_NOTCH_HEIGHT = 36;
@@ -101,7 +105,7 @@ interface INotchMetrics {
   closedHeight: number;
 }
 
-type MainPanelTab = "sessions" | "pomodoro" | "usage" | "runtime";
+type MainPanelTab = "sessions" | "pomodoro" | "usage" | "runtime" | "services";
 
 const estimateLiveActivityWingWidth = (label: string): number => {
   const textWidth = Math.ceil(label.length * 5.6);
@@ -335,10 +339,11 @@ const App = () => {
   const completedSessions = useMemo(() => sessions.filter((session) => session.status === "done"), [sessions]);
   const completedSessionGroups = useMemo(() => buildWorkspaceSessionGroups(completedSessions), [completedSessions]);
   const runtimeMonitor = useRuntimeMonitor({
-    active: activeMainTab === "runtime" && panelOpen && !setupOpen && !selectedSessionId,
     canUseNativeControls,
     demoMode: DEMO_MODE,
+    processActive: activeMainTab === "runtime" && panelOpen && !setupOpen && !selectedSessionId,
     registry: sessionEventRegistry,
+    servicesActive: activeMainTab === "services" && panelOpen && !setupOpen && !selectedSessionId,
     sessions: allSessions,
   });
 
@@ -398,6 +403,8 @@ const App = () => {
           ? "Usage"
           : activeMainTab === "runtime"
             ? "Runtime"
+            : activeMainTab === "services"
+              ? "Services"
           : sessionGroups.length === 0
           ? "Agent Halo"
           : sessionGroups.length === 1
@@ -638,7 +645,7 @@ const App = () => {
       return;
     }
 
-    if ((activeMainTab === "usage" || activeMainTab === "runtime") && !setupOpen && !selectedSessionId) {
+    if ((activeMainTab === "usage" || activeMainTab === "runtime" || activeMainTab === "services") && !setupOpen && !selectedSessionId) {
       setPanelHeight(PANEL_MAX_HEIGHT);
       return;
     }
@@ -913,12 +920,16 @@ const App = () => {
     setSelectedSessionId(null);
     setActiveMainTab(tab);
     setPanelOpen(true);
+    window.requestAnimationFrame(() => {
+      const scrollOwner = document.querySelector<HTMLElement>(".sheet-body");
+      if (scrollOwner) scrollOwner.scrollTop = 0;
+    });
   };
 
   const handleMainTabKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, currentTab: MainPanelTab) => {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
-    const tabs: MainPanelTab[] = ["sessions", "pomodoro", "usage", "runtime"];
+    const tabs: MainPanelTab[] = ["sessions", "pomodoro", "usage", "runtime", "services"];
     const currentIndex = tabs.indexOf(currentTab);
     const nextTab = event.key === "Home"
       ? tabs[0]
@@ -1378,6 +1389,9 @@ const App = () => {
                     <button id="main-tab-runtime" className="header-tab" data-active={activeMainTab === "runtime"} data-panel-focus-target={activeMainTab === "runtime" ? "true" : undefined} type="button" role="tab" aria-label="Runtime" aria-selected={activeMainTab === "runtime"} aria-controls="main-panel-runtime" tabIndex={activeMainTab === "runtime" ? 0 : -1} onKeyDown={(event) => handleMainTabKeyDown(event, "runtime")} onClick={(event) => { event.stopPropagation(); activateMainTab("runtime"); }} data-tauri-drag-region="false" title="Runtime">
                       <Activity size={13} strokeWidth={2.3} />
                     </button>
+                    <button id="main-tab-services" className="header-tab" data-active={activeMainTab === "services"} data-panel-focus-target={activeMainTab === "services" ? "true" : undefined} type="button" role="tab" aria-label="Services" aria-selected={activeMainTab === "services"} aria-controls="main-panel-services" tabIndex={activeMainTab === "services" ? 0 : -1} onKeyDown={(event) => handleMainTabKeyDown(event, "services")} onClick={(event) => { event.stopPropagation(); activateMainTab("services"); }} data-tauri-drag-region="false" title="Services">
+                      <Server size={13} strokeWidth={2.3} />
+                    </button>
                   </div>
                   <button className="header-tab" type="button" aria-label="Setup" onClick={(event) => { event.stopPropagation(); openSetup(); }} data-tauri-drag-region="false" title="Setup">
                     <Settings size={13} strokeWidth={2.3} />
@@ -1469,7 +1483,11 @@ const App = () => {
                 <AgentUsageList usages={agentUsages} onRefresh={refreshAgentUsage} settings={usageSettings} onSettingsChange={updateUsageSettings} />
               ) : activeMainTab === "runtime" ? (
                 <Suspense fallback={<div className="empty-text small">Loading Runtime…</div>}>
-                  <RuntimePanel monitor={runtimeMonitor} />
+                  <RuntimeProcessesPanel monitor={runtimeMonitor} />
+                </Suspense>
+              ) : activeMainTab === "services" ? (
+                <Suspense fallback={<div className="empty-text small">Loading Services…</div>}>
+                  <LocalServicesPanel monitor={runtimeMonitor} />
                 </Suspense>
               ) : sessions.length === 0 ? (
                 <div className="empty-state">
@@ -1573,7 +1591,7 @@ const App = () => {
               )}
             </div>
 
-            {(setupOpen || selectedSession || activitySession?.status === "done") ? (
+            {(setupOpen || selectedSession || (activeMainTab === "sessions" && activitySession?.status === "done")) ? (
               <div className={`sheet-footer ${selectedSession ? "session-context-footer" : ""}`}>
                 {selectedSession ? (
                   <>

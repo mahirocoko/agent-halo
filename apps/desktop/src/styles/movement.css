@@ -370,6 +370,18 @@
   color: var(--accent);
 }
 
+.movement-actions button.is-danger {
+  border-color: rgba(255, 107, 102, 0.42);
+  color: var(--danger);
+  background: rgba(255, 107, 102, 0.1);
+}
+
+.movement-actions button.is-danger:hover,
+.movement-actions button.is-danger:focus-visible {
+  border-color: rgba(255, 107, 102, 0.64);
+  background: rgba(255, 107, 102, 0.16);
+}
+
 .movement-safety {
   margin-right: auto;
   color: var(--text-2);

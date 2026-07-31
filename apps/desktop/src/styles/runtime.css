@@ -1,8 +1,10 @@
 .runtime-panel {
   display: grid;
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  min-width: 0;
   min-height: 0;
-  padding: 12px 0;
+  padding: 0 0 12px;
 }
 
 .runtime-toolbar,
@@ -16,35 +18,88 @@
 }
 
 .runtime-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  min-height: 42px;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
+  padding-top: 8px;
+  border-bottom: 1px solid var(--hair);
+  background: #000;
 }
 
 .runtime-subtitle,
 .runtime-footnote {
-  color: var(--text-3);
+  color: var(--text-2);
   font-size: 10px;
 }
 
-.runtime-subtitle {
-  color: var(--text-2);
-  font-size: 11px;
-  line-height: 1.35;
+.runtime-toolbar-actions {
+  margin-left: auto;
+  gap: 6px;
 }
 
-.runtime-toolbar-actions {
-  gap: 6px;
+.runtime-toolbar .gear-btn:disabled {
+  color: var(--text-3);
+  background: var(--fill);
+  cursor: default;
+}
+
+.runtime-service-groups {
+  display: grid;
+  gap: 8px;
+}
+
+.runtime-group-count {
+  color: var(--text-2);
+  font-size: 9px;
+  line-height: 1;
+  text-align: center;
 }
 
 .runtime-service-row {
   display: grid;
+  gap: 3px;
+  min-width: 0;
   padding: 7px 2px;
   border-bottom: 1px solid var(--hair);
 }
 
+.runtime-service-meta {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.runtime-service-meta > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runtime-service-owner {
+  box-sizing: border-box;
+  flex-basis: 100%;
+  min-width: 0;
+  max-width: none;
+  padding-left: 14px;
+  color: var(--text-2);
+  text-align: left;
+}
+
 .runtime-service-kind {
-  color: var(--text-3);
+  color: var(--text-2);
   font-size: 9px;
+}
+
+.runtime-service-row[data-web-frontend="true"] .runtime-service-mark {
+  background: var(--done);
+}
+
+.row-btn.runtime-service-open {
+  width: 24px;
+  height: 24px;
+  margin-right: 9px;
 }
 
 .runtime-alert-count {
@@ -217,10 +272,20 @@
 }
 
 .runtime-footnote {
-  padding: 0 2px 2px;
+  padding: 10px 2px 2px;
 }
 
 @media (max-width: 360px) {
+  .runtime-toolbar {
+    flex-wrap: wrap;
+    padding-bottom: 6px;
+  }
+
+  .runtime-toolbar-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
   .runtime-metrics {
     align-items: flex-start;
     flex-direction: column;
@@ -231,6 +296,7 @@
     align-items: flex-start;
     flex-wrap: wrap;
   }
+
 }
 
 .runtime-empty {
