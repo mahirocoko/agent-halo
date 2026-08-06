@@ -2,22 +2,29 @@
 
 ## Goal
 
-Agent Halo is a native presence layer for Letta Code. It should show what the current agent is doing — conversation lifecycle, model turns, tool usage, and eventually memory/subagent state — without parsing terminal output as the primary source of truth.
+Agent Halo is a native presence layer for AI coding agents. It should show what the current agent is doing — conversation lifecycle, model turns, tool usage, and eventually memory/subagent state — without parsing terminal output as the primary source of truth. It currently supports Letta Code (via mod API) and AGY / Antigravity (via hook adapter).
 
 ## Current architecture
 
 ```text
-Letta Code Mod API
-  conversation_open / conversation_close / turn_start / tool_start
+Letta Code Mod API                AGY (Antigravity) Hooks API
+  conversation_open / tool_start    PreToolUse / PostToolUse / Stop
+        |                                    |
+        v                                    v
+mods/agent-halo.js              adapters/agy/agent-halo-agy-hook.mjs
+  - normalizes event payloads     - translates AGY hooks → AgentHaloEvent
+  - writes NDJSON audit log       - posts to /ingest with sourceKind: agyHost
+  - serves SSE on localhost                  |
+        |                                    |
+        +------ POST /ingest ←───────────────+
         |
         v
-mods/agent-halo.js
-  - normalizes event payloads
-  - writes NDJSON audit log
-  - serves Server-Sent Events on localhost
+Agent Halo Bridge (127.0.0.1:47621)
+  - /events SSE, /snapshot, /health
+  - NDJSON audit log
         |
         v
-Desktop renderer (planned)
+Desktop renderer (Tauri)
   - subscribes to /events
   - renders compact live presence UI
 ```
@@ -26,13 +33,16 @@ Desktop renderer (planned)
 
 Letta Code has richer runtime state than Claude/Codex hook-only flows: persistent agent identity, conversation identity, scoped cwd/model, tool events, memory, skills, and subagents. A transcript watcher would see some of this late and indirectly. A mod sees public runtime events as they happen.
 
+AGY (Antigravity) uses a different extension model — lifecycle hooks (`PreToolUse`, `PostToolUse`, `PreInvocation`, `PostInvocation`, `Stop`) invoked as shell commands with JSON on stdin/stdout. The AGY adapter translates these hook events into the same `AgentHaloEvent` envelope and posts them to the bridge via `/ingest`, so the desktop UI and presence model work identically regardless of which agent runtime produced the events.
+
 ## Boundaries
 
-- Do not import Letta Code internals from the mod.
+- Do not import Letta Code internals from the mod, or AGY internals from the adapter.
 - Keep bridge state local and explicit.
 - Avoid capturing raw user text by default.
 - Treat the NDJSON log as local diagnostics, not canonical telemetry.
-- Desktop UI should consume the protocol package, not infer fields from mod implementation details.
+- Desktop UI should consume the protocol package, not infer fields from mod or adapter implementation details.
+- The adapter layer is the only place that knows about AGY-specific hook payloads; the bridge and UI stay provider-agnostic.
 
 ## Planned phases
 

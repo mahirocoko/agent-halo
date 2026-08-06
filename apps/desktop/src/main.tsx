@@ -193,6 +193,7 @@ const App = () => {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [setupOpen, setSetupOpen] = useState(false);
   const [modStatus, setModStatus] = useState<IModStatus>({ path: null, installed: null });
+  const [agyHookStatus, setAgyHookStatus] = useState<{ path: string | null; installed: boolean | null }>({ path: null, installed: null });
   const [notchMetrics, setNotchMetrics] = useState<INotchMetrics>({ cameraWidth: DEFAULT_CAMERA_NOTCH_WIDTH, closedHeight: DEFAULT_CLOSED_NOTCH_HEIGHT });
   const [nativeClosedSurfaceWidth, setNativeClosedSurfaceWidth] = useState(DEFAULT_CAMERA_NOTCH_WIDTH);
   const [dismissedSessionIds, setDismissedSessionIds] = useState<DismissedSessionRegistry>(readDismissedSessionIds);
@@ -1193,6 +1194,20 @@ const App = () => {
     }
   };
 
+  const loadAgyHookStatus = async () => {
+    if (!canUseNativeControls) {
+      setAgyHookStatus({ path: null, installed: null });
+      return;
+    }
+
+    try {
+      const [path, installed] = await invoke<[string, boolean]>("agent_halo_agy_hook_status");
+      setAgyHookStatus({ path, installed });
+    } catch {
+      setAgyHookStatus({ path: null, installed: null });
+    }
+  };
+
   const loadDisplayState = async () => {
     if (!canUseNativeControls) {
       applyDisplayState(null);
@@ -1273,6 +1288,24 @@ const App = () => {
     }
   };
 
+  const installAgyHooks = async () => {
+    if (!canUseNativeControls) {
+      setNativeAction({ bridgeOnline: nativeAction.bridgeOnline, message: "Open with pnpm desktop:dev" });
+      return;
+    }
+
+    try {
+      const path = await invoke<string>("install_agent_halo_agy_hooks");
+      setAgyHookStatus({ path, installed: true });
+      setNativeAction({ bridgeOnline: nativeAction.bridgeOnline, message: `Installed → ${shortenPath(path)}` });
+    } catch (error) {
+      setNativeAction({
+        bridgeOnline: nativeAction.bridgeOnline,
+        message: error instanceof Error ? error.message : "AGY hooks install failed",
+      });
+    }
+  };
+
   const focusSelectedSession = async (session: ISessionDetail | ISessionSummary) => {
     if (!canUseNativeControls) {
       setSessionAction({ ok: false, message: "Focus needs the desktop runtime" });
@@ -1299,7 +1332,9 @@ const App = () => {
   useEffect(() => {
     if (setupOpen) {
       void loadModStatus();
+      void loadAgyHookStatus();
       void loadDisplayState();
+      void checkBridge();
     }
   }, [setupOpen]);
 
@@ -1430,11 +1465,13 @@ const App = () => {
                   petPreviewStatus={petPreviewStatus}
                   petPreviewState={petPreviewState}
                   modStatus={modStatus}
+                  agyHookStatus={agyHookStatus}
                   nativeAction={nativeAction}
                   onCheckBridge={() => void checkBridge()}
                   onDisplayChange={updateDisplay}
                   onDisplayRefresh={loadDisplayState}
                   onInstallMod={() => void installMod()}
+                  onInstallAgyHooks={() => void installAgyHooks()}
                   onHaloBotLoadoutChange={updateHaloBotLoadout}
                   onKeepAwakeChange={updateKeepAwakeEnabled}
                   onPetChange={updatePet}

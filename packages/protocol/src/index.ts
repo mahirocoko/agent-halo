@@ -67,7 +67,7 @@ export interface IAgentHaloEventRuntime {
   sourcePid: number;
   sourcePpid: number | null;
   sourceStartedAtMs: number;
-  sourceKind: "lettaHost" | "hookRelay" | "unknown" | string;
+  sourceKind: "lettaHost" | "agyHost" | "hookRelay" | "unknown" | string;
   herdr?: IAgentHaloHerdrTarget | null;
 }
 

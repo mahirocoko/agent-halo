@@ -473,6 +473,23 @@ fn letta_hook_path() -> Result<PathBuf, String> {
         .join("agent-halo-hook.mjs"))
 }
 
+fn agy_hook_path() -> Result<PathBuf, String> {
+    let home = std::env::var("HOME").map_err(|_| "HOME is not set".to_string())?;
+    Ok(PathBuf::from(home)
+        .join(".gemini")
+        .join("config")
+        .join("hooks")
+        .join("agent-halo-agy-hook.mjs"))
+}
+
+fn agy_hooks_json_path() -> Result<PathBuf, String> {
+    let home = std::env::var("HOME").map_err(|_| "HOME is not set".to_string())?;
+    Ok(PathBuf::from(home)
+        .join(".gemini")
+        .join("config")
+        .join("hooks.json"))
+}
+
 #[tauri::command]
 fn bridge_health() -> bool {
     let address = SocketAddr::from(([127, 0, 0, 1], 47_621));
@@ -4234,6 +4251,87 @@ fn agent_halo_mod_status() -> Result<(String, bool), String> {
 }
 
 #[tauri::command]
+fn install_agent_halo_agy_hooks(app: tauri::AppHandle) -> Result<String, String> {
+    let hook_path = agy_hook_path()?;
+    let hooks_json_path = agy_hooks_json_path()?;
+
+    let resource_path = app
+        .path()
+        .resolve("agent-halo-agy-hook.mjs", tauri::path::BaseDirectory::Resource)
+        .map_err(|e| format!("Failed to resolve resource: {e}"))?;
+
+    let Some(hook_parent) = hook_path.parent() else {
+        return Err("Failed to resolve AGY hooks directory".to_string());
+    };
+
+    fs::create_dir_all(hook_parent)
+        .map_err(|error| format!("Failed to create hooks directory: {error}"))?;
+
+    fs::copy(&resource_path, &hook_path)
+        .map_err(|error| format!("Failed to copy hook script: {error}"))?;
+
+    let installed_path = hook_path.to_string_lossy().to_string();
+
+    let mut hooks_config: serde_json::Value = if hooks_json_path.exists() {
+        let content = fs::read_to_string(&hooks_json_path)
+            .map_err(|e| format!("Failed to read hooks.json: {e}"))?;
+        serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse hooks.json: {e}"))?
+    } else {
+        serde_json::json!({})
+    };
+
+    let agent_halo_entry = serde_json::json!({
+      "PreToolUse": [{"matcher": ".*", "hooks": [{"type": "command", "command": format!("node {} --event PreToolUse", installed_path)}]}],
+      "PostToolUse": [{"matcher": ".*", "hooks": [{"type": "command", "command": format!("node {} --event PostToolUse", installed_path)}]}],
+      "PreInvocation": [{"type": "command", "command": format!("node {} --event PreInvocation", installed_path)}],
+      "Stop": [{"type": "command", "command": format!("node {} --event Stop", installed_path)}]
+    });
+
+    if let Some(obj) = hooks_config.as_object_mut() {
+        obj.insert("agent-halo".to_string(), agent_halo_entry);
+    } else {
+        let mut map = serde_json::Map::new();
+        map.insert("agent-halo".to_string(), agent_halo_entry);
+        hooks_config = serde_json::Value::Object(map);
+    }
+
+    let Some(config_parent) = hooks_json_path.parent() else {
+        return Err("Failed to resolve config directory".to_string());
+    };
+    fs::create_dir_all(config_parent)
+        .map_err(|error| format!("Failed to create config directory: {error}"))?;
+
+    let json_string = serde_json::to_string_pretty(&hooks_config)
+        .map_err(|e| format!("Failed to stringify hooks.json: {e}"))?;
+
+    fs::write(&hooks_json_path, json_string)
+        .map_err(|error| format!("Failed to write hooks.json: {error}"))?;
+
+    Ok(installed_path)
+}
+
+#[tauri::command]
+fn agent_halo_agy_hook_status() -> Result<(String, bool), String> {
+    let hook_path = agy_hook_path()?;
+    let hooks_json_path = agy_hooks_json_path()?;
+    let mut is_in_json = false;
+
+    if hooks_json_path.exists() {
+        if let Ok(content) = fs::read_to_string(&hooks_json_path) {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                if let Some(obj) = json.as_object() {
+                    is_in_json = obj.contains_key("agent-halo");
+                }
+            }
+        }
+    }
+
+    let installed = hook_path.exists() && is_in_json;
+    Ok((hook_path.to_string_lossy().to_string(), installed))
+}
+
+#[tauri::command]
 fn focus_terminal(
     conversation_id: String,
     cwd: Option<String>,
@@ -5372,6 +5470,8 @@ pub fn run() {
             drag_completion_pet,
             focus_terminal,
             install_agent_halo_mod,
+            install_agent_halo_agy_hooks,
+            agent_halo_agy_hook_status,
             hide_completion_pet,
             local_services,
             notch_metrics,
@@ -5590,6 +5690,8 @@ mod display_selection_tests {
         for command in [
             "focus_terminal",
             "install_agent_halo_mod",
+            "install_agent_halo_agy_hooks",
+            "agent_halo_agy_hook_status",
             "schedule_pomodoro_notification",
             "set_keep_awake",
             "show_completion_pet",

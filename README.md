@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  A local macOS companion for Letta Code — live presence, workspace sessions, focus rituals, and private local tooling around the notch.
+  A local macOS companion for AI coding agents — live presence, workspace sessions, focus rituals, and private local tooling around the notch. Supports Letta Code and AGY (Antigravity).
 </p>
 
 <p align="center">
@@ -16,9 +16,9 @@
 
 ## Overview
 
-Agent Halo is a native desktop companion for [Letta Code](https://docs.letta.com/letta-code/index.md). It runs around the macOS camera notch, listens to trusted Letta Code mod events, and turns agent activity into a compact live presence surface.
+Agent Halo is a native desktop companion for AI coding agents, currently supporting [Letta Code](https://docs.letta.com/letta-code/index.md) and [AGY (Antigravity)](https://antigravity.google). It runs around the macOS camera notch, listens to trusted agent events, and turns agent activity into a compact live presence surface.
 
-It is designed for people who keep multiple Letta Code conversations, subagents, and project terminals open at once. Instead of scraping terminal text or asking you to hunt through panes, Agent Halo keeps recent workspaces visible, shows what each conversation is doing, and adds local focus tools without trying to become a hosted dashboard or process manager.
+It is designed for people who keep multiple AI coding sessions, subagents, and project terminals open at once. Instead of scraping terminal text or asking you to hunt through panes, Agent Halo keeps recent workspaces visible, shows what each conversation is doing, and adds local focus tools without trying to become a hosted dashboard or process manager.
 
 The current app now spans session presence, a floating Completion Pet, Pomodoro, an optional camera-based Movement Break, local provider usage, read-only process pressure and local services, native display placement, and setup/install controls.
 
@@ -48,7 +48,7 @@ The current app now spans session presence, a floating Completion Pet, Pomodoro,
 - Remembers the selected display for the notch and Pet, with safe Primary fallback when that display disconnects.
 - Installs, verifies, and diagnoses the local Letta Code mod without rewriting global Letta settings.
 
-Agent Halo intentionally stays local. It uses the public Letta Code mod surface, a local bridge, local credentials, and local logs. It does not depend on a hosted dashboard and does not use transcript parsing as its primary source of truth.
+Agent Halo intentionally stays local. It uses the public Letta Code mod surface and AGY hooks API, a local bridge, local credentials, and local logs. It does not depend on a hosted dashboard and does not use transcript parsing as its primary source of truth.
 
 ## Current status
 
@@ -59,8 +59,9 @@ The project still moves quickly. Session/process controls remain intentionally c
 ## Architecture
 
 ```text
-Letta Code public mod events
-  -> ~/.letta/mods/agent-halo.js
+Letta Code public mod events / AGY lifecycle hooks
+  -> ~/.letta/mods/agent-halo.js (Letta)
+  -> adapters/agy/agent-halo-agy-hook.mjs (AGY)
   -> local bridge on 127.0.0.1:47621
   -> SSE / snapshot / NDJSON log
   -> Tauri desktop notch overlay + terminal viewer
@@ -88,7 +89,7 @@ The bridge exposes local-only endpoints:
 | `GET /events` | Live Server-Sent Events stream |
 | `POST /hook/stop` | Optional local Stop-hook bridge for turn completion fallback |
 | `POST /hook/attention` | Local PermissionRequest-hook bridge for needs-input activity |
-| `POST /ingest` | Multi-instance fan-in when another mod instance already owns the bridge port |
+| `POST /ingest` | Multi-provider fan-in: secondary Letta instances, AGY adapters, and other event sources post here |
 
 The bridge also writes a local NDJSON event log:
 

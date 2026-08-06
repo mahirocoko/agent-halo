@@ -59,6 +59,9 @@
     ],
     "icon": [
       "icons/icon.icns"
-    ]
+    ],
+    "resources": {
+      "../../../adapters/agy/agent-halo-agy-hook.mjs": "agent-halo-agy-hook.mjs"
+    }
   }
 }

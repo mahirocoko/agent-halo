@@ -56,6 +56,7 @@ export interface ISetupPanelProps {
   displayLoading: boolean;
   displayState: IDisplayStateSnapshot | null;
   modStatus: { path: string | null; installed: boolean | null };
+  agyHookStatus: { path: string | null; installed: boolean | null };
   nativeAction: { bridgeOnline: boolean | null; message: string | null };
   pet: HaloPetName;
   haloBotLoadout: HaloBotLoadout;
@@ -67,6 +68,7 @@ export interface ISetupPanelProps {
   petPreviewState: "idle" | "showing" | "shown" | "stale" | "error";
   onCheckBridge: () => void;
   onInstallMod: () => void;
+  onInstallAgyHooks: () => void;
   onDisplayChange: (displayId: string) => Promise<void>;
   onDisplayRefresh: () => Promise<void>;
   onKeepAwakeChange: (enabled: boolean) => void;
@@ -80,7 +82,7 @@ export interface ISetupPanelProps {
   onShowPetPreview: () => Promise<void>;
 }
 
-export const SetupPanel = ({ capabilities, canUseNativeControls, completionPetEnabled, completionPetSize, connectionTitle, displayError, displayLoading, displayState, guidance, haloBotLoadout, isConnected, keepAwakeActive, keepAwakeEnabled, keepAwakeError, movementBreakEnabled, pet, petMotionMapping, petPreviewState, petPreviewStatus, modStatus, nativeAction, onCheckBridge, onCompletionPetEnabledChange, onCompletionPetSizeChange, onDisplayChange, onDisplayRefresh, onHaloBotLoadoutChange, onInstallMod, onKeepAwakeChange, onMovementBreakEnabledChange, onPetChange, onPetMotionChange, onPetMotionReset, onShowPetPreview }: ISetupPanelProps) => {
+export const SetupPanel = ({ capabilities, canUseNativeControls, completionPetEnabled, completionPetSize, connectionTitle, displayError, displayLoading, displayState, guidance, haloBotLoadout, isConnected, keepAwakeActive, keepAwakeEnabled, keepAwakeError, movementBreakEnabled, pet, petMotionMapping, petPreviewState, petPreviewStatus, modStatus, agyHookStatus, nativeAction, onCheckBridge, onCompletionPetEnabledChange, onCompletionPetSizeChange, onDisplayChange, onDisplayRefresh, onHaloBotLoadoutChange, onInstallMod, onInstallAgyHooks, onKeepAwakeChange, onMovementBreakEnabledChange, onPetChange, onPetMotionChange, onPetMotionReset, onShowPetPreview }: ISetupPanelProps) => {
   const [activeCategory, setActiveCategory] = useState<SetupCategory>("connection");
   const [compactNavigation, setCompactNavigation] = useState(() => window.matchMedia("(max-width: 380px)").matches);
   const [petPickerOpen, setPetPickerOpen] = useState(false);
@@ -270,9 +272,10 @@ export const SetupPanel = ({ capabilities, canUseNativeControls, completionPetEn
         <div className="setup-category-panel" id={`setup-panel-${activeCategory}`} role="tabpanel" aria-labelledby={`setup-tab-${activeCategory}`}>
           {activeCategory === "connection" ? (
             <>
-              <div className="setup-section-heading"><span>Connection</span><small>Bridge and Letta integration</small></div>
+              <div className="setup-section-heading"><span>Connection</span><small>Bridge and agent integration</small></div>
               <div className="setup-row"><span className="bridge-dot" data-connected={isConnected} title={connectionTitle} /><span className="setup-copy"><span className="setup-title">Bridge</span><span className="setup-detail">{connectionTitle}</span></span><button className="pill-btn" type="button" onClick={onCheckBridge} data-tauri-drag-region="false"><Check size={12} strokeWidth={2.3} />Check</button></div>
               <div className="setup-row"><span className="status-slot"><Download className="setup-icon" size={14} strokeWidth={2.3} /></span><span className="setup-copy"><span className="setup-title">Letta mod</span><span className="setup-detail">{modStatus.installed === true ? `Installed · ${shortenPath(modStatus.path)}` : modStatus.installed === false ? `Not installed · ${shortenPath(modStatus.path)}` : canUseNativeControls ? "Checking install state" : "Tauri runtime needed"}</span></span><button className="pill-btn accent" type="button" onClick={onInstallMod} data-tauri-drag-region="false"><Download size={12} strokeWidth={2.3} />{modStatus.installed ? "Reinstall" : "Install"}</button></div>
+              <div className="setup-row"><span className="status-slot"><Download className="setup-icon" size={14} strokeWidth={2.3} /></span><span className="setup-copy"><span className="setup-title">AGY hooks</span><span className="setup-detail">{agyHookStatus.installed === true ? `Installed · ${shortenPath(agyHookStatus.path)}` : agyHookStatus.installed === false ? `Not installed · ${shortenPath(agyHookStatus.path)}` : canUseNativeControls ? "Checking install state" : "Tauri runtime needed"}</span></span><button className="pill-btn accent" type="button" onClick={onInstallAgyHooks} data-tauri-drag-region="false"><Download size={12} strokeWidth={2.3} />{agyHookStatus.installed ? "Reinstall" : "Install"}</button></div>
               <div className="setup-row passive"><span className="status-slot"><ArrowRight className="setup-icon" size={14} strokeWidth={2.3} /></span><span className="setup-copy"><span className="setup-title">{guidance.title}</span><span className="setup-detail">{guidance.detail}</span></span></div>
               <div className="setup-row passive"><span className="status-slot"><Focus className="setup-icon" size={14} strokeWidth={2.3} /></span><span className="setup-copy"><span className="setup-title">Session controls</span><span className="setup-detail">{canUseNativeControls ? "Herdr exact focus · Ghostty fallback · end unavailable" : capabilities.sessionActions.focusTerminal || capabilities.sessionActions.endSession ? "Focus/end available from bridge" : "Focus/end unavailable in current bridge"}</span></span></div>
               {nativeAction.message ? <div className="notice-row" data-online={nativeAction.bridgeOnline === true} role="status" aria-live="polite">{nativeAction.message}</div> : null}

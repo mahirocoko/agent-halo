@@ -1,0 +1,46 @@
+{
+  "preToolUse": [
+    {
+      "matcher": ".*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "node __AGENT_HALO_HOOK_PATH__ --event PreToolUse"
+        },
+        {
+          "type": "command",
+          "command": "__HOOKS_DIR__/say_decision.sh \"Kanya\" \"ต้องการการตัดสินใจค่ะ\" 0.4 300",
+          "timeout": 10000
+        }
+      ]
+    }
+  ],
+  "postToolUse": [
+    {
+      "matcher": ".*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "node __AGENT_HALO_HOOK_PATH__ --event PostToolUse"
+        }
+      ]
+    }
+  ],
+  "preInvocation": [
+    {
+      "type": "command",
+      "command": "node __AGENT_HALO_HOOK_PATH__ --event PreInvocation"
+    }
+  ],
+  "stop": [
+    {
+      "type": "command",
+      "command": "node __AGENT_HALO_HOOK_PATH__ --event Stop"
+    },
+    {
+      "type": "command",
+      "command": "__HOOKS_DIR__/say_finished.sh \"Kanya\" \"ทำงานเสร็จแล้วค่ะ\" 0.4 300",
+      "timeout": 10000
+    }
+  ]
+}

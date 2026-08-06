@@ -22,7 +22,7 @@ Events are newline-delimited JSON in `~/.letta/mods/agent-halo.events.ndjson` an
     sourcePid: number,
     sourcePpid: number | null,
     sourceStartedAtMs: number,
-    sourceKind: "lettaHost" | "hookRelay" | "unknown" | string,
+    sourceKind: "lettaHost" | "agyHost" | "hookRelay" | "unknown" | string,
     herdr?: {
       socketPath: string,
       paneId: string,
@@ -36,7 +36,7 @@ Events are newline-delimited JSON in `~/.letta/mods/agent-halo.events.ndjson` an
 }
 ```
 
-`runtime` is optional, additive protocol-v2 metadata for local read-only observability. Events emitted inside the Letta mod identify the originating Letta host process before multi-instance forwarding, so a secondary session does not inherit the primary bridge owner's PID. A Letta host launched inside Herdr may also preserve the inherited local socket plus workspace/tab/pane and source-process identity; this is terminal-host navigation metadata, not a Letta process capability. Forwarded `/ingest` runtime identity requires a machine-local 0600 shared token generated under `~/.letta/mods/`; untrusted or older senders remain event-compatible but their `runtime` field is stripped before storage. Hook-derived events reuse a recently correlated Letta scope only when that scope is unambiguous and no older than the bounded active-scope window; an unscoped hook event leaves `runtime` null. Runtime metadata never grants Letta process control and does not expose command arguments.
+`runtime` is optional, additive protocol-v2 metadata for local read-only observability. Events emitted inside the Letta mod identify the originating Letta host process before multi-instance forwarding, so a secondary session does not inherit the primary bridge owner's PID. Events from an AGY (Antigravity) adapter use `sourceKind: "agyHost"` and follow the same `/ingest` fan-in path. A Letta host launched inside Herdr may also preserve the inherited local socket plus workspace/tab/pane and source-process identity; this is terminal-host navigation metadata, not a Letta process capability. Forwarded `/ingest` runtime identity requires a machine-local 0600 shared token generated under `~/.letta/mods/`; untrusted or older senders remain event-compatible but their `runtime` field is stripped before storage. Hook-derived events reuse a recently correlated Letta scope only when that scope is unambiguous and no older than the bounded active-scope window; an unscoped hook event leaves `runtime` null. Runtime metadata never grants process control and does not expose command arguments.
 
 `conversationId` is normalized before emission. A real scoped conversation id wins. When Letta reports the literal fallback id `default`, Agent Halo uses `agent:<agentId>` (or a workspace fallback only when no agent id exists) so stateless/subagent lanes from different agents and projects never collapse into one global `default` session.
 
