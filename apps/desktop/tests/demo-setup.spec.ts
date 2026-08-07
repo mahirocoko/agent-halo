@@ -61,8 +61,10 @@ test("setup view stays capability-aware in browser demo", async ({ page }) => {
   await expect(page.getByText("Setup")).toBeVisible();
   await expect(page.getByText("Bridge", { exact: true })).toBeVisible();
   await expect(page.getByText("Demo mode")).toBeVisible();
-  await expect(page.getByText("Letta mod")).toBeVisible();
-  await expect(page.getByText("Tauri runtime needed")).toBeVisible();
+  const lettaModRow = page.locator(".setup-row").filter({ hasText: "Letta mod" });
+  const agyHooksRow = page.locator(".setup-row").filter({ hasText: "AGY hooks" });
+  await expect(lettaModRow.getByText("Tauri runtime needed")).toBeVisible();
+  await expect(agyHooksRow.getByText("Tauri runtime needed")).toBeVisible();
   await expect(page.getByText("Open desktop runtime")).toBeVisible();
   await expect(page.getByText("Browser demo cannot install or check the mod")).toBeVisible();
   await expect(page.getByText("Session controls")).toBeVisible();
@@ -84,7 +86,9 @@ test("setup view stays capability-aware in browser demo", async ({ page }) => {
   await page.getByRole("button", { name: "Check" }).click();
   await expect(page.getByText("Native controls need Tauri runtime")).toBeVisible();
 
-  await page.getByRole("button", { name: "Install" }).click();
+  await lettaModRow.getByRole("button", { name: "Install" }).click();
+  await expect(page.getByText("Open with pnpm desktop:dev")).toBeVisible();
+  await agyHooksRow.getByRole("button", { name: "Install" }).click();
   await expect(page.getByText("Open with pnpm desktop:dev")).toBeVisible();
 });
 
