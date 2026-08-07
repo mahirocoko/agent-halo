@@ -34,6 +34,7 @@ const MOD_DIR = join(homedir(), ".letta", "mods");
 const CONFIG_PATH = join(MOD_DIR, "agent-halo.config.json");
 const DEFAULT_LOG_FILE = join(MOD_DIR, "agent-halo.events.ndjson");
 const INGEST_TOKEN_PATH = join(MOD_DIR, "agent-halo.ingest-token");
+const BRIDGE_HOST = "127.0.0.1";
 
 // ── Token management ──
 
@@ -83,7 +84,7 @@ function readConfig() {
       ...fallback,
       ...parsed,
       port: Number.isInteger(parsed.port) ? parsed.port : fallback.port,
-      host: typeof parsed.host === "string" ? parsed.host : fallback.host,
+      host: parsed.host === BRIDGE_HOST ? parsed.host : fallback.host,
       logFile: typeof parsed.logFile === "string" ? parsed.logFile : fallback.logFile,
       ingestToken: fallback.ingestToken,
     };
@@ -435,10 +436,13 @@ function readRecentEvents(logFile, maxRecent) {
 
 const args = process.argv.slice(2);
 const portArg = args.includes("--port") ? Number(args[args.indexOf("--port") + 1]) : null;
+const hostArg = args.includes("--host") ? args[args.indexOf("--host") + 1] : null;
 const daemon = args.includes("--daemon");
+const parentStdio = args.includes("--parent-stdio");
 
 const config = readConfig();
 if (portArg && Number.isInteger(portArg)) config.port = portArg;
+if (hostArg === BRIDGE_HOST) config.host = hostArg;
 
 const { server, emitLocal } = startBridge(config);
 
@@ -490,3 +494,8 @@ const shutdown = () => {
 };
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
+if (parentStdio) {
+  process.stdin.resume();
+  process.stdin.once("end", shutdown);
+  process.stdin.once("error", shutdown);
+}

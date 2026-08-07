@@ -42,7 +42,7 @@ test("mod installer copies the relay idempotently without changing global settin
   }
 });
 
-test("hook relay honors loopback bridge config and sends scoped permission metadata", async () => {
+test("hook relay normalizes bridge host and sends scoped permission metadata", async () => {
   const home = await mkdtemp(join(tmpdir(), "agent-halo-relay-"));
   await mkdir(join(home, ".letta", "mods"), { recursive: true });
   let received;
@@ -61,7 +61,7 @@ test("hook relay honors loopback bridge config and sends scoped permission metad
   assert(address && typeof address === "object");
   await writeFile(
     join(home, ".letta", "mods", "agent-halo.config.json"),
-    JSON.stringify({ host: "127.0.0.1", port: address.port }),
+    JSON.stringify({ host: "0.0.0.0", port: address.port }),
   );
 
   try {
@@ -88,6 +88,119 @@ test("hook relay honors loopback bridge config and sends scoped permission metad
     assert.equal(typeof received.payload.hookId, "string");
   } finally {
     await new Promise((resolve) => server.close(resolve));
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test("AGY hook normalizes bridge host and preserves allow semantics", async () => {
+  const home = await mkdtemp(join(tmpdir(), "agent-halo-agy-relay-"));
+  await mkdir(join(home, ".letta", "mods"), { recursive: true });
+  let received;
+  const server = createServer((request, response) => {
+    let body = "";
+    request.setEncoding("utf8");
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => {
+      received = { path: request.url, payload: JSON.parse(body) };
+      response.writeHead(202);
+      response.end();
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  assert(address && typeof address === "object");
+  await writeFile(
+    join(home, ".letta", "mods", "agent-halo.config.json"),
+    JSON.stringify({ host: "localhost", port: address.port }),
+  );
+
+  try {
+    const child = spawn(
+      process.execPath,
+      ["adapters/agy/agent-halo-agy-hook.mjs", "--event", "PreToolUse"],
+      {
+        cwd: repoRoot,
+        env: { ...process.env, HOME: home },
+        stdio: ["pipe", "pipe", "pipe"],
+      },
+    );
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => { stdout += chunk; });
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    child.stdin.end(JSON.stringify({
+      conversationId: "agy-test",
+      workspacePaths: ["/tmp/agy-project"],
+      toolCall: { name: "Read", args: { path: "README.md" } },
+    }));
+    const exitCode = await new Promise((resolve) => child.on("close", resolve));
+    assert.equal(exitCode, 0, stderr);
+    assert.deepEqual(JSON.parse(stdout), { decision: "allow" });
+    assert.equal(received.path, "/ingest");
+    assert.equal(received.payload.conversationId, "agy-test");
+    assert.equal(received.payload.runtime.sourceKind, "agyHost");
+    assert.equal(received.payload.data.toolName, "Read");
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test("standalone bridge serves AGY without Letta and exits with its parent stdio lease", async () => {
+  const home = await mkdtemp(join(tmpdir(), "agent-halo-standalone-"));
+  await mkdir(join(home, ".letta", "mods"), { recursive: true });
+  await writeFile(
+    join(home, ".letta", "mods", "agent-halo.config.json"),
+    JSON.stringify({ host: "0.0.0.0" }),
+  );
+  const probe = createServer();
+  await new Promise((resolve) => probe.listen(0, "127.0.0.1", resolve));
+  const address = probe.address();
+  assert(address && typeof address === "object");
+  const port = address.port;
+  await new Promise((resolve) => probe.close(resolve));
+
+  const child = spawn(
+    process.execPath,
+    ["adapters/bridge/agent-halo-bridge.mjs", "--port", String(port), "--parent-stdio"],
+    {
+      cwd: repoRoot,
+      env: { ...process.env, HOME: home },
+      stdio: ["pipe", "pipe", "pipe"],
+    },
+  );
+  let stdout = "";
+  let stderr = "";
+  child.stdout.on("data", (chunk) => { stdout += chunk; });
+  child.stderr.on("data", (chunk) => { stderr += chunk; });
+  const waitForHealth = async () => {
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      try {
+        const response = await fetch(`http://127.0.0.1:${port}/health`);
+        if (response.ok) return response.json();
+      } catch {}
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    throw new Error(`standalone bridge did not start: ${stderr}`);
+  };
+
+  try {
+    const health = await waitForHealth();
+    assert.equal(health.mode, "standalone");
+    assert.equal(health.name, "agent-halo");
+    assert.match(stdout, new RegExp(`standalone bridge running on 127\\.0\\.0\\.1:${port}`));
+    child.stdin.end();
+    const exitCode = await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error("standalone bridge did not stop")), 2_000);
+      child.once("close", (code) => {
+        clearTimeout(timeout);
+        resolve(code);
+      });
+    });
+    assert.equal(exitCode, 0, stderr);
+    await assert.rejects(fetch(`http://127.0.0.1:${port}/health`));
+  } finally {
+    if (child.exitCode === null) child.kill();
     await rm(home, { recursive: true, force: true });
   }
 });

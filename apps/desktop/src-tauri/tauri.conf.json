@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Agent Halo",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "identifier": "com.mahirocoko.agent-halo",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -61,7 +61,8 @@
       "icons/icon.icns"
     ],
     "resources": {
-      "../../../adapters/agy/agent-halo-agy-hook.mjs": "agent-halo-agy-hook.mjs"
+      "../../../adapters/agy/agent-halo-agy-hook.mjs": "agent-halo-agy-hook.mjs",
+      "../../../adapters/bridge/agent-halo-bridge.mjs": "agent-halo-bridge.mjs"
     }
   }
 }

@@ -48,7 +48,7 @@ The current app now spans session presence, a floating Completion Pet, Pomodoro,
 - Remembers the selected display for the notch and Pet, with safe Primary fallback when that display disconnects.
 - Installs, verifies, and diagnoses the local Letta Code mod without rewriting global Letta settings.
 
-Agent Halo intentionally stays local. It uses the public Letta Code mod surface and AGY hooks API, a local bridge, local credentials, and local logs. It does not depend on a hosted dashboard and does not use transcript parsing as its primary source of truth.
+Agent Halo intentionally stays local. It uses the public Letta Code mod surface and AGY hooks API, a local bridge, local credentials, and local logs. The desktop app supervises a bundled standalone bridge whenever no existing Agent Halo bridge is reachable, so AGY presence does not require Letta Code to be open. It does not depend on a hosted dashboard and does not use transcript parsing as its primary source of truth.
 
 ## Current status
 
@@ -96,6 +96,8 @@ The bridge also writes a local NDJSON event log:
 ```text
 ~/.letta/mods/agent-halo.events.ndjson
 ```
+
+Bridge ownership is fail-closed and local: every bridge owner and relay normalizes to the canonical IPv4 loopback host `127.0.0.1`. The desktop reuses a healthy Agent Halo bridge when Letta or another standalone owner already serves the configured port. It starts its bundled fallback only after a refused loopback connection, treats timeout or ambiguous failures as occupied, never replaces an unrelated listener, and stops the child it owns when the app exits.
 
 See:
 

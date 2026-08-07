@@ -574,7 +574,6 @@ export const useAgentHaloPresence = ({
   useEffect(() => {
     let disposed = false;
     let source: EventSource | null = null;
-    const snapshotStartVersion = liveEventVersionRef.current;
     const store = (events: AgentHaloEvent[]) => {
       setSessionEventRegistry((current) => {
         const next = mergeSessionEvents(current, events);
@@ -622,8 +621,10 @@ export const useAgentHaloPresence = ({
       }>;
     };
 
-    void fetchCapabilities("snapshot")
-      .then((payload) => {
+    const hydrateSnapshot = async () => {
+      const snapshotStartVersion = liveEventVersionRef.current;
+      try {
+        const payload = await fetchCapabilities("snapshot");
         if (disposed) return;
         if (payload.capabilities) setCapabilities(normalizeCapabilities(payload.capabilities));
         if (!Array.isArray(payload.recent)) return;
@@ -633,8 +634,12 @@ export const useAgentHaloPresence = ({
           setRecentEvents(recent.slice(-MAX_RECENT_EVENTS).reverse());
         }
         store(recent);
-      })
-      .catch(() => undefined);
+      } catch {
+        // EventSource reconnect owns recovery when the bridge starts after the renderer.
+      }
+    };
+
+    void hydrateSnapshot();
 
     void fetchCapabilities("health")
       .then((payload) => {
@@ -646,7 +651,10 @@ export const useAgentHaloPresence = ({
 
     source = new EventSource(`${BRIDGE_URL}/events`);
     source.onopen = () => {
-      if (!disposed) setConnection({ status: "connected", message: null });
+      if (!disposed) {
+        setConnection({ status: "connected", message: null });
+        void hydrateSnapshot();
+      }
     };
     source.onerror = () => {
       if (!disposed) {

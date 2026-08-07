@@ -29,9 +29,9 @@ const HOST_STARTED_AT_MS = Math.round(Date.now() - process.uptime() * 1_000);
 const readEndpoint = async () => {
   try {
     const config = JSON.parse(await readFile(join(MOD_DIR, "agent-halo.config.json"), "utf8"));
-    const hostname = typeof config.host === "string" ? config.host : DEFAULT_ENDPOINT.hostname;
+    const hostname = config.host === DEFAULT_ENDPOINT.hostname ? config.host : DEFAULT_ENDPOINT.hostname;
     const port = Number.isInteger(config.port) ? config.port : DEFAULT_ENDPOINT.port;
-    if (!["127.0.0.1", "::1", "localhost"].includes(hostname) || port < 1 || port > 65_535) return DEFAULT_ENDPOINT;
+    if (port < 1 || port > 65_535) return DEFAULT_ENDPOINT;
     return { hostname, port };
   } catch {
     return DEFAULT_ENDPOINT;

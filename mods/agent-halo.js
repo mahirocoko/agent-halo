@@ -10,6 +10,7 @@ const MOD_DIR = join(homedir(), ".letta", "mods");
 const CONFIG_PATH = join(MOD_DIR, "agent-halo.config.json");
 const DEFAULT_LOG_FILE = join(MOD_DIR, "agent-halo.events.ndjson");
 const INGEST_TOKEN_PATH = join(MOD_DIR, "agent-halo.ingest-token");
+const BRIDGE_HOST = "127.0.0.1";
 const HOST_STARTED_AT_MS = Math.round(Date.now() - process.uptime() * 1_000);
 const HERDR_RUNTIME = process.env.HERDR_ENV === "1"
   && typeof process.env.HERDR_SOCKET_PATH === "string"
@@ -79,7 +80,7 @@ function readConfig() {
       ...fallback,
       ...parsed,
       port: Number.isInteger(parsed.port) ? parsed.port : fallback.port,
-      host: typeof parsed.host === "string" ? parsed.host : fallback.host,
+      host: parsed.host === BRIDGE_HOST ? parsed.host : fallback.host,
       logFile: typeof parsed.logFile === "string" ? parsed.logFile : fallback.logFile,
       ingestToken: fallback.ingestToken,
       captureTextPreview: parsed.captureTextPreview === true,

@@ -3,7 +3,6 @@ use std::{
     error::Error as StdError,
     fs,
     io::{ErrorKind, Read, Write},
-    net::{SocketAddr, TcpStream},
     path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::{mpsc, Mutex, OnceLock},
@@ -36,6 +35,7 @@ mod local_services;
 mod notification;
 mod pet_window;
 mod runtime_usage;
+mod standalone_bridge;
 
 use keep_awake::KeepAwakeState;
 use local_services::local_services;
@@ -49,6 +49,7 @@ use pet_window::{
     submit_completion_pet_action, take_completion_pet_action, CompletionPetWindowState,
 };
 use runtime_usage::{runtime_usage, RuntimeUsageState};
+use standalone_bridge::StandaloneBridgeState;
 
 #[cfg(target_os = "macos")]
 use objc2::{msg_send, rc::Retained, MainThreadMarker};
@@ -492,8 +493,7 @@ fn agy_hooks_json_path() -> Result<PathBuf, String> {
 
 #[tauri::command]
 fn bridge_health() -> bool {
-    let address = SocketAddr::from(([127, 0, 0, 1], 47_621));
-    TcpStream::connect_timeout(&address, Duration::from_millis(350)).is_ok()
+    standalone_bridge::bridge_health()
 }
 
 #[tauri::command]
@@ -5497,6 +5497,7 @@ pub fn run() {
         .manage(PomodoroNotificationState::default())
         .manage(CompletionPetWindowState::default())
         .manage(RuntimeUsageState::default())
+        .manage(StandaloneBridgeState::default())
         .invoke_handler(move |invoke| {
             let from_pet = invoke.message.webview_ref().label() == "pet";
             if from_pet && !completion_pet_command_allowed(invoke.message.command()) {
@@ -5517,6 +5518,20 @@ pub fn run() {
             app.state::<CompletionPetWindowState>()
                 .set_position(pet_position);
 
+            match app.path().resolve(
+                "agent-halo-bridge.mjs",
+                tauri::path::BaseDirectory::Resource,
+            ) {
+                Ok(path) => {
+                    if let Err(error) = app.state::<StandaloneBridgeState>().start(path) {
+                        eprintln!("Agent Halo standalone bridge is unavailable: {error}");
+                    }
+                }
+                Err(error) => {
+                    eprintln!("Agent Halo standalone bridge resource is unavailable: {error}");
+                }
+            }
+
             if let Some(window) = app.get_webview_window("main") {
                 position_main_window(&window)?;
                 window.show()?;
@@ -5529,6 +5544,7 @@ pub fn run() {
 
     app.run(|app_handle, event| match event {
         tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
+            app_handle.state::<StandaloneBridgeState>().stop();
             let _ = app_handle.state::<KeepAwakeState>().set_active(false);
             pet_window::hide_pet_on_exit(app_handle);
         }

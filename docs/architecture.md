@@ -22,6 +22,7 @@ mods/agent-halo.js              adapters/agy/agent-halo-agy-hook.mjs
 Agent Halo Bridge (127.0.0.1:47621)
   - /events SSE, /snapshot, /health
   - NDJSON audit log
+  - Letta mod owner when available; desktop-supervised standalone fallback otherwise
         |
         v
 Desktop renderer (Tauri)
@@ -34,6 +35,8 @@ Desktop renderer (Tauri)
 Letta Code has richer runtime state than Claude/Codex hook-only flows: persistent agent identity, conversation identity, scoped cwd/model, tool events, memory, skills, and subagents. A transcript watcher would see some of this late and indirectly. A mod sees public runtime events as they happen.
 
 AGY (Antigravity) uses a different extension model — lifecycle hooks (`PreToolUse`, `PostToolUse`, `PreInvocation`, `PostInvocation`, `Stop`) invoked as shell commands with JSON on stdin/stdout. The AGY adapter translates these hook events into the same `AgentHaloEvent` envelope and posts them to the bridge via `/ingest`, so the desktop UI and presence model work identically regardless of which agent runtime produced the events.
+
+The desktop owns bridge availability, not every bridge process. Every bridge owner and relay normalizes to the canonical IPv4 loopback host `127.0.0.1`, matching the renderer endpoint. At startup it probes the full local `/health` identity. A healthy Letta or standalone owner is reused; an unrelated listener, timeout, or ambiguous connection failure causes a fail-closed occupied state; only an explicitly refused loopback connection starts the bundled standalone bridge. The supervisor retries after an owned crash or external-owner shutdown, while a parent stdio lease and native exit cleanup prevent the desktop-owned child from becoming a permanent daemon. The renderer hydrates `/snapshot` again after SSE reconnect so a bridge that starts after the WebView does not lose capability or recent-event state.
 
 ## Boundaries
 
