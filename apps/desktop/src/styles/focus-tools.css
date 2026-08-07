@@ -1,0 +1,53 @@
+.focus-tool-tabs {
+  min-height: 36px;
+  display: flex;
+  align-items: stretch;
+  gap: 20px;
+  border-bottom: 1px solid var(--hair);
+}
+
+.focus-tool-tabs button {
+  position: relative;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  color: var(--text-3);
+  background: transparent;
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.focus-tool-tabs button::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 1px;
+  background: transparent;
+}
+
+.focus-tool-tabs button[aria-selected="true"] {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.focus-tool-tabs button[aria-selected="true"]::after {
+  background: var(--accent);
+}
+
+.focus-tool-tabs small {
+  color: var(--text-3);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.focus-tool-tabs button:focus-visible {
+  outline: 1px solid rgba(255, 157, 61, 0.86);
+  outline-offset: 2px;
+}

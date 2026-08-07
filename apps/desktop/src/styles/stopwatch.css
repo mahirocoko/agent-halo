@@ -1,0 +1,234 @@
+.focus-tools-panel {
+  min-height: 0;
+}
+
+.stopwatch-panel {
+  min-height: 0;
+  padding: 18px 0;
+}
+
+.stopwatch-heading-row,
+.stopwatch-controls,
+.stopwatch-history-heading,
+.stopwatch-history-heading > span,
+.stopwatch-history-date,
+.stopwatch-history-group li {
+  display: flex;
+  align-items: center;
+}
+
+.stopwatch-heading-row {
+  gap: 7px;
+}
+
+.stopwatch-icon {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: #120b03;
+  background: var(--accent);
+}
+
+.stopwatch-heading-row h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.stopwatch-status {
+  margin-left: auto;
+  color: var(--text-2);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.stopwatch-status[data-status="running"] {
+  color: var(--accent);
+}
+
+.stopwatch-clock {
+  padding: 15px 0 11px;
+  color: #f7f7f5;
+  font-variant-numeric: tabular-nums;
+  font-size: 42px;
+  font-weight: 660;
+  letter-spacing: -0.045em;
+  line-height: 0.95;
+}
+
+.stopwatch-controls {
+  gap: 7px;
+}
+
+.stopwatch-control {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  color: var(--text-2);
+  background: rgba(255, 255, 255, 0.035);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.stopwatch-control:hover,
+.stopwatch-history-heading button:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.075);
+}
+
+.stopwatch-control:disabled,
+.stopwatch-history-heading button:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+.stopwatch-control.primary {
+  min-width: 94px;
+  border-color: transparent;
+  color: #160d04;
+  background: var(--accent);
+  font-weight: 700;
+}
+
+.stopwatch-control.danger,
+.stopwatch-history-heading button.danger {
+  color: #ffb27a;
+  border-color: rgba(255, 122, 72, 0.42);
+  background: rgba(126, 47, 22, 0.24);
+}
+
+.stopwatch-control:focus-visible,
+.stopwatch-history-heading button:focus-visible {
+  outline: 1px solid rgba(255, 157, 61, 0.86);
+  outline-offset: 2px;
+}
+
+.stopwatch-history-heading {
+  min-height: 36px;
+  gap: 8px;
+  margin-top: 14px;
+  border-top: 1px solid var(--hair);
+  border-bottom: 1px solid var(--hair);
+  color: var(--text-2);
+  font-size: 10px;
+}
+
+.stopwatch-history-heading > span {
+  gap: 6px;
+  font-weight: 700;
+}
+
+.stopwatch-history-heading button {
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  padding: 3px 7px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-3);
+  background: transparent;
+  font: inherit;
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.stopwatch-history-empty {
+  padding: 14px 0 2px;
+  color: var(--text-3);
+  font-size: 10px;
+}
+
+.stopwatch-history-group {
+  padding-top: 10px;
+}
+
+.stopwatch-history-date {
+  justify-content: space-between;
+  color: var(--text-2);
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.stopwatch-history-date span:last-child,
+.stopwatch-history-group strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.stopwatch-history-group ol {
+  margin: 5px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stopwatch-history-group li {
+  min-height: 28px;
+  justify-content: space-between;
+  border-top: 1px solid rgba(255, 255, 255, 0.045);
+  color: var(--text-3);
+  font-size: 10px;
+}
+
+.stopwatch-history-group strong {
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.stopwatch-pill-icon,
+.stopwatch-pill-context,
+.stopwatch-pill-secondary {
+  display: inline-flex;
+  align-items: center;
+  color: var(--accent);
+}
+
+.notch-wing-right.is-stopwatch {
+  justify-content: flex-end;
+  padding-left: 12px;
+  padding-right: 26px;
+}
+
+.notch-wing-left.is-stopwatch {
+  justify-content: flex-start;
+}
+
+.notch-wing-left.is-stopwatch > * {
+  position: relative;
+  left: 12px;
+}
+
+.stopwatch-pill-icon + .pill-detail {
+  max-width: 46px;
+  font-variant-numeric: tabular-nums;
+}
+
+.stopwatch-pill-context,
+.stopwatch-pill-secondary {
+  overflow: hidden;
+  max-width: 58px;
+  font-size: 9px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overlay-root[data-stopwatch-status="paused"] .stopwatch-pill-icon,
+.overlay-root[data-stopwatch-status="paused"] .stopwatch-pill-context,
+.overlay-root[data-stopwatch-status="paused"] .stopwatch-pill-secondary {
+  color: #8b8c92;
+}

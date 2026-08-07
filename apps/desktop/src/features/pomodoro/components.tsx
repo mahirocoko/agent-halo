@@ -75,7 +75,8 @@ export const PomodoroPanel = ({ onResetAll, pomodoro }: IPomodoroPanelProps) => 
     <div className="pomodoro-panel" data-phase={state.phase} data-status={state.status}>
       <div className="pomodoro-phase-line">
         <span className="pomodoro-phase-icon" aria-hidden="true"><Timer size={13} strokeWidth={2.3} /></span>
-        <span className="pomodoro-phase-label">{pomodoro.phaseLabel}</span>
+        <span className="pomodoro-phase-label">Pomodoro</span>
+        <span className="pomodoro-phase-context">{pomodoro.phaseLabel}</span>
         <span className="pomodoro-status" data-status={state.status}>{statusLabel}</span>
       </div>
 

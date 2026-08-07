@@ -8,7 +8,7 @@ Runtime flow:
 http://127.0.0.1:47621/events
 ```
 
-The renderer derives compact presence and persisted per-conversation Sessions from the protocol package plus bounded local event history. `src/main.tsx` owns shell/native-window orchestration; owner-local modules under `src/features/` own Sessions, presence ingestion, Setup, Usage, Pomodoro, one persisted global Pet selection, the projection-only floating Completion Pet, and native display/window control. Ordered CSS ownership lives under `src/styles/`. The main renderer remains the sole Pomodoro owner; see `../../docs/pet.md`.
+The renderer derives compact presence and persisted per-conversation Sessions from the protocol package plus bounded local event history. `src/main.tsx` owns shell/native-window orchestration; owner-local modules under `src/features/` own Sessions, presence ingestion, Setup, Usage, Pomodoro, Stopwatch, one persisted global Pet selection, the projection-only floating Completion Pet, and native display/window control. Ordered CSS ownership lives under `src/styles/`. The main renderer remains the sole Pomodoro owner; Stopwatch is a separate renderer-local state/history lane. See `../../docs/pet.md` and `../../docs/stopwatch.md`.
 
 Do not start by scraping terminal output or transcript files. Those can be fallback diagnostics later, not the primary source.
 

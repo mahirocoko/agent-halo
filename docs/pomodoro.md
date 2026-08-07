@@ -1,6 +1,6 @@
 # Pomodoro contract
 
-Agent Halo includes one local Pomodoro lane inside the desktop app. It is independent from Letta bridge/session state and does not change Keep display awake behavior.
+Agent Halo includes one local Pomodoro lane inside the desktop app's **Focus** tab. It is independent from Letta bridge/session state, the sibling Stopwatch documented in `stopwatch.md`, and Keep display awake behavior. Pomodoro and Stopwatch may run at the same time without sharing cycle or notification state.
 
 ## Cycle
 
@@ -23,10 +23,11 @@ When a deadline has passed, the transition is applied once: completed Focus incr
 
 1. Agent Attention or Error
 2. Active, paused, or recently completed Pomodoro
-3. Ordinary agent Working or recent Done
-4. Idle
+3. Active or paused Stopwatch
+4. Ordinary agent Working or recent Done
+5. Idle
 
-This keeps urgent Letta input/errors visible while preserving the user-requested countdown during ordinary agent work.
+This keeps urgent Letta input/errors visible while preserving the user-requested countdown during ordinary agent work. When both Focus tools run, Pomodoro remains the primary countdown and Stopwatch elapsed time becomes secondary right-wing context.
 
 ## macOS notifications
 

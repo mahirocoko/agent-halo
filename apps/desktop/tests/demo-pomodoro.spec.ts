@@ -49,20 +49,20 @@ test("Long break keeps the completed four-session cycle visible", async ({ page 
     }));
   }, storageKey);
   await page.goto("/?demo=1&demoScenario=idle");
-  await page.getByRole("tab", { name: "Pomodoro" }).click();
+  await page.getByRole("tab", { name: "Focus" }).click();
   await expect(page.locator('.pomodoro-cycle-dot[data-complete="true"]')).toHaveCount(4);
   await expect(page.getByText("4 / 4")).toBeVisible();
 });
 
-test("Pomodoro tab starts, pauses, resumes, restarts, skips, and persists", async ({ page }) => {
+test("Pomodoro tool starts, pauses, resumes, restarts, skips, and persists", async ({ page }) => {
   await page.goto("/?demo=1&demoScenario=idle");
-  await page.getByRole("tab", { name: "Pomodoro" }).click();
-  const panel = page.getByRole("tabpanel", { name: "Pomodoro" });
-  await expect(panel.getByRole("timer")).toHaveText(/25:00/);
+  await page.getByRole("tab", { name: "Focus" }).click();
+  const panel = page.getByRole("tabpanel", { name: "Focus" });
+  await expect(panel.locator(".pomodoro-panel").getByRole("timer")).toHaveText(/25:00/);
   await expect(panel.getByText("Focus").first()).toBeVisible();
   await expect(panel.getByRole("button", { name: /Repeat/ })).toBeDisabled();
 
-  await panel.getByRole("button", { name: "Start" }).click();
+  await panel.locator(".pomodoro-panel").getByRole("button", { name: "Start" }).click();
   await expect(panel.getByText("Running")).toBeVisible();
   await expect(panel.getByText("Focus").first()).toBeVisible();
   await expect(panel.getByText("Next · Short break")).toBeVisible();
@@ -77,19 +77,19 @@ test("Pomodoro tab starts, pauses, resumes, restarts, skips, and persists", asyn
 
   await panel.getByRole("button", { name: "Resume" }).click();
   await page.reload();
-  await page.getByRole("tab", { name: "Pomodoro" }).click();
-  await expect(page.getByRole("tabpanel", { name: "Pomodoro" }).getByText("Running")).toBeVisible();
+  await page.getByRole("tab", { name: "Focus" }).click();
+  await expect(page.getByRole("tabpanel", { name: "Focus" }).getByText("Running")).toBeVisible();
 
   await page.getByRole("button", { name: /Repeat/ }).click();
-  await expect(page.getByRole("timer")).toHaveText(/25:00/);
+  await expect(page.locator(".pomodoro-panel").getByRole("timer")).toHaveText(/25:00/);
   await page.getByRole("button", { name: "Skip" }).click();
-  await expect(page.getByRole("timer")).toHaveText(/5:00/);
+  await expect(page.locator(".pomodoro-panel").getByRole("timer")).toHaveText(/5:00/);
   await expect(page.getByText("Short break").first()).toBeVisible();
 });
 
 test("Reset all returns to a fresh Focus cycle while preserving timer settings", async ({ page }) => {
   await page.goto("/?demo=1&demoScenario=idle");
-  await page.getByRole("tab", { name: "Pomodoro" }).click();
+  await page.getByRole("tab", { name: "Focus" }).click();
   await page.getByRole("button", { name: /Timer settings/ }).click();
   await page.getByRole("spinbutton", { name: "Focus min" }).fill("40");
   await page.getByRole("spinbutton", { name: "Focus sessions before long break" }).fill("3");
@@ -103,7 +103,7 @@ test("Reset all returns to a fresh Focus cycle while preserving timer settings",
   await page.getByRole("button", { name: "Confirm reset all Pomodoro progress" }).click();
 
   await expect(page.getByText("Focus").first()).toBeVisible();
-  await expect(page.getByRole("timer")).toHaveText(/40:00/);
+  await expect(page.locator(".pomodoro-panel").getByRole("timer")).toHaveText(/40:00/);
   await expect(page.getByText("0 / 3")).toBeVisible();
   await expect.poll(() => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? "null"), storageKey)).toMatchObject({ phase: "focus", status: "idle", completedFocusSessions: 0, lastCompletion: null });
   await expect.poll(() => page.evaluate(() => JSON.parse(window.localStorage.getItem("agent-halo.pomodoro-settings") ?? "null")?.focusMinutes)).toBe(40);
@@ -111,7 +111,7 @@ test("Reset all returns to a fresh Focus cycle while preserving timer settings",
 
 test("custom durations persist and apply to idle and future phases", async ({ page }) => {
   await page.goto("/?demo=1&demoScenario=idle");
-  await page.getByRole("tab", { name: "Pomodoro" }).click();
+  await page.getByRole("tab", { name: "Focus" }).click();
   await page.getByRole("button", { name: /Timer settings/ }).click();
   await page.getByRole("spinbutton", { name: "Focus min" }).fill("40");
   await page.getByRole("spinbutton", { name: "Short break min" }).fill("7");
@@ -119,7 +119,7 @@ test("custom durations persist and apply to idle and future phases", async ({ pa
   await page.getByRole("spinbutton", { name: "Focus sessions before long break" }).fill("3");
   await page.getByRole("button", { name: "Apply" }).click();
 
-  await expect(page.getByRole("timer")).toHaveText(/40:00/);
+  await expect(page.locator(".pomodoro-panel").getByRole("timer")).toHaveText(/40:00/);
   await expect.poll(() => page.evaluate(() => JSON.parse(window.localStorage.getItem("agent-halo.pomodoro-settings") ?? "null"))).toMatchObject({
     focusMinutes: 40,
     shortBreakMinutes: 7,
@@ -128,41 +128,41 @@ test("custom durations persist and apply to idle and future phases", async ({ pa
   });
 
   await page.getByRole("button", { name: "Skip" }).click();
-  await expect(page.getByRole("timer")).toHaveText(/7:00/);
+  await expect(page.locator(".pomodoro-panel").getByRole("timer")).toHaveText(/7:00/);
   await page.reload();
-  await page.getByRole("tab", { name: "Pomodoro" }).click();
-  await expect(page.getByRole("timer")).toHaveText(/7:00/);
+  await page.getByRole("tab", { name: "Focus" }).click();
+  await expect(page.locator(".pomodoro-panel").getByRole("timer")).toHaveText(/7:00/);
   await expect(page.locator(".pomodoro-settings-summary")).toHaveText("40 / 7 / 20 · ×3");
 
   await page.getByRole("button", { name: /Timer settings/ }).click();
   await page.getByRole("button", { name: "Defaults" }).click();
   await expect.poll(() => page.evaluate(() => JSON.parse(window.localStorage.getItem("agent-halo.pomodoro-settings") ?? "null")?.focusMinutes)).toBe(40);
   await page.getByRole("button", { name: "Apply" }).click();
-  await expect(page.getByRole("timer")).toHaveText(/5:00/);
+  await expect(page.locator(".pomodoro-panel").getByRole("timer")).toHaveText(/5:00/);
   await expect.poll(() => page.evaluate(() => JSON.parse(window.localStorage.getItem("agent-halo.pomodoro-settings") ?? "null")?.focusMinutes)).toBe(25);
 });
 
 test("custom settings do not change a running or paused timer until Restart", async ({ page }) => {
   await page.goto("/?demo=1&demoScenario=idle");
-  await page.getByRole("tab", { name: "Pomodoro" }).click();
-  await page.getByRole("button", { name: "Start" }).click();
+  await page.getByRole("tab", { name: "Focus" }).click();
+  await page.locator(".pomodoro-panel").getByRole("button", { name: "Start" }).click();
 
   await page.getByRole("button", { name: /Timer settings/ }).click();
   await page.getByRole("spinbutton", { name: "Focus min" }).fill("50");
   await page.getByRole("button", { name: "Apply" }).click();
-  await expect(page.getByRole("timer")).not.toHaveText(/50:00/);
+  await expect(page.locator(".pomodoro-panel").getByRole("timer")).not.toHaveText(/50:00/);
   await expect.poll(() => page.evaluate(() => JSON.parse(window.localStorage.getItem("agent-halo.pomodoro") ?? "null")?.phaseDurationMs)).toBe(25 * 60 * 1_000);
 
   await page.getByRole("button", { name: "Pause" }).click();
   await page.getByRole("button", { name: "Resume" }).click();
-  await expect(page.getByRole("timer")).not.toHaveText(/50:00/);
+  await expect(page.locator(".pomodoro-panel").getByRole("timer")).not.toHaveText(/50:00/);
   await page.getByRole("button", { name: /Repeat/ }).click();
-  await expect(page.getByRole("timer")).toHaveText(/50:00/);
+  await expect(page.locator(".pomodoro-panel").getByRole("timer")).toHaveText(/50:00/);
 });
 
 test("custom settings block invalid drafts with associated range feedback", async ({ page }) => {
   await page.goto("/?demo=1&demoScenario=idle");
-  await page.getByRole("tab", { name: "Pomodoro" }).click();
+  await page.getByRole("tab", { name: "Focus" }).click();
   await page.getByRole("button", { name: /Timer settings/ }).click();
   const focusInput = page.getByRole("spinbutton", { name: /Focus min/ });
   await focusInput.fill("");
@@ -231,8 +231,8 @@ test("completed focus shows a quiet collapsed Done state and prepares the break"
   await expect(page.getByRole("button", { name: "Open Agent Halo — Short break ready" })).toBeVisible();
   await expect.poll(() => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? "null")?.completedFocusSessions, storageKey)).toBe(1);
   await page.getByRole("button", { name: "Open Agent Halo — Short break ready" }).click();
-  await page.getByRole("tab", { name: "Pomodoro" }).click();
-  await expect(page.getByRole("button", { name: "Start" })).toBeVisible();
+  await page.getByRole("tab", { name: "Focus" }).click();
+  await expect(page.locator(".pomodoro-panel").getByRole("button", { name: "Start" })).toBeVisible();
   await expect.poll(() => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? "null")?.status, storageKey)).toBe("idle");
 });
 
@@ -682,7 +682,7 @@ test("an elapsed deadline wins atomically over Pause before the next timer tick"
   }, storageKey);
 
   await page.goto("/?demo=1&demoScenario=idle");
-  await page.getByRole("tab", { name: "Pomodoro" }).click();
+  await page.getByRole("tab", { name: "Focus" }).click();
   await page.evaluate(() => {
     const controlledWindow = window as typeof window & { __pomodoroControlledNow: number };
     controlledWindow.__pomodoroControlledNow += 200;
@@ -841,8 +841,8 @@ test("native Start requests permission, schedules silently, and Pause cancels", 
   });
 
   await page.goto("/?demo=1&demoScenario=idle");
-  await page.getByRole("tab", { name: "Pomodoro" }).click();
-  await page.getByRole("button", { name: "Start" }).click();
+  await page.getByRole("tab", { name: "Focus" }).click();
+  await page.locator(".pomodoro-panel").getByRole("button", { name: "Start" }).click();
   await expect.poll(() => page.evaluate(() => (window as typeof window & { __pomodoroNativeCalls: Array<{ command: string }> }).__pomodoroNativeCalls.some((call) => call.command === "schedule_pomodoro_notification"))).toBe(true);
 
   const schedule = await page.evaluate(() => (window as typeof window & { __pomodoroNativeCalls: Array<{ command: string; args?: Record<string, unknown> }> }).__pomodoroNativeCalls.find((call) => call.command === "schedule_pomodoro_notification"));
@@ -855,7 +855,7 @@ test("native Start requests permission, schedules silently, and Pause cancels", 
   await page.getByRole("button", { name: "Resume" }).click();
   await expect.poll(() => page.evaluate(() => (window as typeof window & { __pomodoroNativeCalls: Array<{ command: string }> }).__pomodoroNativeCalls.filter((call) => call.command === "schedule_pomodoro_notification").length)).toBe(2);
   await page.getByRole("button", { name: /Repeat/ }).click();
-  await page.getByRole("button", { name: "Start" }).click();
+  await page.locator(".pomodoro-panel").getByRole("button", { name: "Start" }).click();
   await expect.poll(() => page.evaluate(() => (window as typeof window & { __pomodoroNativeCalls: Array<{ command: string }> }).__pomodoroNativeCalls.filter((call) => call.command === "schedule_pomodoro_notification").length)).toBe(3);
   await page.getByRole("button", { name: "Skip" }).click();
   await expect.poll(() => page.evaluate(() => (window as typeof window & { __pomodoroNativeCalls: Array<{ command: string }> }).__pomodoroNativeCalls.filter((call) => call.command === "cancel_pomodoro_notification").length)).toBeGreaterThanOrEqual(3);
@@ -886,8 +886,8 @@ test("delayed old scheduling cannot cancel the resumed timer notification", asyn
   });
 
   await page.goto("/?demo=1&demoScenario=idle");
-  await page.getByRole("tab", { name: "Pomodoro" }).click();
-  await page.getByRole("button", { name: "Start" }).click();
+  await page.getByRole("tab", { name: "Focus" }).click();
+  await page.locator(".pomodoro-panel").getByRole("button", { name: "Start" }).click();
   await expect.poll(() => page.evaluate(() => (window as typeof window & { __pomodoroSequence: string[] }).__pomodoroSequence.filter((item) => item === "schedule_pomodoro_notification").length)).toBe(1);
   await page.getByRole("button", { name: "Pause" }).click();
   await page.getByRole("button", { name: "Resume" }).click();

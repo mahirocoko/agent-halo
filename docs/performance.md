@@ -65,6 +65,8 @@ The `services-top-level-web-evidence-v1` revision replaces the temporary interna
 
 The `services-owner-evidence-v1` revision raises JavaScript gzip from 98,000 to 98,500 bytes while keeping CSS at 11,500 bytes. The allowance covers safe HTTP document titles, current service-cwd context, bounded owner-target transport, compact `Started by Letta · project · Herdr pane` rows, and the disjoint Web frontend / Letta service / Other listener hierarchy; native ancestry matching remains outside the web bundle. The candidate measures 11,479 bytes CSS gzip and 98,119 bytes JavaScript gzip. It never ships command arguments, response bodies, terminal output, or environment values to the renderer.
 
+The `stopwatch-history-v1` revision raises the primary CSS gzip ceiling to 12,200 bytes and JavaScript gzip to 101,000 bytes for the independent reload-safe Stopwatch state machine, bounded validated local history, Focus sub-navigation, keyboard semantics, destructive confirmations, and concurrent collapsed-notch context. The measured candidate is 12,075 bytes CSS gzip and 100,562 bytes JavaScript gzip. Stopwatch remains renderer-local: it adds no native command, notification, Keep display awake, or Pomodoro/Pet ownership.
+
 The low-risk bridge refactor's three-run median measured event duration `603.06ms → 574.18ms` (−4.79%) and throughput `33,164 → 34,832 events/s` (+5.03%) for 20,000 deterministic events. Startup stayed effectively flat; synchronous NDJSON durability and event ordering remain unchanged.
 
 ## Commands

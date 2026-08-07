@@ -141,7 +141,7 @@ test("inactive group removal disarms when leaving the Sessions context", async (
   await page.getByRole("button", { name: "Remove 6 inactive admin-template sessions" }).click();
   await expect(page.getByRole("button", { name: "Confirm remove 6 inactive admin-template sessions" })).toBeVisible();
 
-  await page.getByRole("tab", { name: "Pomodoro" }).click();
+  await page.getByRole("tab", { name: "Focus" }).click();
   await page.getByRole("tab", { name: "Sessions" }).click();
 
   await expect(page.getByRole("button", { name: "Remove 6 inactive admin-template sessions" })).toBeVisible();

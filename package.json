@@ -1,6 +1,6 @@
 {
   "name": "agent-halo",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "Native presence bridge and desktop halo for Letta Code agent activity.",
   "type": "module",

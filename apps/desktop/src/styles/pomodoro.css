@@ -185,6 +185,11 @@
   font-weight: 700;
 }
 
+.pomodoro-phase-context {
+  color: var(--text-2);
+  font-size: 10px;
+}
+
 .pomodoro-status {
   margin-left: auto;
   color: var(--text-2);

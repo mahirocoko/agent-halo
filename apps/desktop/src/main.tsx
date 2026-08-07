@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { Activity, BarChart3, Check, ChevronLeft, Focus, List, Server, Settings, Timer, Trash2, X } from "lucide-react";
+import { Activity, BarChart3, Check, ChevronLeft, Clock3, Focus, List, Server, Settings, Timer, Trash2, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createRoot } from "react-dom/client";
 import type { AgentHaloPresenceStatus } from "@agent-halo/protocol";
@@ -34,9 +34,10 @@ import {
 } from "./features/session/selectors";
 import type { ActivityKind, DeletedSessionRegistry, DismissedSessionRegistry, ISessionDetail, ISessionSummary, IWorkspaceSessionGroup } from "./features/session/types";
 import { useAgentHaloPresence } from "./features/presence/useAgentHaloPresence";
-import { PomodoroPanel } from "./features/pomodoro/components";
+import { FocusToolsPanel } from "./features/focus/components";
 import { POMODORO_PET_HANDOFF_WINDOW_MS } from "./features/pomodoro/model";
 import { usePomodoro } from "./features/pomodoro/usePomodoro";
+import { useStopwatch } from "./features/stopwatch/useStopwatch";
 import { readCompletionPetEnabled, readCompletionPetSize, writeCompletionPetEnabled, writeCompletionPetSize, type CompletionPetSize } from "./features/pet/preferences";
 import type { ICompletionPetActionRequest, ICompletionPetSummon } from "./features/pet/types";
 import { SetupPanel } from "./features/setup/SetupPanel";
@@ -226,6 +227,7 @@ const App = () => {
       : view;
   const canUseNativeControls = typeof window.__TAURI_INTERNALS__ !== "undefined";
   const pomodoro = usePomodoro(canUseNativeControls, completionPetEnabled);
+  const stopwatch = useStopwatch();
   const pomodoroRef = useRef(pomodoro);
   const observedCompletionIdRef = useRef(pomodoro.state.lastCompletion?.id ?? null);
   pomodoroRef.current = pomodoro;
@@ -399,7 +401,7 @@ const App = () => {
     : selectedSession
       ? selectedSession.project
       : activeMainTab === "pomodoro"
-        ? "Pomodoro"
+        ? "Focus"
         : activeMainTab === "usage"
           ? "Usage"
           : activeMainTab === "runtime"
@@ -448,7 +450,9 @@ const App = () => {
   const hasCriticalAgentActivity = activityStatus === "attention" || activityStatus === "error";
   const hasPomodoroActivity = pomodoro.state.status === "running" || pomodoro.state.status === "paused" || pomodoro.completionVisible;
   const showPomodoroActivity = !hasCriticalAgentActivity && hasPomodoroActivity;
-  const hasLiveActivity = hasAgentLiveActivity || showPomodoroActivity;
+  const hasStopwatchActivity = stopwatch.state.status === "running" || stopwatch.state.status === "paused";
+  const showStopwatchActivity = !hasCriticalAgentActivity && !hasPomodoroActivity && hasStopwatchActivity;
+  const hasLiveActivity = hasAgentLiveActivity || showPomodoroActivity || showStopwatchActivity;
 
   useEffect(() => {
     if (!canUseNativeControls) {
@@ -499,6 +503,7 @@ const App = () => {
 
   const pillDetail = (() => {
     if (showPomodoroActivity) return pomodoro.completionVisible ? "Done" : pomodoro.countdownLabel;
+    if (showStopwatchActivity) return stopwatch.compactElapsedLabel;
     if (activitySession?.status === "working") return activitySession.detail === "thinking" ? "Thinking" : activitySession.detail;
     if (activityStatus === "attention") return activitySession?.detail ?? (lastLiveEvent?.type === "attention_requested" && lastLiveEvent.data.kind === "question" ? "Question" : "Approval needed");
     if (activitySession?.status === "done") return "Done";
@@ -510,11 +515,21 @@ const App = () => {
     : pomodoro.state.status === "paused"
       ? `${pomodoro.phaseLabel} paused`
       : pomodoro.phaseLabel;
-  const liveActivityWidthLabel = showPomodoroActivity && pomodoroPhaseDetail.length > pillDetail.length ? pomodoroPhaseDetail : pillDetail;
+  const stopwatchDetail = stopwatch.state.status === "paused" ? "SW paused" : `SW ${stopwatch.compactElapsedLabel}`;
+  const timeActivityDetail = showPomodoroActivity && hasStopwatchActivity
+    ? stopwatchDetail
+    : showPomodoroActivity
+      ? pomodoroPhaseDetail
+      : showStopwatchActivity
+        ? stopwatch.state.status === "paused" ? "Stopwatch paused" : "Stopwatch"
+        : pillDetail;
+  const liveActivityWidthLabel = timeActivityDetail.length > pillDetail.length ? timeActivityDetail : pillDetail;
   const closedSurfaceLabel = showPomodoroActivity
     ? pomodoro.completionVisible
       ? `Open Agent Halo — ${pomodoro.phaseLabel} ready`
-      : `Open Agent Halo — ${pomodoro.phaseLabel}${pomodoro.state.status === "paused" ? " paused" : ""}, ${pomodoro.countdownLabel} remaining`
+      : `Open Agent Halo — ${pomodoro.phaseLabel}${pomodoro.state.status === "paused" ? " paused" : ""}, ${pomodoro.countdownLabel} remaining${hasStopwatchActivity ? `; Stopwatch ${stopwatch.state.status}, ${stopwatch.elapsedLabel} elapsed` : ""}`
+    : showStopwatchActivity
+      ? `Open Agent Halo — Stopwatch ${stopwatch.state.status}, ${stopwatch.elapsedLabel} elapsed`
     : "Open Agent Halo";
   const liveActivityWingWidth = hasLiveActivity ? estimateLiveActivityWingWidth(liveActivityWidthLabel) : 0;
   const closedSurfaceWidth = Math.round(notchMetrics.cameraWidth + liveActivityWingWidth * 2);
@@ -1339,7 +1354,7 @@ const App = () => {
   }, [setupOpen]);
 
   return (
-    <main className="overlay-root" data-live={hasLiveActivity ? "true" : "false"} data-running={isWorkingActivity || (showPomodoroActivity && pomodoro.state.status === "running") ? "true" : "false"} data-status={activityViewStatus} data-pomodoro-status={pomodoro.state.status} data-pomodoro-complete={pomodoro.completionVisible ? "true" : "false"}>
+    <main className="overlay-root" data-live={hasLiveActivity ? "true" : "false"} data-running={isWorkingActivity || (showPomodoroActivity && pomodoro.state.status === "running") || (!hasCriticalAgentActivity && stopwatch.state.status === "running") ? "true" : "false"} data-status={activityViewStatus} data-pomodoro-status={pomodoro.state.status} data-pomodoro-complete={pomodoro.completionVisible ? "true" : "false"} data-stopwatch-status={stopwatch.state.status}>
       <section className={`notch-wrap ${surfaceState === "open" ? "is-open" : surfaceState === "closing" ? "is-closing" : ""}`} style={notchStyle}>
         <div
           ref={surfaceRef}
@@ -1365,11 +1380,16 @@ const App = () => {
             <path d={notchShapePath} />
           </svg>
           <div className="surface-pill" aria-hidden={surfaceState === "open"}>
-            <div className={`notch-wing notch-wing-left ${showPomodoroActivity ? "is-pomodoro" : ""}`}>
+            <div className={`notch-wing notch-wing-left ${showPomodoroActivity ? "is-pomodoro" : showStopwatchActivity ? "is-stopwatch" : ""}`}>
               {hasLiveActivity ? (
                 showPomodoroActivity ? (
                   <>
                     <span className="pomodoro-pill-icon"><Timer size={12} strokeWidth={2.4} /></span>
+                    <span className="pill-detail">{pillDetail}</span>
+                  </>
+                ) : showStopwatchActivity ? (
+                  <>
+                    <span className="stopwatch-pill-icon"><Clock3 size={12} strokeWidth={2.4} /></span>
                     <span className="pill-detail">{pillDetail}</span>
                   </>
                 ) : (
@@ -1381,8 +1401,8 @@ const App = () => {
               ) : null}
             </div>
             <div className="camera-spacer" aria-hidden="true" />
-            <div className={`notch-wing notch-wing-right ${showPomodoroActivity ? "is-pomodoro" : ""}`} aria-hidden="true">
-              {showPomodoroActivity ? <span className="pomodoro-pill-phase">{pomodoroPhaseDetail}</span> : hasLiveActivity ? <ActivityPet activityKind={activityKind} loadout={haloBotLoadout} motionMapping={petMotionMapping} pet={pet} status={activityStatus} /> : null}
+            <div className={`notch-wing notch-wing-right ${showPomodoroActivity ? "is-pomodoro" : showStopwatchActivity ? "is-stopwatch" : ""}`} aria-hidden="true">
+              {showPomodoroActivity ? <span className={hasStopwatchActivity ? "stopwatch-pill-secondary" : "pomodoro-pill-phase"}>{hasStopwatchActivity ? stopwatchDetail : pomodoroPhaseDetail}</span> : showStopwatchActivity ? <span className="stopwatch-pill-context">{stopwatch.state.status === "paused" ? "Paused" : "Stopwatch"}</span> : hasLiveActivity ? <ActivityPet activityKind={activityKind} loadout={haloBotLoadout} motionMapping={petMotionMapping} pet={pet} status={activityStatus} /> : null}
             </div>
           </div>
 
@@ -1415,7 +1435,7 @@ const App = () => {
                     <button id="main-tab-sessions" className="header-tab" data-active={activeMainTab === "sessions"} data-panel-focus-target={activeMainTab === "sessions" ? "true" : undefined} type="button" role="tab" aria-label="Sessions" aria-selected={activeMainTab === "sessions"} aria-controls="main-panel-sessions" tabIndex={activeMainTab === "sessions" ? 0 : -1} onKeyDown={(event) => handleMainTabKeyDown(event, "sessions")} onClick={(event) => { event.stopPropagation(); activateMainTab("sessions"); }} data-tauri-drag-region="false" title="Sessions">
                       <List size={13} strokeWidth={2.3} />
                     </button>
-                    <button id="main-tab-pomodoro" className="header-tab" data-active={activeMainTab === "pomodoro"} data-panel-focus-target={activeMainTab === "pomodoro" ? "true" : undefined} type="button" role="tab" aria-label="Pomodoro" aria-selected={activeMainTab === "pomodoro"} aria-controls="main-panel-pomodoro" tabIndex={activeMainTab === "pomodoro" ? 0 : -1} onKeyDown={(event) => handleMainTabKeyDown(event, "pomodoro")} onClick={(event) => { event.stopPropagation(); activateMainTab("pomodoro"); }} data-tauri-drag-region="false" title="Pomodoro">
+                    <button id="main-tab-pomodoro" className="header-tab" data-active={activeMainTab === "pomodoro"} data-panel-focus-target={activeMainTab === "pomodoro" ? "true" : undefined} type="button" role="tab" aria-label="Focus" aria-selected={activeMainTab === "pomodoro"} aria-controls="main-panel-pomodoro" tabIndex={activeMainTab === "pomodoro" ? 0 : -1} onKeyDown={(event) => handleMainTabKeyDown(event, "pomodoro")} onClick={(event) => { event.stopPropagation(); activateMainTab("pomodoro"); }} data-tauri-drag-region="false" title="Focus">
                       <Timer size={13} strokeWidth={2.3} />
                     </button>
                     <button id="main-tab-usage" className="header-tab" data-active={activeMainTab === "usage"} data-panel-focus-target={activeMainTab === "usage" ? "true" : undefined} type="button" role="tab" aria-label="Usage" aria-selected={activeMainTab === "usage"} aria-controls="main-panel-usage" tabIndex={activeMainTab === "usage" ? 0 : -1} onKeyDown={(event) => handleMainTabKeyDown(event, "usage")} onClick={(event) => { event.stopPropagation(); activateMainTab("usage"); }} data-tauri-drag-region="false" title="Usage">
@@ -1515,7 +1535,7 @@ const App = () => {
                   )}
                 </div>
               ) : activeMainTab === "pomodoro" ? (
-                <PomodoroPanel pomodoro={pomodoro} onResetAll={resetAllPomodoroCycle} />
+                <FocusToolsPanel pomodoro={pomodoro} stopwatch={stopwatch} onResetAllPomodoro={resetAllPomodoroCycle} />
               ) : activeMainTab === "usage" ? (
                 <AgentUsageList usages={agentUsages} onRefresh={refreshAgentUsage} settings={usageSettings} onSettingsChange={updateUsageSettings} />
               ) : activeMainTab === "runtime" ? (
