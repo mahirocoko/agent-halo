@@ -68,6 +68,8 @@ test("Runtime and Services use separate canonical top-level tabs", async ({ page
   expect(servicesBox!.x + servicesBox!.width - (openBox!.x + openBox!.width)).toBeGreaterThanOrEqual(8);
 
   await runtimeTab.click();
+  await expect(runtimePanel.locator(".runtime-row[data-pressure=critical]")).toHaveCount(2);
+  await expect(runtimePanel.locator(".runtime-row[data-pressure=unavailable]")).toHaveCount(1);
   await runtimePanel.locator(".runtime-row[data-pressure=unavailable]").getByRole("button").click();
   await expect(runtimePanel.locator(".runtime-row")).toHaveCount(2);
   await page.getByRole("button", { name: "Refresh Runtime" }).click();

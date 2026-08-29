@@ -48,6 +48,7 @@ import { AgentUsageList } from "./features/usage/components";
 import type { IUsageSettings } from "./features/usage/types";
 import { useAgentUsageList } from "./features/usage/useAgentUsageList";
 import { useRuntimeMonitor } from "./features/runtime/useRuntimeMonitor";
+import { reconcileEndedRuntimeSessions } from "./features/runtime/model";
 import { readMovementBreakEnabled, writeMovementBreakEnabled } from "./features/movement/preferences";
 import type { MovementExerciseId } from "./features/movement/types";
 import "./styles.css";
@@ -360,13 +361,26 @@ const App = () => {
   const workspace = shortenPath(presence.cwd);
   const project = projectName(presence.cwd);
   const model = presence.model?.split("/").slice(-1)[0] ?? "Letta Code";
-  const allSessions = useMemo(
+  const rawSessions = useMemo(
     () =>
       buildSessionSummaries(sessionEventRegistry, presence, now).filter(
         (session) =>
           !isDeletedAfter(deletedSessionIds, session.conversationId, session.lastActivityAt),
       ),
     [deletedSessionIds, now, presence, sessionEventRegistry],
+  );
+  const runtimeMonitor = useRuntimeMonitor({
+    canUseNativeControls,
+    demoMode: DEMO_MODE,
+    livenessActive: canUseNativeControls && !DEMO_MODE && rawSessions.some((session) => ["working", "attention"].includes(session.status)),
+    processActive: activeMainTab === "runtime" && panelOpen && !setupOpen && !selectedSessionId,
+    registry: sessionEventRegistry,
+    servicesActive: activeMainTab === "services" && panelOpen && !setupOpen && !selectedSessionId,
+    sessions: rawSessions,
+  });
+  const allSessions = useMemo(
+    () => reconcileEndedRuntimeSessions(rawSessions, runtimeMonitor.endedConversationIds),
+    [rawSessions, runtimeMonitor.endedConversationIds],
   );
   const sessions = useMemo(
     () =>
@@ -393,15 +407,6 @@ const App = () => {
   );
   const completedSessions = useMemo(() => sessions.filter((session) => session.status === "done"), [sessions]);
   const completedSessionGroups = useMemo(() => buildWorkspaceSessionGroups(completedSessions), [completedSessions]);
-  const runtimeMonitor = useRuntimeMonitor({
-    canUseNativeControls,
-    demoMode: DEMO_MODE,
-    processActive: activeMainTab === "runtime" && panelOpen && !setupOpen && !selectedSessionId,
-    registry: sessionEventRegistry,
-    servicesActive: activeMainTab === "services" && panelOpen && !setupOpen && !selectedSessionId,
-    sessions: allSessions,
-  });
-
   useEffect(() => {
     if (!clearCompletedArmed) return undefined;
     const timer = window.setTimeout(() => setClearCompletedArmed(false), 4_000);

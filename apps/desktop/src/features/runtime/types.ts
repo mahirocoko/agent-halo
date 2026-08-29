@@ -132,6 +132,7 @@ export interface IRuntimeSessionView extends IRuntimeUsageTarget {
 
 export interface IRuntimeMonitorView {
   rows: IRuntimeSessionView[];
+  endedConversationIds: ReadonlySet<string>;
   services: ILocalService[];
   servicesError: string | null;
   servicesLoading: boolean;

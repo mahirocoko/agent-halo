@@ -25,7 +25,7 @@ macOS TCP LISTEN sockets
   -> optional exact-identity Stop / Force kill command for eligible current-user listeners
 ```
 
-- Runtime process sampling runs only while the Runtime tab is visible. Listener discovery runs only while Services is visible. Each lane refreshes independently every 5 seconds and owns its own status, error, refresh action, footnote, and existing outer sheet scrollbar; neither creates a nested scroller. Services uses a dedicated host-identity builder that does not require Runtime cwd eligibility, receives at most 512 strongly keyed owner targets from the bounded trusted renderer session registry, validates live native start identities, and retains still-live protected host identities across later samples. Native code does not independently discover Letta hosts outside that trusted registry boundary.
+- Full Runtime resource/pressure sampling runs only while the Runtime tab is visible. A narrower exact-identity liveness sample remains active for up to 64 current `working`/`attention` rows even while that tab is closed, and stops when no eligible row remains. Listener discovery runs only while Services is visible. Each lane refreshes independently every 5 seconds and owns its own status, error, refresh action, footnote, and existing outer sheet scrollbar; neither creates a nested scroller. Services uses a dedicated host-identity builder that does not require Runtime cwd eligibility, receives at most 512 strongly keyed owner targets from the bounded trusted renderer session registry, validates live native start identities, and retains still-live protected host identities across later samples. Native code does not independently discover Letta hosts outside that trusted registry boundary.
 - macOS reads structured `lsof` listener output and bounded `libproc` detail: process name, PID/start identity, parent, executable path, numeric user ID, physical/resident memory, bind address, port, current cwd, whether a bounded root `GET` received an HTTP response, a safe document title, and whether strong web-frontend evidence was confirmed. Each discovery pass has a 1.5-second total budget, an 8 KiB per-response cap, and a 256 KiB listener-output cap.
 - Web-frontend classification is fail-closed and does not guess from ports or process names. The same probes apply to every listener, including Node, Bun, Python, and unknown runtimes. Automatic evidence is either a framework-specific Vite/Next development response or a successful root HTML document with browser-app anatomy such as a module script plus stylesheet, a known Next/Nuxt marker, a root mount plus external script, or a bundled `/assets/` stylesheet plus JavaScript `modulepreload` visible before late streamed hydration. This catches large SSR documents whose scripts arrive after the bounded prefix without promoting a generic styled HTML page or downloading the whole document. A Python directory listing, generic HTML/error page, arbitrary JavaScript endpoint, API, or AirTunes response remains an ordinary HTTP service.
 - Strongly evidenced web frontends appear first in **Detected web frontends** with the green dot. A non-web listener with exact trusted Letta ancestry appears next in **Letta services** with a neutral dot. Remaining HTTP/TCP listeners appear under **Other listeners**. A listener that is both a web frontend and Letta-started stays in the first group and retains its `Started by Letta` detail, so rows are never duplicated and green never means merely “Letta opened it” or “a TCP port answered.” Group labels and `HTTP`/`TCP` text keep color from being the only signal.
@@ -77,6 +77,47 @@ The mod records PID identity before multi-instance forwarding, so a secondary Le
 
 The desktop validates PID continuity against both `sourceStartedAtMs` and the expected cwd. A reused PID is reported as `pidReused`; a mismatched cwd is `identityMismatch`. A target without both trusted fields remains unavailable rather than sampling an arbitrary process. If one process has several recent live conversations, the UI labels it as a shared process because OS metrics cannot be divided truthfully between those conversations.
 
+This exact identity also closes missing-terminal presence gaps. While a native session row is `working` or `attention`, the desktop samples up to the 64 most recent live-status targets on the existing five-second runtime cadence even when the Runtime tab is closed; those targets take priority over Runtime history when both jobs are active. `missing` and `pidReused` become durable exact-identity tombstones and downgrade the affected row to `inactive`; they do not create synthetic `conversation_close`, `turn_complete`, or success claims. Once no eligible live-status target remains, background liveness sampling stops.
+
+### Missing-terminal native verification (2026-08-29)
+
+The installed macOS candidate was restarted and exercised against a controlled
+background Letta subagent. Mahiro observed session `1e0bdfd1` as `Working` while
+its process was live. The parent then interrupted it through `TaskStop`; the
+child process disappeared without a normal completion event, matching the
+original stale-row defect. Mahiro subsequently confirmed that the same row
+became `Inactive`. The probe did not fabricate `Done` or success, and its
+orphaned sleep process was removed after interruption. This is native/human
+evidence for abrupt-process disappearance; PID-reuse behavior remains covered
+by exact-identity source logic rather than a live PID-reuse experiment.
+
+### v0.1.8 release evidence
+
+Release-preparation evidence captured on 2026-08-29:
+
+- root, desktop, Cargo, lockfile, and Tauri bundle versions align at `0.1.8`
+- `pnpm install --frozen-lockfile`, `pnpm check`, and `git diff --check` pass
+- focused liveness browser coverage passes 6/6 with one worker
+- the first full browser run passed 143/144 and exposed one Runtime-tab timing
+  assertion that selected the transient pre-sample state; the exact test passed
+  after waiting for the canonical pressure distribution, and the fresh full
+  serialized suite then passed 144/144
+- hook/mod/AGY/standalone integration coverage passes 7/7
+- performance gates pass with JavaScript gzip at 105,685 bytes under the
+  evidence-backed 105,800-byte liveness ceiling; session and bridge benchmarks
+  remain within their existing limits
+- serialized native tests pass 89 with 1 ignored, and locked Cargo check passes
+- the v0.1.8 macOS bundle builds, installs, and restarts successfully;
+  `Info.plist` reports `0.1.8` for both short and bundle versions
+- built and installed native binaries match byte-for-byte at SHA-256
+  `981d786315803fb32605ab8be90b370e845a1fb5bbbc70eaa52bd79579d94f3a`
+- the restarted standalone bridge reports protocol version 2 with one desktop
+  client connected
+
+Final commit, origin, annotated tag, and GitHub Release alignment are verified
+only after publication. Agent Halo remains a local personal macOS app and this
+release publishes source archives rather than signed/notarized binaries.
+
 ## Native sampling
 
 On macOS, the Tauri command uses `libproc` through Rust's pinned `libc` bindings:
@@ -97,7 +138,7 @@ Confirmed terminal identities (`missing` because the host PID is absent from the
 
 Other unavailable diagnostics such as cwd identity mismatch or incomplete runtime metadata remain visible because they may describe a live configuration problem. Their `×` control is still a temporary view hide; manual Runtime refresh restores those diagnostic rows. Runtime considers the 512 most recently active distinct host identities and samples at most the newest 64 non-ended targets per refresh, preserving native CPU/PID continuity without letting a large historical registry invalidate the current sample. The toolbar reports any older eligible identities that were not sampled.
 
-Sampling starts only after the user opens Runtime and refreshes every 5 seconds while that tab remains visible. Closing or leaving Runtime stops native polling. The first sample has no CPU percentage because no prior delta exists.
+Full resource/pressure sampling starts after the user opens Runtime and refreshes every 5 seconds while that tab remains visible. Closing or leaving Runtime stops those history/resource samples; only the bounded live-status identity reconciliation described above may continue. The first resource sample has no CPU percentage because no prior delta exists.
 
 ## Current pressure labels
 

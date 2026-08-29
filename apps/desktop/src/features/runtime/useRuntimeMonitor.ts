@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { buildLocalServiceOwnerTargets, buildRuntimeSessionViews, buildRuntimeUsageTargets, createDemoLocalServices, createDemoRuntimeSnapshots, isTerminalRuntimeStatus, localServiceProcessKey, runtimeTargetKey, selectRuntimeSamplingTargets } from "./model";
+import { buildLocalServiceOwnerTargets, buildRuntimeLivenessTargets, buildRuntimeSessionViews, buildRuntimeUsageTargets, createDemoLocalServices, createDemoRuntimeSnapshots, isTerminalRuntimeStatus, localServiceProcessKey, runtimeTargetKey, selectRuntimeMonitorTargets, selectRuntimeSamplingTargets } from "./model";
 import { mergeRuntimeEndedIdentities, readRuntimeEndedIdentities, reconcileRuntimeEndedIdentities, writeRuntimeEndedIdentities } from "./persistence";
 import type { ILocalService, ILocalServiceControlRequest, ILocalServiceControlResult, ILocalServiceOwnerTarget, ILocalServicesSnapshot, IRuntimeMonitorView, IRuntimeNativeTarget, IRuntimeTargetSource, IRuntimeUsageSnapshot, IRuntimeUsageTarget } from "./types";
 
@@ -8,22 +8,46 @@ const ACTIVE_REFRESH_MS = 5_000;
 
 interface IUseRuntimeMonitorOptions extends IRuntimeTargetSource {
   processActive: boolean;
+  livenessActive: boolean;
   servicesActive: boolean;
   canUseNativeControls: boolean;
   demoMode: boolean;
 }
 
-export const useRuntimeMonitor = ({ canUseNativeControls, demoMode, processActive, registry, servicesActive, sessions }: IUseRuntimeMonitorOptions): IRuntimeMonitorView => {
+export const useRuntimeMonitor = ({ canUseNativeControls, demoMode, livenessActive, processActive, registry, servicesActive, sessions }: IUseRuntimeMonitorOptions): IRuntimeMonitorView => {
   const allTargets = useMemo(() => buildRuntimeUsageTargets({ registry, sessions }), [registry, sessions]);
+  const livenessCandidates = useMemo(() => buildRuntimeLivenessTargets({ registry, sessions }), [registry, sessions]);
   const serviceOwnerTargets = useMemo(() => buildLocalServiceOwnerTargets({ registry, sessions }), [registry, sessions]);
   const [endedIdentities, setEndedIdentities] = useState<Map<string, number>>(readRuntimeEndedIdentities);
   const eligibleTargets = useMemo(() => allTargets.filter((target) => !endedIdentities.has(runtimeTargetKey(target))), [allTargets, endedIdentities]);
-  const targets = useMemo(() => selectRuntimeSamplingTargets(allTargets, endedIdentities), [allTargets, endedIdentities]);
+  const runtimeTargets = useMemo(() => selectRuntimeSamplingTargets(allTargets, endedIdentities), [allTargets, endedIdentities]);
+  const livenessTargets = useMemo(
+    () => selectRuntimeSamplingTargets(livenessCandidates, endedIdentities),
+    [endedIdentities, livenessCandidates],
+  );
+  const samplingTargets = useMemo(
+    () => selectRuntimeMonitorTargets(runtimeTargets, livenessTargets, processActive, livenessActive),
+    [livenessActive, livenessTargets, processActive, runtimeTargets],
+  );
+  const referencedTargets = useMemo(() => {
+    const byIdentity = new Map([...allTargets, ...livenessCandidates].map((target) => [runtimeTargetKey(target), target]));
+    return [...byIdentity.values()];
+  }, [allTargets, livenessCandidates]);
   const endedCount = allTargets.length - eligibleTargets.length;
-  const omittedCount = eligibleTargets.length - targets.length;
-  const targetKey = useMemo(() => targets.map((target) => `${target.processId}:${target.sourceStartedAtMs}:${target.conversationId}:${target.runtimeEventId}:${target.cwd ?? ""}`).join("|"), [targets]);
-  const targetsRef = useRef(targets);
-  const allTargetsRef = useRef(allTargets);
+  const omittedCount = eligibleTargets.length - runtimeTargets.length;
+  const endedConversationIds = useMemo(
+    () => !canUseNativeControls || demoMode
+      ? new Set<string>()
+      : new Set(
+      livenessCandidates
+        .filter((target) => endedIdentities.has(runtimeTargetKey(target)))
+        .map((target) => target.conversationId),
+    ),
+    [canUseNativeControls, demoMode, endedIdentities, livenessCandidates],
+  );
+  const targetKey = useMemo(() => samplingTargets.map((target) => `${target.processId}:${target.sourceStartedAtMs}:${target.conversationId}:${target.runtimeEventId}:${target.cwd ?? ""}`).join("|"), [samplingTargets]);
+  const targetsRef = useRef(samplingTargets);
+  const allTargetsRef = useRef(referencedTargets);
   const serviceOwnerTargetsRef = useRef(serviceOwnerTargets);
   const targetKeyRef = useRef(targetKey);
   targetKeyRef.current = targetKey;
@@ -43,14 +67,14 @@ export const useRuntimeMonitor = ({ canUseNativeControls, demoMode, processActiv
   const [refreshNonce, setRefreshNonce] = useState(0);
 
   useEffect(() => {
-    targetsRef.current = targets;
-    allTargetsRef.current = allTargets;
+    targetsRef.current = samplingTargets;
+    allTargetsRef.current = referencedTargets;
     serviceOwnerTargetsRef.current = serviceOwnerTargets;
-  }, [allTargets, serviceOwnerTargets, targets]);
+  }, [referencedTargets, samplingTargets, serviceOwnerTargets]);
 
   useEffect(() => {
-    setEndedIdentities((previous) => reconcileRuntimeEndedIdentities(previous, allTargets));
-  }, [allTargets]);
+    setEndedIdentities((previous) => reconcileRuntimeEndedIdentities(previous, referencedTargets));
+  }, [referencedTargets]);
 
   useEffect(() => {
     writeRuntimeEndedIdentities(endedIdentities);
@@ -227,11 +251,12 @@ export const useRuntimeMonitor = ({ canUseNativeControls, demoMode, processActiv
   }, [acceptSnapshots, canUseNativeControls, demoMode]);
 
   useEffect(() => {
-    if (!processActive) return undefined;
+    const hasBackgroundLivenessTarget = livenessActive && livenessTargets.length > 0;
+    if (!processActive && !hasBackgroundLivenessTarget) return undefined;
     void refreshProcesses();
     const timer = window.setInterval(() => void refreshProcesses(), ACTIVE_REFRESH_MS);
     return () => window.clearInterval(timer);
-  }, [processActive, refreshNonce, refreshProcesses, targetKey]);
+  }, [livenessActive, livenessTargets.length, processActive, refreshNonce, refreshProcesses, targetKey]);
 
   useEffect(() => {
     if (!servicesActive) return undefined;
@@ -241,7 +266,8 @@ export const useRuntimeMonitor = ({ canUseNativeControls, demoMode, processActiv
   }, [refreshServices, servicesActive]);
 
   return {
-    rows: useMemo(() => buildRuntimeSessionViews(targets, snapshots), [snapshots, targets]),
+    rows: useMemo(() => buildRuntimeSessionViews(runtimeTargets, snapshots), [runtimeTargets, snapshots]),
+    endedConversationIds,
     services,
     servicesError,
     servicesLoading,

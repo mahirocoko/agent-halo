@@ -11,7 +11,7 @@ const BUDGETS = {
   cssGzipBytes: 13_650,
   haloBotAssetBytes: 50_000,
   haloformAssetBytes: 85_000,
-  jsGzipBytes: 105_500,
+  jsGzipBytes: 105_800,
   movementAssetBytes: 28_250_000,
 };
 

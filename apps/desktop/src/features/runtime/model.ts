@@ -1,4 +1,5 @@
 import type { IAgentHaloEventRuntime } from "@agent-halo/protocol";
+import type { ISessionSummary } from "../session/types";
 import type { ILocalService, ILocalServiceOwnerTarget, IRuntimeSessionView, IRuntimeTargetSource, IRuntimeUsageSnapshot, IRuntimeUsageTarget, RuntimePressureLevel } from "./types";
 
 const GIB = 1024 ** 3;
@@ -23,31 +24,39 @@ const PRESSURE_PRIORITY: Record<RuntimePressureLevel, number> = {
 const isHostRuntime = (runtime: IAgentHaloEventRuntime | null | undefined): runtime is IAgentHaloEventRuntime =>
   runtime?.sourceKind === "lettaHost" && Number.isInteger(runtime.sourcePid) && runtime.sourcePid > 1 && Number.isFinite(runtime.sourceStartedAtMs);
 
+const buildRuntimeTarget = (
+  session: ISessionSummary,
+  registry: IRuntimeTargetSource["registry"],
+): IRuntimeUsageTarget | null => {
+  const runtimeEvent = (registry[session.conversationId] ?? []).find((event) => isHostRuntime(event.runtime));
+  if (!runtimeEvent?.runtime || !isHostRuntime(runtimeEvent.runtime)) return null;
+  const cwd = session.workspacePath ?? runtimeEvent.cwd ?? null;
+  if (!cwd) return null;
+  return {
+    conversationId: session.conversationId,
+    runtimeEventId: runtimeEvent.id,
+    processId: runtimeEvent.runtime.sourcePid,
+    sourceStartedAtMs: runtimeEvent.runtime.sourceStartedAtMs,
+    cwd,
+    project: session.project,
+    workspace: session.workspace,
+    herdrPaneId: session.herdrTarget?.sourcePid === runtimeEvent.runtime.sourcePid &&
+      Math.abs(session.herdrTarget.sourceStartedAtMs - runtimeEvent.runtime.sourceStartedAtMs) <= 2_000
+      ? session.herdrTarget.paneId
+      : null,
+    sessionStatus: session.status,
+    lastActivityAt: session.lastActivityAt,
+    relatedConversationCount: 1,
+    mappingStatus: "exact",
+  };
+};
+
 export const buildRuntimeUsageTargets = ({ sessions, registry }: IRuntimeTargetSource): IRuntimeUsageTarget[] => {
   const byProcessIdentity = new Map<string, IRuntimeUsageTarget[]>();
 
   for (const session of sessions) {
-    const runtimeEvent = (registry[session.conversationId] ?? []).find((event) => isHostRuntime(event.runtime));
-    if (!runtimeEvent?.runtime || !isHostRuntime(runtimeEvent.runtime)) continue;
-    const cwd = session.workspacePath ?? runtimeEvent.cwd ?? null;
-    if (!cwd) continue;
-    const target: IRuntimeUsageTarget = {
-      conversationId: session.conversationId,
-      runtimeEventId: runtimeEvent.id,
-      processId: runtimeEvent.runtime.sourcePid,
-      sourceStartedAtMs: runtimeEvent.runtime.sourceStartedAtMs,
-      cwd,
-      project: session.project,
-      workspace: session.workspace,
-      herdrPaneId: session.herdrTarget?.sourcePid === runtimeEvent.runtime.sourcePid &&
-        Math.abs(session.herdrTarget.sourceStartedAtMs - runtimeEvent.runtime.sourceStartedAtMs) <= 2_000
-        ? session.herdrTarget.paneId
-        : null,
-      sessionStatus: session.status,
-      lastActivityAt: session.lastActivityAt,
-      relatedConversationCount: 1,
-      mappingStatus: "exact",
-    };
+    const target = buildRuntimeTarget(session, registry);
+    if (!target) continue;
     const processIdentity = `${target.processId}:${target.sourceStartedAtMs}`;
     const group = byProcessIdentity.get(processIdentity) ?? [];
     group.push(target);
@@ -73,6 +82,13 @@ export const buildRuntimeUsageTargets = ({ sessions, registry }: IRuntimeTargetS
     .sort((a, b) => Date.parse(b.lastActivityAt) - Date.parse(a.lastActivityAt))
     .slice(0, RUNTIME_HISTORY_TARGET_LIMIT);
 };
+
+export const buildRuntimeLivenessTargets = ({ sessions, registry }: IRuntimeTargetSource): IRuntimeUsageTarget[] =>
+  sessions
+    .filter((session) => ["working", "attention"].includes(session.status))
+    .map((session) => buildRuntimeTarget(session, registry))
+    .filter((target): target is IRuntimeUsageTarget => target !== null)
+    .sort((a, b) => Date.parse(b.lastActivityAt) - Date.parse(a.lastActivityAt));
 
 export const buildLocalServiceOwnerTargets = ({ sessions, registry }: IRuntimeTargetSource): ILocalServiceOwnerTarget[] => {
   const byProcessIdentity = new Map<string, { target: ILocalServiceOwnerTarget; lastActivityAt: string }>();
@@ -103,6 +119,30 @@ export const buildLocalServiceOwnerTargets = ({ sessions, registry }: IRuntimeTa
 
 export const selectRuntimeSamplingTargets = (targets: IRuntimeUsageTarget[], endedIdentities: ReadonlyMap<string, number>): IRuntimeUsageTarget[] =>
   targets.filter((target) => !endedIdentities.has(runtimeTargetKey(target))).slice(0, RUNTIME_NATIVE_TARGET_LIMIT);
+
+export const selectRuntimeMonitorTargets = (
+  runtimeTargets: IRuntimeUsageTarget[],
+  livenessTargets: IRuntimeUsageTarget[],
+  processActive: boolean,
+  livenessActive: boolean,
+): IRuntimeUsageTarget[] => {
+  const candidates = processActive
+    ? [...livenessTargets, ...runtimeTargets]
+    : livenessActive
+      ? livenessTargets
+      : [];
+  const byIdentity = new Map(candidates.map((target) => [runtimeTargetKey(target), target]));
+  return [...byIdentity.values()].slice(0, RUNTIME_NATIVE_TARGET_LIMIT);
+};
+
+export const reconcileEndedRuntimeSessions = (
+  sessions: ISessionSummary[],
+  endedConversationIds: ReadonlySet<string>,
+): ISessionSummary[] => sessions.map((session) =>
+  endedConversationIds.has(session.conversationId) && ["working", "attention"].includes(session.status)
+    ? { ...session, status: "inactive" }
+    : session,
+);
 
 export const classifyRuntimePressure = (
   snapshot: IRuntimeUsageSnapshot | null,
