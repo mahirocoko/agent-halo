@@ -5,10 +5,10 @@ Runtime Monitor is a read-only local view of CPU and memory pressure for open Le
 ## Contract
 
 ```text
-Letta mod event runtime.sourcePid
+Agent event runtime.sourcePid (Letta mod or AGY hook)
   -> desktop session registry
   -> native macOS libproc sampler
-  -> Letta + Subprocesses rows in the Runtime tab
+  -> Agent + Subprocesses rows in the Runtime tab
 ```
 
 The Runtime monitor never kills, suspends, renices, or ends a process. It does not enable `sessionActions.endSession` and does not use Letta's internal app-server process-control protocol. Services control is a narrower desktop-native capability for an exact local listener process, not a Letta session action.
@@ -69,13 +69,13 @@ runtime?: {
   sourcePid: number
   sourcePpid: number | null
   sourceStartedAtMs: number
-  sourceKind: "lettaHost" | "hookRelay" | "unknown" | string
+  sourceKind: "lettaHost" | "agyHost" | "hookRelay" | "unknown" | string
 } | null
 ```
 
-The mod records PID identity before multi-instance forwarding, so a secondary Letta CLI process keeps its own PID when `/ingest` forwards the event to the primary bridge. Trusted runtime forwarding uses the shared 0600 ingest token generated under `~/.letta/mods/`; older or untrusted senders keep event compatibility but have runtime identity stripped. Hook events inherit a recently correlated Letta runtime only when the scope is unambiguous and inside the bounded active-scope window.
+The mod records PID identity before multi-instance forwarding, so a secondary Letta CLI process keeps its own PID when `/ingest` forwards the event to the primary bridge. External CLI hook adapters (such as `sourceKind: "agyHost"`) resolve the persistent host binary process PID and its OS start time from process ancestry, rather than reporting the ephemeral hook runner's own PID. Trusted runtime forwarding uses the shared 0600 ingest token generated under `~/.letta/mods/`; older or untrusted senders keep event compatibility but have runtime identity stripped. Hook events inherit a recently correlated Letta runtime only when the scope is unambiguous and inside the bounded active-scope window.
 
-The desktop validates PID continuity against both `sourceStartedAtMs` and the expected cwd. A reused PID is reported as `pidReused`; a mismatched cwd is `identityMismatch`. A target without both trusted fields remains unavailable rather than sampling an arbitrary process. If one process has several recent live conversations, the UI labels it as a shared process because OS metrics cannot be divided truthfully between those conversations.
+The desktop validates PID continuity against both `sourceStartedAtMs` and the expected cwd. macOS `libproc` CPU time sampling reads `ri_user_time` and `ri_system_time` from `rusage_info_v4`. On Apple Silicon, these values are Mach Absolute Time ticks (scaled by `mach_timebase_info`, where `numer=125, denom=3`), not raw nanoseconds. The native sampler converts ticks to true nanoseconds before evaluating delta percentages over elapsed wall time so a fully saturated core truthfully reports 100%. A reused PID is reported as `pidReused`; a mismatched cwd is `identityMismatch`. A target without both trusted fields remains unavailable rather than sampling an arbitrary process. If one process has several recent live conversations, the UI labels it as a shared process because OS metrics cannot be divided truthfully between those conversations.
 
 This exact identity also closes missing-terminal presence gaps. While a native session row is `working` or `attention`, the desktop samples up to the 64 most recent live-status targets on the existing five-second runtime cadence even when the Runtime tab is closed; those targets take priority over Runtime history when both jobs are active. `missing` and `pidReused` become durable exact-identity tombstones and downgrade the affected row to `inactive`; they do not create synthetic `conversation_close`, `turn_complete`, or success claims. Once no eligible live-status target remains, background liveness sampling stops.
 
@@ -90,6 +90,17 @@ became `Inactive`. The probe did not fabricate `Done` or success, and its
 orphaned sleep process was removed after interruption. This is native/human
 evidence for abrupt-process disappearance; PID-reuse behavior remains covered
 by exact-identity source logic rather than a live PID-reuse experiment.
+
+### v0.1.9 release evidence
+
+Release-preparation evidence captured on 2026-09-03:
+
+- root, desktop, Cargo, lockfile, and Tauri bundle versions align at `0.1.9`
+- `pnpm check` passes with 0 TypeScript errors
+- hook integration tests pass 7/7 (`pnpm test:hooks`)
+- native macOS Rust tests pass 89/89 (`cargo test`)
+- AGY host runtime monitoring verified via live event ingestion, ancestor host PID resolution, and libproc process tree sampling
+- Apple Silicon Mach timebase CPU scaling verified via live rusage tests and cargo test suite
 
 ### v0.1.8 release evidence
 

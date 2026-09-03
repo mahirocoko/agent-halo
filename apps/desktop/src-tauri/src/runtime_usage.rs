@@ -171,7 +171,33 @@ mod macos {
     use std::{
         mem::{size_of, size_of_val},
         os::raw::c_void,
+        sync::OnceLock,
     };
+
+    #[repr(C)]
+    #[derive(Default)]
+    struct MachTimebaseInfo {
+        numer: u32,
+        denom: u32,
+    }
+
+    extern "C" {
+        fn mach_timebase_info(info: *mut MachTimebaseInfo) -> libc::c_int;
+    }
+
+    fn mach_time_to_ns(ticks: u64) -> u64 {
+        static TIMEBASE: OnceLock<(u64, u64)> = OnceLock::new();
+        let (numer, denom) = *TIMEBASE.get_or_init(|| {
+            let mut info = MachTimebaseInfo::default();
+            let res = unsafe { mach_timebase_info(&mut info) };
+            if res == 0 && info.denom > 0 {
+                (info.numer as u64, info.denom as u64)
+            } else {
+                (1, 1)
+            }
+        });
+        (ticks as u128 * numer as u128 / denom as u128) as u64
+    }
 
     fn bounded_c_chars(ptr: *const libc::c_char, length: usize) -> String {
         let bytes = unsafe { std::slice::from_raw_parts(ptr.cast::<u8>(), length) };
@@ -305,7 +331,8 @@ mod macos {
                 continue;
             };
             let key = (pid, basic.start_time_ms);
-            let total_cpu_ns = usage.ri_user_time.saturating_add(usage.ri_system_time);
+            let total_cpu_ticks = usage.ri_user_time.saturating_add(usage.ri_system_time);
+            let total_cpu_ns = mach_time_to_ns(total_cpu_ticks);
             let cpu_percent = baselines.get(&key).and_then(|previous| {
                 calculate_cpu_percent(
                     previous.total_cpu_ns,

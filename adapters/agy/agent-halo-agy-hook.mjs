@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
+import { execFileSync } from "node:child_process";
 
 /**
  * Agent Halo AGY (Antigravity) Hook Adapter
@@ -24,6 +25,69 @@ import { randomUUID } from "node:crypto";
 const DEFAULT_ENDPOINT = { hostname: "127.0.0.1", port: 47_621 };
 const MOD_DIR = join(homedir(), ".letta", "mods");
 const HOST_STARTED_AT_MS = Math.round(Date.now() - process.uptime() * 1_000);
+
+/**
+ * Resolve host identity for AGY.
+ * Inspects process.ppid and ancestors to locate the running `agy` binary process
+ * and its exact start time (for native libproc validation).
+ */
+const resolveHostIdentity = () => {
+  let currentPid = Number.isInteger(process.ppid) && process.ppid > 1 ? process.ppid : null;
+  let agyPid = null;
+  let agyStartedAtMs = null;
+
+  for (let depth = 0; depth < 5 && currentPid && currentPid > 1; depth++) {
+    try {
+      const out = execFileSync("ps", ["-p", String(currentPid), "-o", "ppid=,comm=,lstart="], {
+        encoding: "utf8",
+        timeout: 1000,
+      }).trim();
+      const match = out.match(/^\s*(\d+)\s+(\S+)\s+(.+)$/);
+      if (!match) break;
+      const [, ppidStr, comm, lstart] = match;
+      const lower = comm.toLowerCase();
+      if (lower.endsWith("agy") || lower.includes("/agy")) {
+        const parsed = Date.parse(lstart);
+        agyPid = currentPid;
+        agyStartedAtMs = Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+        break;
+      }
+      currentPid = parseInt(ppidStr, 10);
+    } catch {
+      break;
+    }
+  }
+
+  if (agyPid) {
+    return {
+      sourcePid: agyPid,
+      sourcePpid: Number.isInteger(process.ppid) && process.ppid > 0 ? process.ppid : null,
+      sourceStartedAtMs: agyStartedAtMs ?? HOST_STARTED_AT_MS,
+    };
+  }
+
+  const ppid = Number.isInteger(process.ppid) && process.ppid > 1 ? process.ppid : null;
+  if (ppid) {
+    try {
+      const raw = execFileSync("ps", ["-p", String(ppid), "-o", "lstart="], {
+        encoding: "utf8",
+        timeout: 1000,
+      }).trim();
+      const parsed = Date.parse(raw);
+      return {
+        sourcePid: ppid,
+        sourcePpid: ppid,
+        sourceStartedAtMs: Number.isFinite(parsed) && parsed > 0 ? parsed : HOST_STARTED_AT_MS,
+      };
+    } catch {}
+  }
+
+  return {
+    sourcePid: process.pid,
+    sourcePpid: ppid,
+    sourceStartedAtMs: HOST_STARTED_AT_MS,
+  };
+};
 
 /** Read bridge endpoint from Agent Halo config. */
 const readEndpoint = async () => {
@@ -130,6 +194,8 @@ const main = async () => {
       ? input.modelName
       : null;
 
+    const hostIdentity = resolveHostIdentity();
+
     /** Build a protocol-v2 AgentHaloEvent envelope. */
     const buildEvent = (type, data = {}) => ({
       version: 2,
@@ -143,9 +209,9 @@ const main = async () => {
       model,
       permissionMode: null,
       runtime: {
-        sourcePid: process.pid,
-        sourcePpid: Number.isInteger(process.ppid) && process.ppid > 0 ? process.ppid : null,
-        sourceStartedAtMs: HOST_STARTED_AT_MS,
+        sourcePid: hostIdentity.sourcePid,
+        sourcePpid: hostIdentity.sourcePpid,
+        sourceStartedAtMs: hostIdentity.sourceStartedAtMs,
         sourceKind: "agyHost",
       },
       data,

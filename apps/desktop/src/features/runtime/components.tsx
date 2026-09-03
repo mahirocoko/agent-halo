@@ -207,7 +207,7 @@ const RuntimeRow = ({ onHide, row }: { onHide: (row: IRuntimeSessionView) => voi
         </div>
       </div>
       <div className="runtime-metrics">
-        <span><b>Letta</b> {formatRuntimeBytes(host?.physicalFootprintBytes)} · {formatRuntimeCpu(host?.cpuPercent)}</span>
+        <span><b>{row.sourceKind === "agyHost" ? "AGY" : "Letta"}</b> {formatRuntimeBytes(host?.physicalFootprintBytes)} · {formatRuntimeCpu(host?.cpuPercent)}</span>
         <span><b>Subprocesses</b> {formatRuntimeBytes(children?.physicalFootprintBytes)} · {formatRuntimeCpu(children?.cpuPercent)} · {children?.processCount ?? 0}</span>
       </div>
       <div className="runtime-reason">
@@ -237,7 +237,7 @@ export const RuntimeProcessesPanel = ({ monitor }: { monitor: IRuntimeMonitorVie
   return (
     <section className="runtime-panel" aria-label="Runtime process monitor">
       <div className="runtime-toolbar">
-        <div className="runtime-subtitle">Letta and subprocess pressure</div>
+        <div className="runtime-subtitle">Agent and subprocess pressure</div>
         <div className="runtime-toolbar-actions">
           {hiddenSummary ? <span className="runtime-ended-count" role="status" aria-live="polite" aria-atomic="true">{hiddenSummary}</span> : null}
           {alertCount > 0 ? <span className="runtime-alert-count"><TriangleAlert size={12} /> {alertCount}</span> : null}
@@ -249,8 +249,8 @@ export const RuntimeProcessesPanel = ({ monitor }: { monitor: IRuntimeMonitorVie
       {monitor.error ? <div className="notice-row compact" data-online="false" role="status">{monitor.error}</div> : null}
       {rows.length === 0 ? (
         <div className="empty-state runtime-empty">
-          <div className="empty-text">{monitor.endedCount > 0 ? "No live Letta processes" : "No PID-aware events yet"}</div>
-          <div className="empty-text small">{monitor.endedCount > 0 ? `${monitor.endedCount} ended runtime ${monitor.endedCount === 1 ? "record is" : "records are"} hidden` : "Install the current mod, then reload active Letta sessions."}</div>
+          <div className="empty-text">{monitor.endedCount > 0 ? "No live agent processes" : "No PID-aware events yet"}</div>
+          <div className="empty-text small">{monitor.endedCount > 0 ? `${monitor.endedCount} ended runtime ${monitor.endedCount === 1 ? "record is" : "records are"} hidden` : "Install the current mod or hooks, then reload active sessions."}</div>
         </div>
       ) : (
         <ul className="runtime-list">

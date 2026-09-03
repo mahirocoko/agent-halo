@@ -2,11 +2,12 @@ import type { ISessionSummary, SessionEventRegistry } from "../session/types";
 
 export type RuntimePressureLevel = "normal" | "elevated" | "high" | "critical" | "unavailable";
 
-export interface IRuntimeUsageTarget {
+export type IRuntimeUsageTarget = {
   conversationId: string;
   runtimeEventId: string;
   processId: number;
   sourceStartedAtMs: number;
+  sourceKind?: string;
   cwd: string | null;
   project: string;
   workspace: string;
@@ -15,7 +16,7 @@ export interface IRuntimeUsageTarget {
   lastActivityAt: string;
   relatedConversationCount: number;
   mappingStatus: "exact" | "sharedProcess";
-}
+};
 
 export interface IRuntimeNativeTarget {
   conversationId: string;

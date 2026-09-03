@@ -22,7 +22,10 @@ const PRESSURE_PRIORITY: Record<RuntimePressureLevel, number> = {
 };
 
 const isHostRuntime = (runtime: IAgentHaloEventRuntime | null | undefined): runtime is IAgentHaloEventRuntime =>
-  runtime?.sourceKind === "lettaHost" && Number.isInteger(runtime.sourcePid) && runtime.sourcePid > 1 && Number.isFinite(runtime.sourceStartedAtMs);
+  (runtime?.sourceKind === "lettaHost" || runtime?.sourceKind === "agyHost") &&
+  Number.isInteger(runtime.sourcePid) &&
+  runtime.sourcePid > 1 &&
+  Number.isFinite(runtime.sourceStartedAtMs);
 
 const buildRuntimeTarget = (
   session: ISessionSummary,
@@ -37,6 +40,7 @@ const buildRuntimeTarget = (
     runtimeEventId: runtimeEvent.id,
     processId: runtimeEvent.runtime.sourcePid,
     sourceStartedAtMs: runtimeEvent.runtime.sourceStartedAtMs,
+    sourceKind: runtimeEvent.runtime.sourceKind,
     cwd,
     project: session.project,
     workspace: session.workspace,
@@ -160,9 +164,9 @@ export const classifyRuntimePressure = (
   const childCpu = snapshot.children.cpuPercent ?? 0;
   const quiet = ["idle", "inactive", "done"].includes(sessionStatus);
 
-  if (host >= 3 * GIB) return { pressure: "critical", pressureReason: "Letta host above 3 GiB" };
+  if (host >= 3 * GIB) return { pressure: "critical", pressureReason: "Host above 3 GiB" };
   if (children >= 3 * GIB || childCpu >= 250) return { pressure: "critical", pressureReason: "Child workload is using several cores or over 3 GiB" };
-  if (host >= 1.5 * GIB) return { pressure: "high", pressureReason: quiet ? "High memory while quiet" : "Letta host above 1.5 GiB" };
+  if (host >= 1.5 * GIB) return { pressure: "high", pressureReason: quiet ? "High memory while quiet" : "Host above 1.5 GiB" };
   if (children >= 1.5 * GIB || childCpu >= 150 || snapshot.children.processCount >= 20) {
     return { pressure: "high", pressureReason: "Heavy descendant workload" };
   }
