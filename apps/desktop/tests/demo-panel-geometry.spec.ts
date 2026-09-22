@@ -1,13 +1,44 @@
+import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
+
+test("board surface tones retain material bases and share monochrome semantic tokens with canonical dot tokens", async () => {
+  const styleDir = "apps/desktop/src/styles";
+  const owners = ["notchowl-board.css", "panel-status.css", "shared-controls.css", "sessions-context.css", "pomodoro.css", "stopwatch.css"];
+  const sources = await Promise.all(owners.map((name) => readFile(`${styleDir}/${name}`, "utf8")));
+  const board = sources[0];
+
+  for (const [tone, base] of Object.entries({ mint: "#8ea594", lavender: "#8c87a1", sand: "#a39e6a", parchment: "#9b9683", slate: "#717f8e", navy: "#717f8e", teal: "#6f8888" })) {
+    const block = board.match(new RegExp(`\\.halo-surface-${tone}(?:,| \\{)[\\s\\S]*?\\}`))?.[0] ?? "";
+    expect(block).toContain(`--surface-base: ${base}`);
+    expect(block).not.toMatch(/--surface-(?:ink|line|fill|accent|ok|warn|danger|dot)/);
+  }
+
+  const surfaceBlock = board.match(/\.halo-tab-surface \{[\s\S]*?\}/)?.[0] ?? "";
+  expect(surfaceBlock).toMatch(/--surface-ink: #111;[\s\S]*--surface-accent: #111;[\s\S]*--surface-accent-ink: #fff;/);
+  expect(surfaceBlock).not.toMatch(/--surface-dot/);
+
+  const panelStatus = sources[1];
+  const sheetInnerBlock = panelStatus.match(/\.sheet-inner\s*\{[\s\S]*?\}/)?.[0] ?? "";
+  expect(sheetInnerBlock).toContain("--surface-dot-positive: #5ea876;");
+  expect(sheetInnerBlock).toContain("--surface-dot-negative: #c75a5a;");
+  expect(panelStatus).toMatch(/\.status-error\s*\{[\s\S]*?background:\s*var\(--surface-dot-negative\);/);
+
+  const usageCss = await readFile(`${styleDir}/usage.css`, "utf8");
+  expect(usageCss).toMatch(/\.usage-side-dot\s*\{[\s\S]*?background:\s*var\(--surface-dot-positive\);/);
+  expect(usageCss).toMatch(/\.usage-meter\[data-level="ok"\]\s+\.usage-status-dot[\s\S]*?background:\s*var\(--surface-dot-positive\);/);
+  expect(usageCss).toMatch(/\.usage-meter\[data-level="danger"\]\s+\.usage-status-dot[\s\S]*?background:\s*var\(--surface-dot-negative\);/);
+
+  expect(sources.join("\n")).not.toMatch(/#155dfc|#ff9500|#16c456|#ff3849|var\(--surface-(?:ok|warn|danger)/i);
+});
 
 const WIDTH_RANGES = {
   sessions: [1020, 1060],
-  "session-detail": [1000, 1040],
-  pomodoro: [1000, 1040],
-  usage: [1100, 1140],
-  runtime: [1080, 1120],
-  services: [1060, 1100],
-  setup: [960, 1000],
+  "session-detail": [1020, 1060],
+  pomodoro: [1020, 1060],
+  usage: [1020, 1060],
+  runtime: [1020, 1060],
+  services: [1020, 1060],
+  setup: [1020, 1060],
 } as const;
 
 const paint = async (page: import("@playwright/test").Page, selector: string) => page.locator(selector).evaluate((element) => {
@@ -177,11 +208,11 @@ test("Sessions uses dark paper ink for row details, badges, and semantic status"
   expect(paint.actual.ageBackground).not.toContain("255, 255, 255");
   expect(paint.actual.modelBackground).not.toBe(paint.actual.ageBackground);
   expect(paint.actual.working).toBe("rgb(255, 255, 255)");
-  expect(paint.actual.workingBackground).toBe("rgb(21, 93, 252)");
+  expect(paint.actual.workingBackground).toBe("rgb(17, 17, 17)");
   expect(paint.actual.count).toBe(paint.expected.completedInk);
   expect(paint.actual.countBackground).toBe(paint.expected.completedFill2);
   expect(paint.actual.done).toBe("rgb(17, 17, 17)");
-  expect(paint.actual.doneBackground).toBe("rgb(22, 196, 86)");
+  expect(paint.actual.doneBackground).toBe("rgb(255, 255, 255)");
   expect(paint.actual.opacities.every((opacity) => opacity === "1")).toBe(true);
 });
 
@@ -301,7 +332,7 @@ test("compact Sessions stacks cards, disables separators, and scrolls to complet
   expect(await page.locator(".halo-surface").evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
 });
 
-test("panel width is owned by the current top-level view and clamps at 320", async ({ page }) => {
+test("panel width stays at the Sessions default across views and clamps at 320", async ({ page }) => {
   await page.setViewportSize({ width: 1200, height: 800 });
   await page.goto("/?demo=1&demoScenario=multi");
 
@@ -325,7 +356,7 @@ test("panel width is owned by the current top-level view and clamps at 320", asy
       labelsVisible: label ? getComputedStyle(label).display !== "none" : false,
     };
   });
-  expect(sessionsHeader).toEqual({ railOverflow: false, labelsVisible: true });
+  expect(sessionsHeader).toEqual({ railOverflow: false, labelsVisible: false });
 
   await page.getByRole("tab", { name: "Sessions" }).focus();
   await page.keyboard.press("ArrowRight");
@@ -353,7 +384,7 @@ test("panel width is owned by the current top-level view and clamps at 320", asy
       labelsVisible: label ? getComputedStyle(label).display !== "none" : false,
     };
   });
-  expect(usageHeader).toEqual({ railOverflow: false, labelsVisible: true });
+  expect(usageHeader).toEqual({ railOverflow: false, labelsVisible: false });
 
   await page.getByRole("tab", { name: "Runtime" }).click();
   const runtime = await readWidth();
@@ -430,17 +461,386 @@ test("wide Focus uses three independent cards, 12px gutters, and a fully visible
   }
 });
 
+test("Usage renders parchment navigation and sand detail cards with independent wide scrollers", async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 800 });
+  await page.goto("/?demo=1&demoScenario=multi");
+  await page.getByRole("tab", { name: "Usage" }).click();
+
+  const geometry = await page.getByTestId("usage-tray").evaluate((tray) => {
+    const cards = [...tray.querySelectorAll<HTMLElement>(".usage-card")];
+    const rects = cards.map((card) => card.getBoundingClientRect());
+    const scrollers = cards.map((card) => card.querySelector<HTMLElement>("[data-scroll-owner='inner']")!);
+    return {
+      cardCount: cards.length,
+      paints: cards.map((card) => getComputedStyle(card).backgroundColor),
+      gap: rects[1].left - rects[0].right,
+      navigationWidth: rects[0].width,
+      order: scrollers.map((scroller) => scroller.dataset.usageCard),
+      horizontalOverflow: tray.scrollWidth > tray.clientWidth + 1,
+      scrollers: scrollers.map((scroller) => {
+        const style = getComputedStyle(scroller);
+        return {
+          position: style.position,
+          inset: [style.top, style.right, style.bottom, style.left],
+          padding: [style.paddingTop, style.paddingRight, style.paddingBottom, style.paddingLeft],
+          gutter: style.scrollbarGutter,
+        };
+      }),
+    };
+  });
+
+  expect(geometry.cardCount).toBe(2);
+  expect(geometry.paints).toEqual(["rgb(155, 150, 131)", "rgb(163, 158, 106)"]);
+  expect(geometry.gap).toBeCloseTo(12, 0);
+  expect(geometry.navigationWidth).toBeCloseTo(190, 0);
+  expect(geometry.order).toEqual(["navigation", "detail"]);
+  expect(geometry.horizontalOverflow).toBe(false);
+  for (const scroller of geometry.scrollers) {
+    expect(scroller.position).toBe("absolute");
+    expect(scroller.inset).toEqual(["0px", "0px", "0px", "0px"]);
+    expect(scroller.padding).toEqual(["12px", "12px", "12px", "12px"]);
+    expect(scroller.gutter).toBe("auto");
+  }
+});
+
+test("compact Usage stacks navigation before detail and gives scrolling to the tray", async ({ page }) => {
+  await page.setViewportSize({ width: 620, height: 440 });
+  await page.goto("/?demo=1&demoScenario=multi");
+  await page.getByRole("tab", { name: "Usage" }).click();
+
+  const tray = page.getByTestId("usage-tray");
+  const geometry = await tray.evaluate((node) => {
+    const cards = [...node.querySelectorAll<HTMLElement>(".usage-card")];
+    const rects = cards.map((card) => card.getBoundingClientRect());
+    const scrollers = cards.map((card) => card.querySelector<HTMLElement>("[data-scroll-owner='inner']")!);
+    return {
+      order: scrollers.map((scroller) => scroller.dataset.usageCard),
+      tops: rects.map((rect) => rect.top),
+      minHeights: cards.map((card) => getComputedStyle(card).minHeight),
+      trayOverflowY: getComputedStyle(node).overflowY,
+      horizontalOverflow: node.scrollWidth > node.clientWidth + 1,
+      scrollers: scrollers.map((scroller) => ({
+        position: getComputedStyle(scroller).position,
+        overflowY: getComputedStyle(scroller).overflowY,
+      })),
+    };
+  });
+
+  expect(geometry.order).toEqual(["navigation", "detail"]);
+  expect(geometry.tops[0]).toBeLessThan(geometry.tops[1]);
+  expect(geometry.minHeights).toEqual(["240px", "360px"]);
+  expect(geometry.trayOverflowY).toBe("auto");
+  expect(geometry.horizontalOverflow).toBe(false);
+  for (const scroller of geometry.scrollers) {
+    expect(scroller.position).toBe("relative");
+    expect(scroller.overflowY).toBe("visible");
+  }
+
+  const trayBox = await tray.boundingBox();
+  if (!trayBox) throw new Error("missing compact Usage tray geometry");
+  await page.mouse.move(trayBox.x + trayBox.width / 2, trayBox.y + trayBox.height / 2);
+  await page.mouse.wheel(0, 800);
+  await expect.poll(() => tray.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+});
+
+test("wide Setup uses two material cards with a fixed detail heading and flat Pet controls", async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 800 });
+  await page.goto("/?demo=1&demoScenario=multi");
+  await page.getByRole("button", { name: "Setup" }).click();
+  const tray = page.getByTestId("settings-board");
+  await expect(tray).toHaveClass(/setup-tray/);
+  await expect.poll(() => page.locator(".halo-surface").evaluate((node) => Number.parseFloat(getComputedStyle(node).height))).toBe(500);
+
+  const wide = await tray.evaluate((node) => {
+    const cards = [...node.querySelectorAll<HTMLElement>(".setup-card")];
+    const rects = cards.map((card) => card.getBoundingClientRect());
+    const detail = node.querySelector<HTMLElement>(".setup-detail-card")!;
+    const heading = node.querySelector<HTMLElement>(".setup-detail-heading")!;
+    const body = node.querySelector<HTMLElement>("[data-setup-card='detail']")!;
+    const headingRect = heading.getBoundingClientRect();
+    const bodyRect = body.getBoundingClientRect();
+    return {
+      cardCount: cards.length,
+      paints: cards.map((card) => getComputedStyle(card).backgroundColor),
+      gap: rects[1].left - rects[0].right,
+      navigationWidth: rects[0].width,
+      detailFlexible: rects[1].width > rects[0].width,
+      detailRows: getComputedStyle(detail).gridTemplateRows,
+      headingBodyGap: bodyRect.top - headingRect.bottom,
+      detailOverflowY: getComputedStyle(body).overflowY,
+      horizontalOverflow: node.scrollWidth > node.clientWidth + 1,
+    };
+  });
+  expect(wide.cardCount).toBe(2);
+  expect(wide.paints).toEqual(["rgb(113, 127, 142)", "rgb(155, 150, 131)"]);
+  expect(wide.gap).toBeCloseTo(12, 0);
+  expect(wide.navigationWidth).toBeCloseTo(170, 0);
+  expect(wide.detailFlexible).toBe(true);
+  expect(wide.detailRows).toContain("minmax(0px, 1fr)");
+  expect(wide.headingBodyGap).toBeGreaterThanOrEqual(0);
+  expect(wide.detailOverflowY).toBe("auto");
+  expect(wide.horizontalOverflow).toBe(false);
+  const passiveBorders = await page.locator(".setup-row.passive").first().evaluate((row) => {
+    const style = getComputedStyle(row);
+    return [style.borderTopWidth, style.borderRightWidth, style.borderBottomWidth, style.borderLeftWidth, style.borderBottomStyle];
+  });
+  expect(passiveBorders).toEqual(["0px", "0px", "1px", "0px", "solid"]);
+
+  await page.getByRole("tab", { name: "Pet" }).click();
+  const flat = await page.locator(".setup-detail-card").evaluate((node) => {
+    const row = node.querySelector<HTMLElement>(".setup-row")!;
+    const motion = node.querySelector<HTMLElement>(".pet-motion-mapping")!;
+    const size = node.querySelector<HTMLElement>(".setup-size-options")!;
+    const preview = node.querySelector<HTMLElement>(".pet-current-preview > .pet-option-sprite")!;
+    const actions = node.querySelector<HTMLElement>(".setup-row-actions")!;
+    const copy = node.querySelector<HTMLElement>(".pet-setting-row .setup-copy")!;
+    const rowStyle = getComputedStyle(row);
+    const actionRect = actions.getBoundingClientRect();
+    const copyRect = copy.getBoundingClientRect();
+    const borderWidths = (element: HTMLElement) => {
+      const style = getComputedStyle(element);
+      return [style.borderTopWidth, style.borderRightWidth, style.borderBottomWidth, style.borderLeftWidth];
+    };
+    return {
+      rowBorders: borderWidths(row),
+      rowRadius: rowStyle.borderRadius,
+      motionBorders: borderWidths(motion),
+      motionRadius: getComputedStyle(motion).borderRadius,
+      sizeBorders: borderWidths(size),
+      preview: preview.getBoundingClientRect().width,
+      actionsClearCopy: actionRect.left >= copyRect.right - 1 || actionRect.top >= copyRect.bottom - 1,
+      motionColumns: getComputedStyle(node.querySelector<HTMLElement>(".pet-motion-mapping-grid")!).gridTemplateColumns.split(" ").length,
+      selectHeights: [...node.querySelectorAll<HTMLElement>(".pet-motion-row select")].map((select) => select.getBoundingClientRect().height),
+    };
+  });
+  expect(flat.rowBorders).toEqual(["0px", "0px", "1px", "0px"]);
+  expect(flat.rowRadius).toBe("0px");
+  expect(flat.motionBorders).toEqual(["1px", "0px", "0px", "0px"]);
+  expect(flat.motionRadius).toBe("0px");
+  expect(flat.sizeBorders).toEqual(["0px", "0px", "0px", "0px"]);
+  expect(flat.preview).toBeGreaterThanOrEqual(52);
+  expect(flat.actionsClearCopy).toBe(true);
+  expect(flat.motionColumns).toBe(3);
+  expect(flat.selectHeights.every((height) => height >= 24)).toBe(true);
+
+  const body = page.locator("[data-setup-card='detail']");
+  await body.evaluate((node) => { node.scrollTop = node.scrollHeight; });
+  await expect(page.locator(".pet-motion-row").last()).toBeInViewport();
+});
+
+test("compact Setup stacks a 90px navigation card over reachable detail content", async ({ page }) => {
+  await page.setViewportSize({ width: 620, height: 760 });
+  await page.goto("/?demo=1&demoScenario=multi");
+  await page.getByRole("button", { name: "Setup" }).click();
+  const tray = page.getByTestId("settings-board");
+  await page.getByRole("tab", { name: "Pet" }).click();
+
+  const compact = await tray.evaluate((node) => {
+    const navigation = node.querySelector<HTMLElement>(".setup-navigation-card")!;
+    const detail = node.querySelector<HTMLElement>(".setup-detail-card")!;
+    const detailBody = node.querySelector<HTMLElement>("[data-setup-card='detail']")!;
+    const trayRect = node.getBoundingClientRect();
+    const cards = [navigation, detail].map((card) => card.getBoundingClientRect());
+    const scrollers = [...node.querySelectorAll<HTMLElement>("[data-setup-card]")];
+    const detailContentBottom = cards[1].top - trayRect.top + detail.scrollHeight;
+    return {
+      order: scrollers.map((scroller) => scroller.dataset.setupCard),
+      navigationHeight: cards[0].height,
+      detailHeight: cards[1].height,
+      detailScrollHeight: detail.scrollHeight,
+      detailMinHeight: getComputedStyle(detail).minHeight,
+      detailBodyHeight: detailBody.clientHeight,
+      detailBodyScrollHeight: detailBody.scrollHeight,
+      detailGridRows: getComputedStyle(detail).gridTemplateRows,
+      trayHeight: node.clientHeight,
+      trayScrollHeight: node.scrollHeight,
+      trayIncludesDetailContent: node.scrollHeight + 1 >= detailContentBottom,
+      cardContentFits: detail.scrollHeight <= detail.clientHeight + 1,
+      detailBodyContentFits: detailBody.scrollHeight <= detailBody.clientHeight + 1,
+      stacked: cards[0].top < cards[1].top,
+      trayOverflowY: getComputedStyle(node).overflowY,
+      horizontalOverflow: node.scrollWidth > node.clientWidth + 1,
+      innerScrollers: scrollers.map((scroller) => ({
+        position: getComputedStyle(scroller).position,
+        overflowY: getComputedStyle(scroller).overflowY,
+        nestedAuto: [...scroller.querySelectorAll<HTMLElement>("*")].some((element) => ["auto", "scroll"].includes(getComputedStyle(element).overflowY)),
+      })),
+      motionColumns: getComputedStyle(node.querySelector<HTMLElement>(".pet-motion-mapping-grid")!).gridTemplateColumns.split(" ").length,
+    };
+  });
+  expect(compact.order).toEqual(["navigation", "detail"]);
+  expect(compact.navigationHeight).toBeCloseTo(90, 0);
+  expect(compact.detailMinHeight).toBe("520px");
+  expect(compact.detailGridRows).toBe("auto auto");
+  expect(compact.cardContentFits).toBe(true);
+  expect(compact.detailBodyContentFits).toBe(true);
+  expect(compact.trayIncludesDetailContent).toBe(true);
+  expect(compact.stacked).toBe(true);
+  expect(compact.trayOverflowY).toBe("auto");
+  expect(compact.horizontalOverflow).toBe(false);
+  expect(compact.innerScrollers).toEqual([
+    { position: "relative", overflowY: "visible", nestedAuto: false },
+    { position: "relative", overflowY: "visible", nestedAuto: false },
+  ]);
+  expect(compact.motionColumns).toBe(2);
+
+  await tray.evaluate((node) => { node.scrollTop = node.scrollHeight; });
+  await expect.poll(() => tray.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+  const reachability = await tray.evaluate((node) => {
+    const rows = [...node.querySelectorAll<HTMLElement>(".pet-motion-row")];
+    const lastRow = rows.at(-1)!;
+    return {
+      atMaxScroll: Math.abs(node.scrollTop - (node.scrollHeight - node.clientHeight)) <= 1,
+      lastRowWithinTray: lastRow.getBoundingClientRect().bottom <= node.getBoundingClientRect().bottom + 1,
+    };
+  });
+  expect(reachability.atMaxScroll).toBe(true);
+  expect(reachability.lastRowWithinTray).toBe(true);
+});
+
+test("wide Runtime and Services keep fixed headings above their detail scrollers", async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 800 });
+  await page.goto("/?demo=1&demoScenario=multi");
+
+  for (const view of ["Runtime", "Services"] as const) {
+    await page.getByRole("tab", { name: view, exact: true }).click();
+    const board = page.getByTestId(`${view.toLowerCase()}-board`);
+    await expect(board).toBeVisible();
+    await expect.poll(() => page.locator(".halo-surface").evaluate((surface) => Number.parseFloat(getComputedStyle(surface).height))).toBe(500);
+
+    const geometry = await board.evaluate((tray) => {
+      const cards = [...tray.querySelectorAll<HTMLElement>(".monitor-card")];
+      const rects = cards.map((card) => card.getBoundingClientRect());
+      const overview = tray.querySelector<HTMLElement>("[data-monitor-card='overview']")!;
+      const detail = tray.querySelector<HTMLElement>("[data-monitor-card='detail']")!;
+      const heading = tray.querySelector<HTMLElement>(".runtime-detail-heading")!;
+      const refresh = tray.querySelector<HTMLElement>("[data-surface-control-shape='circle']")!;
+      const styleOf = (element: HTMLElement) => getComputedStyle(element);
+      const overviewStyle = styleOf(overview);
+      const detailStyle = styleOf(detail);
+      const headingBefore = heading.getBoundingClientRect();
+      detail.scrollTop = detail.scrollHeight;
+      const headingAfter = heading.getBoundingClientRect();
+      const detailRect = detail.getBoundingClientRect();
+      const lastServiceRow = tray.querySelector<HTMLElement>(".runtime-service-row:last-child");
+      const refreshRect = refresh.getBoundingClientRect();
+      return {
+        cardCount: cards.length,
+        overviewWidth: rects[0].width,
+        detailWidth: rects[1].width,
+        gap: rects[1].left - rects[0].right,
+        horizontalOverflow: tray.scrollWidth > tray.clientWidth + 1,
+        overview: {
+          position: overviewStyle.position,
+          inset: [overviewStyle.top, overviewStyle.right, overviewStyle.bottom, overviewStyle.left],
+          padding: [overviewStyle.paddingTop, overviewStyle.paddingRight, overviewStyle.paddingBottom, overviewStyle.paddingLeft],
+          overflowY: overviewStyle.overflowY,
+        },
+        detail: {
+          position: detailStyle.position,
+          padding: [detailStyle.paddingTop, detailStyle.paddingRight, detailStyle.paddingBottom, detailStyle.paddingLeft],
+          overflowY: detailStyle.overflowY,
+          top: detailRect.top,
+          scrollTop: detail.scrollTop,
+          maxScrollTop: detail.scrollHeight - detail.clientHeight,
+        },
+        headingBottom: headingBefore.bottom,
+        headingTopBefore: headingBefore.top,
+        headingTopAfter: headingAfter.top,
+        lastServiceReachable: !lastServiceRow || lastServiceRow.getBoundingClientRect().bottom <= detailRect.bottom + 1,
+        refresh: { width: refreshRect.width, height: refreshRect.height, radius: styleOf(refresh).borderRadius },
+      };
+    });
+
+    expect(geometry.cardCount).toBe(2);
+    expect(geometry.overviewWidth).toBeCloseTo(240, 0);
+    expect(geometry.detailWidth).toBeGreaterThan(240);
+    expect(geometry.gap).toBeCloseTo(12, 0);
+    expect(geometry.horizontalOverflow).toBe(false);
+    expect(geometry.overview).toEqual({
+      position: "absolute",
+      inset: ["0px", "0px", "0px", "0px"],
+      padding: ["12px", "12px", "12px", "12px"],
+      overflowY: "auto",
+    });
+    expect(geometry.detail.position).toBe("relative");
+    expect(geometry.detail.padding).toEqual(["6px", "12px", "12px", "12px"]);
+    expect(geometry.detail.overflowY).toBe("auto");
+    expect(geometry.detail.top).toBeGreaterThanOrEqual(geometry.headingBottom - 1);
+    expect(geometry.headingTopAfter).toBeCloseTo(geometry.headingTopBefore, 1);
+    expect(geometry.detail.scrollTop).toBe(geometry.detail.maxScrollTop);
+    expect(geometry.lastServiceReachable).toBe(true);
+    expect(geometry.refresh.width).toBeCloseTo(28, 2);
+    expect(geometry.refresh.height).toBeCloseTo(28, 2);
+    expect(geometry.refresh.radius).toBe("50%");
+  }
+});
+
+test("compact Runtime and Services stack 210px and 420px cards with tray scrolling", async ({ page }) => {
+  await page.setViewportSize({ width: 620, height: 440 });
+  await page.goto("/?demo=1&demoScenario=multi");
+
+  for (const view of ["Runtime", "Services"] as const) {
+    await page.getByRole("tab", { name: view, exact: true }).click();
+    const board = page.getByTestId(`${view.toLowerCase()}-board`);
+    await expect(board).toBeVisible();
+    const geometry = await board.evaluate((tray) => {
+      const cards = [...tray.querySelectorAll<HTMLElement>(".monitor-card")];
+      const rects = cards.map((card) => card.getBoundingClientRect());
+      const scrollers = cards.map((card) => card.querySelector<HTMLElement>("[data-scroll-owner='inner']")!);
+      return {
+        order: scrollers.map((scroller) => scroller.dataset.monitorCard),
+        tops: rects.map((rect) => rect.top),
+        widths: rects.map((rect) => rect.width),
+        trayWidth: tray.getBoundingClientRect().width,
+        minHeights: cards.map((card) => getComputedStyle(card).minHeight),
+        trayOverflowY: getComputedStyle(tray).overflowY,
+        trayScrollable: tray.scrollHeight > tray.clientHeight,
+        horizontalOverflow: tray.scrollWidth > tray.clientWidth + 1,
+        cardsNotClipped: cards.every((card) => card.scrollHeight <= card.clientHeight + 1),
+        scrollers: scrollers.map((scroller) => ({
+          position: getComputedStyle(scroller).position,
+          overflowY: getComputedStyle(scroller).overflowY,
+          padding: [getComputedStyle(scroller).paddingTop, getComputedStyle(scroller).paddingRight, getComputedStyle(scroller).paddingBottom, getComputedStyle(scroller).paddingLeft],
+          contentFits: scroller.scrollHeight <= scroller.clientHeight + 1,
+          nestedAuto: [...scroller.querySelectorAll<HTMLElement>("*")].some((element) => ["auto", "scroll"].includes(getComputedStyle(element).overflowY)),
+        })),
+      };
+    });
+
+    expect(geometry.order).toEqual(["overview", "detail"]);
+    expect(geometry.tops[0]).toBeLessThan(geometry.tops[1]);
+    expect(geometry.minHeights).toEqual(["210px", "420px"]);
+    expect(geometry.widths.every((width) => Math.abs(width - geometry.trayWidth) <= 1)).toBe(true);
+    expect(geometry.trayOverflowY).toBe("auto");
+    expect(geometry.trayScrollable).toBe(true);
+    expect(geometry.horizontalOverflow).toBe(false);
+    expect(geometry.cardsNotClipped).toBe(true);
+    expect(geometry.scrollers[0]).toEqual({ position: "relative", overflowY: "visible", padding: ["12px", "12px", "12px", "12px"], contentFits: true, nestedAuto: false });
+    expect(geometry.scrollers[1]).toEqual({ position: "relative", overflowY: "visible", padding: ["6px", "12px", "12px", "12px"], contentFits: true, nestedAuto: false });
+
+    await board.evaluate((tray) => { tray.scrollTop = tray.scrollHeight; });
+    await expect.poll(() => board.evaluate((tray) => tray.scrollTop)).toBeGreaterThan(0);
+    const finalRow = view === "Services" ? board.locator(".runtime-service-row").last() : board.locator(".runtime-row").last();
+    await expect(finalRow).toBeVisible();
+    expect(await finalRow.evaluate((row, boardTestId) => {
+      const tray = document.querySelector<HTMLElement>(`[data-testid='${boardTestId}']`)!;
+      return row.getBoundingClientRect().bottom <= tray.getBoundingClientRect().bottom + 1;
+    }, `${view.toLowerCase()}-board`)).toBe(true);
+  }
+});
+
 test("colored boards own vertical scrolling and keep complete material edges", async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 800 });
   await page.goto("/?demo=1&demoScenario=multi");
   await page.waitForTimeout(200);
 
-  const inspect = async (boardSelector: string) => page.evaluate((selector) => {
+  const inspect = async (boardSelector: string, scrollerSelector = "[data-scroll-owner='inner']") => page.evaluate(({ selector, target }) => {
     const board = document.querySelector<HTMLElement>(selector);
     const sheet = document.querySelector<HTMLElement>(".sheet-body");
     const inner = document.querySelector<HTMLElement>(".sheet-inner");
-    const scroller = board?.querySelector<HTMLElement>("[data-scroll-owner='inner']");
-    if (!board || !sheet || !inner || !scroller) throw new Error(`missing ${selector} or scroller`);
+    const scroller = board?.querySelector<HTMLElement>(target);
+    if (!board || !sheet || !inner || !scroller) throw new Error(`missing ${selector} or ${target}`);
     scroller.style.maxHeight = "100px";
     const boardBox = board.getBoundingClientRect();
     const sheetBox = sheet.getBoundingClientRect();
@@ -460,7 +860,7 @@ test("colored boards own vertical scrolling and keep complete material edges", a
         getComputedStyle(board).backgroundColor !== "rgba(0, 0, 0, 0)",
       horizontalOverflow: board.scrollWidth > board.clientWidth + 1,
     };
-  }, boardSelector);
+  }, { selector: boardSelector, target: scrollerSelector });
 
   const sessions = await inspect("[data-testid='sessions-board']");
   expect(sessions).toMatchObject({
@@ -473,64 +873,61 @@ test("colored boards own vertical scrolling and keep complete material edges", a
   });
   expect(sessions.scrollerScrollTop).toBeGreaterThan(0);
 
-  await page.getByRole("tab", { name: "Usage" }).click();
-  await page.waitForTimeout(200);
-  const usage = await inspect("[data-testid='usage-board']");
-  expect(usage.boardOverflowY).toBe("hidden");
-  expect(usage.scrollerOverflowY).toBe("auto");
-  expect(usage.sheetOverflowY).toBe("hidden");
-  expect(usage.nestedAuto).toBe(false);
-  expect(usage.completeEdges).toBe(true);
-
   await page.getByRole("tab", { name: "Runtime" }).click();
   await page.waitForTimeout(200);
-  const runtime = await inspect("[data-testid='runtime-board']");
+  await expect(page.getByTestId("runtime-board")).toBeVisible();
+  const runtime = await inspect("[data-testid='runtime-board']", "[data-monitor-card='detail']");
   expect(runtime.boardOverflowY).toBe("hidden");
   expect(runtime.scrollerOverflowY).toBe("auto");
   expect(runtime.nestedAuto).toBe(false);
-  expect(await page.locator(".runtime-toolbar").evaluate((node) => getComputedStyle(node).position)).toBe("sticky");
 
   await page.getByRole("tab", { name: "Services" }).click();
-  await expect.poll(() => page.locator("[data-testid='services-board'] [data-scroll-owner='inner']").evaluate((scroller) => scroller.scrollTop)).toBe(0);
+  const servicesDetail = page.locator("[data-testid='services-board'] [data-monitor-card='detail']");
+  await expect(servicesDetail).toBeVisible();
+  await expect.poll(() => servicesDetail.evaluate((scroller) => scroller.scrollTop)).toBe(0);
 
   await page.getByRole("button", { name: "Setup" }).click();
   await page.waitForTimeout(200);
-  const setup = await inspect("[data-testid='settings-board']");
+  const setup = await inspect("[data-testid='settings-board'] .setup-detail-card", "[data-setup-card='detail']");
   expect(setup.boardOverflowY).toBe("hidden");
   expect(setup.scrollerOverflowY).toBe("auto");
   expect(setup.nestedAuto).toBe(false);
   expect(setup.completeEdges).toBe(true);
 });
 
-test("runtime view preserves active tab and scroll position when closed and reopened", async ({ page }) => {
-  await page.goto("/?demo=1&demoScenario=multi");
-  await page.addStyleTag({ content: "[data-testid='runtime-board'] [data-scroll-owner='inner'] { max-height: 120px !important; }" });
-  await page.getByRole("tab", { name: "Runtime" }).click();
-  const scroller = page.locator("[data-testid='runtime-board'] [data-scroll-owner='inner']");
-  await expect(scroller).toBeVisible();
-  await expect(page.locator(".runtime-row").first()).toBeVisible();
-  await scroller.evaluate((element) => {
-    element.scrollTop = 48;
+for (const view of ["Runtime", "Services"] as const) {
+  test(`${view} preserves its detail scroll position when closed and reopened`, async ({ page }) => {
+    const panelView = view.toLowerCase();
+    const board = `[data-testid='${panelView}-board']`;
+    const scrollerSelector = `${board} [data-monitor-card='detail']`;
+    await page.goto("/?demo=1&demoScenario=multi");
+    await page.addStyleTag({ content: `${scrollerSelector} { max-height: 120px !important; }` });
+    await page.getByRole("tab", { name: view, exact: true }).click();
+    const scroller = page.locator(scrollerSelector);
+    await expect(scroller).toBeVisible();
+    await scroller.evaluate((element) => {
+      element.scrollTop = 48;
+    });
+    expect(await scroller.evaluate((element) => element.scrollTop)).toBe(48);
+
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".halo-surface")).toHaveAttribute("data-state", "closed");
+
+    await page.locator(".halo-surface").focus();
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".halo-surface")).toHaveAttribute("data-state", "open");
+    expect(await page.locator(".halo-surface").getAttribute("data-panel-view")).toBe(panelView);
+    await expect.poll(async () => scroller.evaluate((element) => element.scrollTop)).toBe(48);
   });
-  expect(await scroller.evaluate((element) => element.scrollTop)).toBe(48);
-
-  await page.keyboard.press("Escape");
-  await expect(page.locator(".halo-surface")).toHaveAttribute("data-state", "closed");
-
-  await page.locator(".halo-surface").focus();
-  await page.keyboard.press("Enter");
-  await expect(page.locator(".halo-surface")).toHaveAttribute("data-state", "open");
-  expect(await page.locator(".halo-surface").getAttribute("data-panel-view")).toBe("runtime");
-  await expect.poll(async () => scroller.evaluate((element) => element.scrollTop)).toBe(48);
-});
+}
 
 test("navigating from usage to setup and back restores active tab and prior scroll position", async ({ page }) => {
   await page.goto("/?demo=1&demoScenario=multi");
+  await page.addStyleTag({ content: "[data-usage-card='detail'] { max-height: 120px !important; }" });
   await page.getByRole("tab", { name: "Usage" }).click();
-  const usageScroller = page.locator("[data-testid='usage-board'] [data-scroll-owner='inner']");
+  const usageScroller = page.locator("[data-usage-card='detail']");
   await expect(usageScroller).toBeVisible();
   await usageScroller.evaluate((element) => {
-    element.style.maxHeight = "120px";
     element.scrollTop = 56;
   });
   expect(await usageScroller.evaluate((element) => element.scrollTop)).toBe(56);
@@ -540,7 +937,7 @@ test("navigating from usage to setup and back restores active tab and prior scro
   expect(await page.locator(".halo-surface").getAttribute("data-panel-view")).toBe("setup");
 
   await page.getByRole("button", { name: /Back/ }).click();
-  await expect(page.locator("[data-testid='usage-board']")).toBeVisible();
+  await expect(page.getByTestId("usage-tray")).toBeVisible();
   expect(await page.locator(".halo-surface").getAttribute("data-panel-view")).toBe("usage");
   await expect.poll(async () => usageScroller.evaluate((element) => element.scrollTop)).toBe(56);
 });
@@ -559,22 +956,24 @@ test("surface personalities stay distinct and drop the legacy orange recipe", as
   expect((await paint(page, ".focus-tool-card-move")).backgroundColor).toBe("rgb(163, 158, 106)");
   const start = await page.locator(".pomodoro-panel").getByRole("button", { name: "Start" }).evaluate((button) => getComputedStyle(button).backgroundColor);
   expect(start).not.toBe("rgb(255, 157, 61)");
-  expect(start).toBe("rgb(39, 31, 56)");
+  expect(start).toBe("rgb(17, 17, 17)");
 
   await page.getByRole("tab", { name: "Usage" }).click();
-  expect((await paint(page, "[data-testid='usage-board']")).backgroundColor).toBe("rgb(163, 158, 106)");
+  expect((await paint(page, ".usage-card-navigation")).backgroundColor).toBe("rgb(155, 150, 131)");
+  expect((await paint(page, ".usage-card-detail")).backgroundColor).toBe("rgb(163, 158, 106)");
 
   await page.getByRole("tab", { name: "Runtime" }).click();
-  const runtime = await paint(page, "[data-testid='runtime-board']");
+  const runtime = await paint(page, "[data-testid='runtime-board'] .monitor-detail-card");
   expect(runtime.backgroundColor).toBe("rgb(113, 127, 142)");
 
   await page.getByRole("tab", { name: "Services" }).click();
-  const services = await paint(page, "[data-testid='services-board']");
+  const services = await paint(page, "[data-testid='services-board'] .monitor-detail-card");
   expect(services.backgroundColor).toBe("rgb(111, 136, 136)");
   expect(services.backgroundColor).not.toBe(runtime.backgroundColor);
 
   await page.getByRole("button", { name: "Setup" }).click();
-  expect((await paint(page, "[data-testid='settings-board']")).backgroundColor).toBe("rgb(155, 150, 131)");
+  expect((await paint(page, ".setup-navigation-card")).backgroundColor).toBe("rgb(113, 127, 142)");
+  expect((await paint(page, ".setup-detail-card")).backgroundColor).toBe("rgb(155, 150, 131)");
 
   const orangeHits = await page.evaluate(() => {
     const probe = document.createElement("span");
@@ -585,4 +984,306 @@ test("surface personalities stay distinct and drop the legacy orange recipe", as
     return rootAccent;
   });
   expect(orangeHits).toBe("rgb(126, 184, 212)");
+});
+
+test("wide Session Detail uses a 300px mint overview and fixed-heading parchment activity card", async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 800 });
+  await page.goto("/?demo=1&demoScenario=multi");
+  await page.locator(".session-row-main").first().click();
+  const tray = page.getByTestId("session-detail-board");
+  await expect(tray).toHaveClass(/session-detail-tray/);
+  await expect.poll(() => page.locator(".halo-surface").evaluate((surface) => Number.parseFloat(getComputedStyle(surface).height))).toBe(500);
+
+  const geometry = await tray.evaluate((node) => {
+    const cards = [...node.querySelectorAll<HTMLElement>(".session-detail-card")];
+    const rects = cards.map((card) => card.getBoundingClientRect());
+    const overview = node.querySelector<HTMLElement>("[data-session-detail-card='overview']")!;
+    const activity = node.querySelector<HTMLElement>("[data-session-detail-card='activity']")!;
+    const heading = node.querySelector<HTMLElement>(".session-detail-activity-heading")!;
+    const controls = node.querySelector<HTMLElement>(".session-detail-controls")!;
+    const finalRow = node.querySelector<HTMLElement>(".action-row:last-child");
+    const headingBefore = heading.getBoundingClientRect();
+    activity.scrollTop = activity.scrollHeight;
+    const activityRect = activity.getBoundingClientRect();
+    const overviewRect = overview.getBoundingClientRect();
+    return {
+      cardCount: cards.length,
+      paints: cards.map((card) => getComputedStyle(card).backgroundColor),
+      overviewWidth: rects[0].width,
+      gap: rects[1].left - rects[0].right,
+      fullHeight: rects.every((rect) => Math.abs(rect.height - node.getBoundingClientRect().height) <= 1),
+      overviewPadding: [getComputedStyle(overview).paddingTop, getComputedStyle(overview).paddingRight, getComputedStyle(overview).paddingBottom, getComputedStyle(overview).paddingLeft],
+      headingStationary: Math.abs(heading.getBoundingClientRect().top - headingBefore.top) <= 1,
+      activityStartsBelowHeading: activityRect.top >= headingBefore.bottom - 1,
+      activityOverflow: getComputedStyle(activity).overflowY,
+      controlsVisible: controls.getBoundingClientRect().bottom <= overviewRect.bottom + 1,
+      finalRowReachable: !finalRow || finalRow.getBoundingClientRect().bottom <= activityRect.bottom + 1,
+      horizontalOverflow: node.scrollWidth > node.clientWidth + 1,
+    };
+  });
+
+  expect(geometry).toMatchObject({
+    cardCount: 2,
+    paints: ["rgb(142, 165, 148)", "rgb(155, 150, 131)"],
+    fullHeight: true,
+    overviewPadding: ["12px", "12px", "12px", "12px"],
+    headingStationary: true,
+    activityStartsBelowHeading: true,
+    activityOverflow: "auto",
+    controlsVisible: true,
+    finalRowReachable: true,
+    horizontalOverflow: false,
+  });
+  expect(geometry.overviewWidth).toBeCloseTo(300, 0);
+  expect(geometry.gap).toBeCloseTo(12, 0);
+});
+
+test("Session Detail interior paint is monochrome and structurally encoded", async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 800 });
+  await page.goto("/?demo=1&demoScenario=multi");
+  await page.locator(".session-row-main").first().click();
+
+  const paintGuard = await page.getByTestId("session-detail-board").evaluate((tray) => {
+    const summary = tray.querySelector<HTMLElement>(".session-context-summary")!;
+    const summaryStyle = getComputedStyle(summary);
+    const rows = [...tray.querySelectorAll<HTMLElement>(".action-row")];
+    const paints = [...tray.querySelectorAll<HTMLElement>(".action-tool, .action-mark, .session-context-copy, .session-context-meta")]
+      .flatMap((element) => {
+        const style = getComputedStyle(element);
+        return [style.color, style.backgroundColor, style.borderColor];
+      });
+    const monochrome = (value: string) => {
+      if (value === "rgba(0, 0, 0, 0)") return true;
+      const channels = value.match(/[\d.]+/g)?.slice(0, 3).map(Number);
+      return Boolean(channels && channels[0] === channels[1] && channels[1] === channels[2]);
+    };
+    return {
+      summaryBackground: summaryStyle.backgroundColor,
+      summaryBorders: [summaryStyle.borderTopWidth, summaryStyle.borderRightWidth, summaryStyle.borderBottomWidth, summaryStyle.borderLeftWidth],
+      rowBorders: rows.map((row) => {
+        const style = getComputedStyle(row);
+        return [style.borderTopWidth, style.borderRightWidth, style.borderBottomWidth, style.borderLeftWidth];
+      }),
+      allMonochrome: paints.every(monochrome),
+    };
+  });
+
+  expect(paintGuard.summaryBackground).toBe("rgba(0, 0, 0, 0)");
+  expect(paintGuard.summaryBorders).toEqual(["0px", "0px", "1px", "0px"]);
+  expect(paintGuard.rowBorders.every((borders) => JSON.stringify(borders) === JSON.stringify(["0px", "0px", "1px", "0px"]))).toBe(true);
+  expect(paintGuard.allMonochrome).toBe(true);
+});
+
+test("canonical dot status tokens introduce dusty green/red exclusively to approved dot selectors", async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 800 });
+  await page.goto("/?demo=1&demoScenario=error");
+
+  const canonicalTokens = await page.locator(".sheet-inner").first().evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      positive: style.getPropertyValue("--surface-dot-positive").trim(),
+      negative: style.getPropertyValue("--surface-dot-negative").trim(),
+    };
+  });
+  expect(canonicalTokens.positive).toBe("#5ea876");
+  expect(canonicalTokens.negative).toBe("#c75a5a");
+
+  await page.locator(".session-row-main").first().click();
+  const errorDot = page.locator(".detail-header .status-dot.status-error");
+  await expect(errorDot).toBeVisible();
+  expect(await errorDot.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe("rgb(199, 90, 90)");
+
+  await page.getByRole("button", { name: "Back to sessions" }).click();
+  await page.getByRole("tab", { name: "Usage" }).click();
+  const navDots = await page.evaluate(() => {
+    const selected = document.querySelector<HTMLElement>(".usage-side-tab[data-active='true'] .usage-side-dot");
+    const unselected = document.querySelector<HTMLElement>(".usage-side-tab:not([data-active='true']) .usage-side-dot");
+    return {
+      selected: selected ? getComputedStyle(selected).backgroundColor : null,
+      unselected: unselected ? getComputedStyle(unselected).backgroundColor : null,
+    };
+  });
+  expect(navDots.selected).toBe("rgb(94, 168, 118)");
+  expect(navDots.unselected).toBe("rgb(94, 168, 118)");
+});
+
+for (const width of [620, 320]) {
+  test(`compact Session Detail at ${width}px stacks intrinsically with tray-only scrolling`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 500 });
+    await page.goto("/?demo=1&demoScenario=multi");
+    await page.locator(".session-row-main").first().click();
+    const tray = page.getByTestId("session-detail-board");
+    const geometry = await tray.evaluate((node) => {
+      const cards = [...node.querySelectorAll<HTMLElement>(".session-detail-card")];
+      const rects = cards.map((card) => card.getBoundingClientRect());
+      const scrollers = [...node.querySelectorAll<HTMLElement>("[data-scroll-owner='inner']")];
+      const controls = [...node.querySelectorAll<HTMLElement>(".session-context-actions .surface-control")];
+      return {
+        order: scrollers.map((scroller) => scroller.dataset.sessionDetailCard),
+        stacked: rects[0].top < rects[1].top,
+        minHeights: cards.map((card) => getComputedStyle(card).minHeight),
+        contentFits: cards.every((card) => card.scrollHeight <= card.clientHeight + 1),
+        trayOverflowY: getComputedStyle(node).overflowY,
+        trayScrollable: node.scrollHeight > node.clientHeight,
+        horizontalOverflow: node.scrollWidth > node.clientWidth + 1,
+        scrollers: scrollers.map((scroller) => ({ position: getComputedStyle(scroller).position, overflowY: getComputedStyle(scroller).overflowY })),
+        controlsDoNotOverlap: controls.every((control, index) => controls.slice(index + 1).every((other) => {
+          const a = control.getBoundingClientRect();
+          const b = other.getBoundingClientRect();
+          return a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top;
+        })),
+      };
+    });
+
+    expect(geometry.order).toEqual(["overview", "activity"]);
+    expect(geometry.stacked).toBe(true);
+    expect(Number.parseFloat(geometry.minHeights[0])).toBeGreaterThanOrEqual(300);
+    expect(Number.parseFloat(geometry.minHeights[1])).toBeGreaterThanOrEqual(360);
+    expect(geometry.contentFits).toBe(true);
+    expect(geometry.trayOverflowY).toBe("auto");
+    expect(geometry.trayScrollable).toBe(true);
+    expect(geometry.horizontalOverflow).toBe(false);
+    expect(geometry.controlsDoNotOverlap).toBe(true);
+    expect(geometry.scrollers).toEqual([
+      { position: "relative", overflowY: "visible" },
+      { position: "relative", overflowY: "visible" },
+    ]);
+
+    await tray.evaluate((node) => { node.scrollTop = node.scrollHeight; });
+    await expect.poll(() => tray.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+    const reachability = await tray.evaluate((node) => {
+      const lastRow = node.querySelector<HTMLElement>(".action-row:last-child");
+      const back = node.querySelector<HTMLElement>(".session-context-return")!;
+      const trayRect = node.getBoundingClientRect();
+      return {
+        atMaxScroll: Math.abs(node.scrollTop - (node.scrollHeight - node.clientHeight)) <= 1,
+        lastRowReachable: !lastRow || lastRow.getBoundingClientRect().bottom <= trayRect.bottom + 1,
+        backPrecedesActivity: back.getBoundingClientRect().bottom <= node.querySelector<HTMLElement>(".session-detail-activity-card")!.getBoundingClientRect().top + 1,
+      };
+    });
+    expect(reachability).toEqual({ atMaxScroll: true, lastRowReachable: true, backPrecedesActivity: true });
+  });
+}
+
+test("visual polish regression: bridge dots, notice spacing, runtime clipping, usage icon, done/inactive badges, detail dividers", async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 800 });
+
+  // 1. Bridge dots in Setup
+  await page.goto("/?demo=1&demoScenario=idle");
+  await page.getByRole("button", { name: "Setup" }).click();
+  const setupDot = page.locator(".bridge-dot[data-connected='true']");
+  await expect(setupDot).toBeVisible();
+  expect(await setupDot.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe("rgb(94, 168, 118)");
+
+  // 2. Setup notice row margin
+  await page.getByRole("button", { name: "Check" }).click();
+  const notice = page.locator(".setup-category-panel .notice-row");
+  await expect(notice).toBeVisible();
+  expect(await notice.evaluate((el) => getComputedStyle(el).marginTop)).toBe("8px");
+  expect(await notice.evaluate((el) => getComputedStyle(el).marginBottom)).toBe("0px");
+
+  // 3. Runtime & Services content begins below heading without clipping
+  await page.getByRole("button", { name: "Back to sessions" }).click();
+  await page.getByRole("tab", { name: "Runtime" }).click();
+  const runtimeHeading = page.locator(".runtime-detail-heading");
+  const runtimeScroll = page.locator(".runtime-board .monitor-detail-card .halo-inner-scroll");
+  await expect(runtimeHeading).toBeVisible();
+  await expect(runtimeScroll).toBeVisible();
+  const [rhBox, rsBox] = await Promise.all([runtimeHeading.boundingBox(), runtimeScroll.boundingBox()]);
+  expect(rhBox).not.toBeNull();
+  expect(rsBox).not.toBeNull();
+  expect(rsBox!.y).toBeGreaterThanOrEqual(rhBox!.y + rhBox!.height - 1);
+  expect(await runtimeScroll.evaluate((el) => getComputedStyle(el).paddingTop)).toBe("6px");
+
+  await page.getByRole("tab", { name: "Services" }).click();
+  const servicesHeading = page.locator(".services-board .runtime-detail-heading");
+  const servicesScroll = page.locator(".services-board .monitor-detail-card .halo-inner-scroll");
+  await expect(servicesHeading).toBeVisible();
+  await expect(servicesScroll).toBeVisible();
+  const [shBox, ssBox] = await Promise.all([servicesHeading.boundingBox(), servicesScroll.boundingBox()]);
+  expect(shBox).not.toBeNull();
+  expect(ssBox).not.toBeNull();
+  expect(ssBox!.y).toBeGreaterThanOrEqual(shBox!.y + shBox!.height - 1);
+  expect(await servicesScroll.evaluate((el) => getComputedStyle(el).paddingTop)).toBe("6px");
+
+  // 4. Usage active icon computes to white
+  await page.getByRole("tab", { name: "Usage" }).click();
+  const activeUsageTab = page.locator(".usage-side-tab[data-active='true']");
+  await expect(activeUsageTab).toBeVisible();
+  const activeIcon = activeUsageTab.locator(".usage-provider-icon");
+  await expect(activeIcon).toBeVisible();
+  expect(await activeIcon.evaluate((el) => getComputedStyle(el).color)).toBe("rgb(255, 255, 255)");
+
+  // 5. Done and Inactive badges remain achromatic with <= 1px calm borders and pill radius
+  await page.goto("/?demo=1&demoScenario=done");
+  const doneBadge = page.locator(".session-inline-status.status-text-done");
+  await expect(doneBadge).toBeVisible();
+  const doneStyles = await doneBadge.evaluate((el) => {
+    const cs = getComputedStyle(el);
+    return {
+      borderWidth: parseFloat(cs.borderWidth),
+      borderRadius: parseFloat(cs.borderRadius),
+      color: cs.color,
+      bgColor: cs.backgroundColor,
+    };
+  });
+  expect(doneStyles.borderWidth).toBeLessThanOrEqual(1);
+  expect(doneStyles.borderRadius).toBeGreaterThanOrEqual(99);
+
+  await page.goto("/?demo=1&demoScenario=inactive");
+  const inactiveBadge = page.locator(".session-inline-status.status-text-inactive");
+  await expect(inactiveBadge).toBeVisible();
+  const inactiveStyles = await inactiveBadge.evaluate((el) => {
+    const cs = getComputedStyle(el);
+    return {
+      borderWidth: parseFloat(cs.borderWidth),
+      borderRadius: parseFloat(cs.borderRadius),
+      color: cs.color,
+      bgColor: cs.backgroundColor,
+    };
+  });
+  expect(inactiveStyles.borderWidth).toBeLessThanOrEqual(1);
+  expect(inactiveStyles.borderRadius).toBeGreaterThanOrEqual(99);
+
+  // 6. Detail summary outline none, return count badge no border + pill radius, all three dividers resolve to identical color & width
+  await page.locator(".session-row-main").first().click();
+  const summary = page.locator(".session-context-summary");
+  const returnCount = page.locator(".session-context-return-count");
+  const activityHeading = page.locator(".session-detail-activity-heading");
+  const actionRow = page.locator(".action-row").first();
+  await expect(summary).toBeVisible();
+  await expect(returnCount).toBeVisible();
+  await expect(activityHeading).toBeVisible();
+  await expect(actionRow).toBeVisible();
+
+  const detailStyles = await page.evaluate(() => {
+    const s = document.querySelector<HTMLElement>(".session-context-summary")!;
+    const rc = document.querySelector<HTMLElement>(".session-context-return-count")!;
+    const ah = document.querySelector<HTMLElement>(".session-detail-activity-heading")!;
+    const ar = document.querySelector<HTMLElement>(".action-row")!;
+    const scs = getComputedStyle(s);
+    const rcs = getComputedStyle(rc);
+    const ahs = getComputedStyle(ah);
+    const ars = getComputedStyle(ar);
+
+    return {
+      summaryOutline: scs.outlineStyle,
+      returnCountBorderWidth: parseFloat(rcs.borderWidth),
+      returnCountRadius: parseFloat(rcs.borderRadius),
+      returnCountFontSize: rcs.fontSize,
+      dividers: [
+        { width: scs.borderBottomWidth, color: scs.borderBottomColor },
+        { width: ahs.borderBottomWidth, color: ahs.borderBottomColor },
+        { width: ars.borderBottomWidth, color: ars.borderBottomColor },
+      ],
+    };
+  });
+
+  expect(detailStyles.summaryOutline).toBe("none");
+  expect(detailStyles.returnCountBorderWidth).toBe(0);
+  expect(detailStyles.returnCountRadius).toBeGreaterThanOrEqual(99);
+  expect(detailStyles.returnCountFontSize).toBe("9px");
+  expect(detailStyles.dividers[0]).toEqual(detailStyles.dividers[1]);
+  expect(detailStyles.dividers[1]).toEqual(detailStyles.dividers[2]);
+  expect(detailStyles.dividers[0].width).toBe("1px");
 });

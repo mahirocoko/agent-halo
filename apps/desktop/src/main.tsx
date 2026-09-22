@@ -3,6 +3,8 @@ import { Activity, BarChart3, Check, ChevronLeft, Clock3, Focus, List, Server, S
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createRoot } from "react-dom/client";
 import type { AgentHaloPresenceStatus } from "@agent-halo/protocol";
+import { BoardScroll, BoardSurface } from "./components/board-surface";
+import { SurfaceControl } from "./components/surface-control";
 import { ActivityPet, type HaloPetName } from "./features/session/HaloPet";
 import { SessionContextSummary, StatusGlyph, WorkspaceSessionGroupItem } from "./features/session/components";
 import {
@@ -82,20 +84,20 @@ const LIVE_ACTIVITY_TEXT_WIDTH_BUFFER = 52;
 type MainPanelTab = "sessions" | "pomodoro" | "usage" | "runtime" | "services";
 type PanelWidthView = MainPanelTab | "session-detail" | "setup";
 
-const PANEL_WIDTH_BY_VIEW: Record<PanelWidthView, number> = {
-  sessions: 1040,
-  "session-detail": 1020,
-  pomodoro: 1020,
-  usage: 1120,
-  runtime: 1100,
-  services: 1080,
-  setup: 980,
-};
+const PANEL_WINDOW_WIDTH = 1040;
 
 const MIN_PANEL_WINDOW_WIDTH = 280;
 const PANEL_MIN_HEIGHT = 218;
 const PANEL_MAX_HEIGHT = 440;
-const FOCUS_PANEL_HEIGHT = 500;
+const TALL_PANEL_HEIGHT = 500;
+const SETTLED_PANEL_HEIGHT_BY_VIEW: Partial<Record<PanelWidthView, number>> = {
+  "session-detail": TALL_PANEL_HEIGHT,
+  pomodoro: TALL_PANEL_HEIGHT,
+  runtime: TALL_PANEL_HEIGHT,
+  services: TALL_PANEL_HEIGHT,
+  usage: PANEL_MAX_HEIGHT,
+  setup: TALL_PANEL_HEIGHT,
+};
 const ACTIVITY_COLLAPSE_MS = 220;
 const HOVER_OPEN_DELAY_MS = 24;
 const HOVER_CLOSE_DELAY_MS = 170;
@@ -153,8 +155,8 @@ const buildNotchShapePath = (width: number, height: number, topRadius: number, b
 const waitForNextPaint = () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
 
 const clampPanelHeight = (value: number): number => Math.min(PANEL_MAX_HEIGHT, Math.max(PANEL_MIN_HEIGHT, Math.ceil(value)));
-const focusPanelHeight = (availableHeight?: number): number => Math.max(PANEL_MIN_HEIGHT, Math.min(FOCUS_PANEL_HEIGHT, availableHeight ?? FOCUS_PANEL_HEIGHT));
-const getAvailableFocusPanelHeight = (): number => focusPanelHeight(DEMO_MODE ? window.innerHeight : undefined);
+const tallPanelHeight = (availableHeight?: number): number => Math.max(PANEL_MIN_HEIGHT, Math.min(TALL_PANEL_HEIGHT, availableHeight ?? TALL_PANEL_HEIGHT));
+const getAvailableTallPanelHeight = (): number => tallPanelHeight(DEMO_MODE ? window.innerHeight : undefined);
 const resolvePanelWidthView = (setupOpen: boolean, hasSessionDetail: boolean, activeMainTab: MainPanelTab): PanelWidthView => {
   if (setupOpen) return "setup";
   if (hasSessionDetail) return "session-detail";
@@ -251,14 +253,14 @@ const App = () => {
   const [renderPanel, setRenderPanel] = useState(DEMO_MODE && !DEMO_COLLAPSED);
   const [panelHeight, setPanelHeight] = useState(PANEL_MIN_HEIGHT);
   const [availablePanelWidth, setAvailablePanelWidth] = useState(getAvailablePanelWidth);
-  const [availableFocusPanelHeight, setAvailableFocusPanelHeight] = useState(getAvailableFocusPanelHeight);
+  const [availableTallPanelHeight, setAvailableTallPanelHeight] = useState(getAvailableTallPanelHeight);
   const [panelFocusRequestId, setPanelFocusRequestId] = useState(0);
   const [hoverExpandSuppressed, setHoverExpandSuppressed] = useState(false);
   const [activeMainTab, setActiveMainTab] = useState<MainPanelTab>("sessions");
   const [setupOpen, setSetupOpen] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const panelWidthView = resolvePanelWidthView(setupOpen, selectedSessionId !== null, activeMainTab);
-  const panelWindowWidth = Math.min(PANEL_WIDTH_BY_VIEW[panelWidthView], availablePanelWidth);
+  const panelWindowWidth = Math.min(PANEL_WINDOW_WIDTH, availablePanelWidth);
   const [modStatus, setModStatus] = useState<IModStatus>({ path: null, installed: null });
   const [agyHookStatus, setAgyHookStatus] = useState<{ path: string | null; installed: boolean | null }>({ path: null, installed: null });
   const [notchMetrics, setNotchMetrics] = useState<INotchMetrics>({ cameraWidth: DEFAULT_CAMERA_NOTCH_WIDTH, closedHeight: DEFAULT_CLOSED_NOTCH_HEIGHT });
@@ -749,9 +751,9 @@ const App = () => {
   useEffect(() => {
     const updateAvailablePanelSize = () => {
       const nextWidth = getAvailablePanelWidth();
-      const nextFocusHeight = getAvailableFocusPanelHeight();
+      const nextFocusHeight = getAvailableTallPanelHeight();
       setAvailablePanelWidth((current) => (current === nextWidth ? current : nextWidth));
-      setAvailableFocusPanelHeight((current) => (current === nextFocusHeight ? current : nextFocusHeight));
+      setAvailableTallPanelHeight((current) => (current === nextFocusHeight ? current : nextFocusHeight));
     };
     updateAvailablePanelSize();
     window.addEventListener("resize", updateAvailablePanelSize);
@@ -793,13 +795,10 @@ const App = () => {
       return;
     }
 
-    if (!setupOpen && !selectedSessionId && activeMainTab === "pomodoro") {
-      setPanelHeight(availableFocusPanelHeight);
-      return;
-    }
-
-    if (setupOpen || ((activeMainTab === "usage" || activeMainTab === "runtime" || activeMainTab === "services") && !selectedSessionId)) {
-      setPanelHeight(PANEL_MAX_HEIGHT);
+    const settledView: PanelWidthView = setupOpen ? "setup" : selectedSessionId ? "session-detail" : activeMainTab;
+    const settledHeight = SETTLED_PANEL_HEIGHT_BY_VIEW[settledView];
+    if (settledHeight != null) {
+      setPanelHeight(settledHeight === TALL_PANEL_HEIGHT ? availableTallPanelHeight : settledHeight);
       return;
     }
 
@@ -846,7 +845,7 @@ const App = () => {
     observer.observe(target);
     for (const child of Array.from(target.children)) observer.observe(child);
     return () => observer.disconnect();
-  }, [activeMainTab, agentUsages, availableFocusPanelHeight, renderPanel, selectedSessionId, sessionGroups.length, setupOpen]);
+  }, [activeMainTab, agentUsages, availableTallPanelHeight, renderPanel, selectedSessionId, sessionGroups.length, setupOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -999,13 +998,9 @@ const App = () => {
   };
 
   const setupOriginTabRef = useRef<MainPanelTab>("sessions");
-  const tabScrollTopRef = useRef<Record<MainPanelTab, number>>({
-    sessions: 0,
-    pomodoro: 0,
-    usage: 0,
-    runtime: 0,
-    services: 0,
-  });
+  const pomodoroScrollTopRef = useRef(0);
+  const runtimeScrollTopRef = useRef(0);
+  const servicesScrollTopRef = useRef(0);
 
   const saveCurrentTabScroll = () => {
     if (setupOpen || selectedSessionId) return;
@@ -1016,10 +1011,16 @@ const App = () => {
       if (activeScroller) sessionsCardScrollRef.current.active = activeScroller.scrollTop;
       if (completedScroller) sessionsCardScrollRef.current.completed = completedScroller.scrollTop;
       if (recentScroller) sessionsCardScrollRef.current.recent = recentScroller.scrollTop;
-    } else {
+    } else if (activeMainTab === "pomodoro") {
       const inner = sheetInnerRef.current?.querySelector<HTMLElement>("[data-scroll-owner='inner']");
       if (inner) {
-        tabScrollTopRef.current[activeMainTab] = inner.scrollTop;
+        pomodoroScrollTopRef.current = inner.scrollTop;
+      }
+    } else if (activeMainTab === "runtime" || activeMainTab === "services") {
+      const inner = sheetInnerRef.current?.querySelector<HTMLElement>("[data-monitor-card='detail']");
+      if (inner) {
+        if (activeMainTab === "runtime") runtimeScrollTopRef.current = inner.scrollTop;
+        else servicesScrollTopRef.current = inner.scrollTop;
       }
     }
   };
@@ -1033,10 +1034,10 @@ const App = () => {
         if (activeScroller) activeScroller.scrollTop = sessionsCardScrollRef.current.active;
         if (completedScroller) completedScroller.scrollTop = sessionsCardScrollRef.current.completed;
         if (recentScroller) recentScroller.scrollTop = sessionsCardScrollRef.current.recent;
-      } else {
+      } else if (tab === "pomodoro") {
         const inner = sheetInnerRef.current?.querySelector<HTMLElement>("[data-scroll-owner='inner']");
         if (inner) {
-          inner.scrollTop = tabScrollTopRef.current[tab] ?? 0;
+          inner.scrollTop = pomodoroScrollTopRef.current;
         }
       }
     });
@@ -1981,65 +1982,108 @@ const App = () => {
               }}
             >
               {setupOpen ? (
-                <div className="settings-board halo-tab-surface halo-surface-parchment" data-testid="settings-board">
-                  <div className="halo-inner-scroll" data-scroll-owner="inner">
-                    <Suspense fallback={null}>
-                      <SetupPanel
-                        capabilities={capabilities}
-                        canUseNativeControls={canUseNativeControls}
-                        connectionTitle={connectionTitle}
-                        displayError={displayError}
-                        displayLoading={displayLoading}
-                        displayState={displayState}
-                        guidance={setupGuidance}
-                        haloBotLoadout={haloBotLoadout}
-                        isConnected={isConnected}
-                        keepAwakeActive={keepAwakeActive}
-                        keepAwakeEnabled={keepAwakeEnabled}
-                        keepAwakeError={keepAwakeError}
-                        pet={pet}
-                        petMotionMapping={petMotionMapping}
-                        completionPetEnabled={completionPetEnabled}
-                        completionPetSize={completionPetSize}
-                        movementBreakEnabled={movementBreakEnabled}
-                        petPreviewStatus={petPreviewStatus}
-                        petPreviewState={petPreviewState}
-                        modStatus={modStatus}
-                        agyHookStatus={agyHookStatus}
-                        nativeAction={nativeAction}
-                        onCheckBridge={() => void checkBridge()}
-                        onDisplayChange={updateDisplay}
-                        onDisplayRefresh={loadDisplayState}
-                        onInstallMod={() => void installMod()}
-                        onInstallAgyHooks={() => void installAgyHooks()}
-                        onHaloBotLoadoutChange={updateHaloBotLoadout}
-                        onKeepAwakeChange={updateKeepAwakeEnabled}
-                        onPetChange={updatePet}
-                        onPetMotionChange={updatePetMotion}
-                        onPetMotionReset={resetPetMotionMapping}
-                        onCompletionPetEnabledChange={updateCompletionPetEnabled}
-                        onCompletionPetSizeChange={updateCompletionPetSize}
-                        onMovementBreakEnabledChange={updateMovementBreakEnabled}
-                        onShowPetPreview={showPetPreview}
-                      />
-                    </Suspense>
-                  </div>
-                </div>
+                <Suspense fallback={null}>
+                  <SetupPanel
+                    capabilities={capabilities}
+                    canUseNativeControls={canUseNativeControls}
+                    connectionTitle={connectionTitle}
+                    displayError={displayError}
+                    displayLoading={displayLoading}
+                    displayState={displayState}
+                    guidance={setupGuidance}
+                    haloBotLoadout={haloBotLoadout}
+                    isConnected={isConnected}
+                    keepAwakeActive={keepAwakeActive}
+                    keepAwakeEnabled={keepAwakeEnabled}
+                    keepAwakeError={keepAwakeError}
+                    pet={pet}
+                    petMotionMapping={petMotionMapping}
+                    completionPetEnabled={completionPetEnabled}
+                    completionPetSize={completionPetSize}
+                    movementBreakEnabled={movementBreakEnabled}
+                    petPreviewStatus={petPreviewStatus}
+                    petPreviewState={petPreviewState}
+                    modStatus={modStatus}
+                    agyHookStatus={agyHookStatus}
+                    nativeAction={nativeAction}
+                    onCheckBridge={() => void checkBridge()}
+                    onDisplayChange={updateDisplay}
+                    onDisplayRefresh={loadDisplayState}
+                    onInstallMod={() => void installMod()}
+                    onInstallAgyHooks={() => void installAgyHooks()}
+                    onHaloBotLoadoutChange={updateHaloBotLoadout}
+                    onKeepAwakeChange={updateKeepAwakeEnabled}
+                    onPetChange={updatePet}
+                    onPetMotionChange={updatePetMotion}
+                    onPetMotionReset={resetPetMotionMapping}
+                    onCompletionPetEnabledChange={updateCompletionPetEnabled}
+                    onCompletionPetSizeChange={updateCompletionPetSize}
+                    onMovementBreakEnabledChange={updateMovementBreakEnabled}
+                    onShowPetPreview={showPetPreview}
+                  />
+                </Suspense>
               ) : selectedSession ? (
-                <div className="session-detail-board halo-tab-surface halo-surface-mint" data-testid="session-detail-board">
-                  <div className="halo-inner-scroll" data-scroll-owner="inner">
-                    <div className="detail-body session-context-view" data-status={selectedSession.status}>
-                      <SessionContextSummary loadout={haloBotLoadout} motionMapping={petMotionMapping} pet={pet} session={selectedSession} />
-                      <div className="detail-path" title={selectedSession.cwd}>{shortenPath(selectedSession.cwd)}</div>
-                      {canUseNativeControls ? (
-                        <div className="capability-note">Focus matches Ghostty terminal cwd/title and selects its tab</div>
-                      ) : (
-                        <div className="capability-note">Focus needs the desktop runtime</div>
-                      )}
-                      {sessionAction.message ? (
-                        <div className="notice-row compact" data-online={sessionAction.ok === true} role="status" aria-live="polite">{sessionAction.message}</div>
-                      ) : null}
-                      <div className="detail-section-label">Recent activity</div>
+                <div className="session-detail-tray" data-testid="session-detail-board">
+                  <BoardSurface className="session-detail-card session-detail-overview-card" tone="mint">
+                    <BoardScroll className="session-detail-overview-scroll session-context-view" data-session-detail-card="overview" data-status={selectedSession.status}>
+                      <div className="session-detail-overview-content">
+                        <SessionContextSummary loadout={haloBotLoadout} motionMapping={petMotionMapping} pet={pet} session={selectedSession} />
+                        <div className="detail-path" title={selectedSession.cwd}>{shortenPath(selectedSession.cwd)}</div>
+                        {canUseNativeControls ? (
+                          <div className="capability-note">Focus matches Ghostty terminal cwd/title and selects its tab</div>
+                        ) : (
+                          <div className="capability-note">Focus needs the desktop runtime</div>
+                        )}
+                        {sessionAction.message ? (
+                          <div className="notice-row compact" data-online={sessionAction.ok === true} role="status" aria-live="polite">{sessionAction.message}</div>
+                        ) : null}
+                      </div>
+                      <div className="session-detail-controls">
+                        <div className="session-context-actions">
+                          <SurfaceControl surfaceControlVariant="primary" type="button" onClick={() => void focusSelectedSession(selectedSession)} data-tauri-drag-region="false">
+                            <Focus size={12} strokeWidth={2.3} />
+                            Focus
+                          </SurfaceControl>
+                          {selectedSession.status === "done" ? (
+                            <SurfaceControl type="button" onClick={() => dismissSession(selectedSession.conversationId)} data-tauri-drag-region="false" title="Hide until fresh activity arrives">
+                              <X size={12} strokeWidth={2.4} />
+                              Clear
+                            </SurfaceControl>
+                          ) : null}
+                          <SurfaceControl
+                            className="session-history-action"
+                            surfaceControlSize={pendingRemoveHistoryId === selectedSession.conversationId ? "compact" : "icon"}
+                            surfaceControlVariant={pendingRemoveHistoryId === selectedSession.conversationId ? "armed-danger" : "default"}
+                            type="button"
+                            onClick={() => requestRemoveSessionHistory(selectedSession.conversationId)}
+                            data-tauri-drag-region="false"
+                            title="Remove this session's locally stored activity"
+                            aria-label={pendingRemoveHistoryId === selectedSession.conversationId ? "Confirm remove" : "Remove history"}
+                          >
+                            <Trash2 size={12} strokeWidth={2.3} />
+                            {pendingRemoveHistoryId === selectedSession.conversationId ? "Confirm remove" : null}
+                          </SurfaceControl>
+                        </div>
+                        <SurfaceControl
+                          className="session-context-return"
+                          type="button"
+                          onClick={backToSessions}
+                          data-tauri-drag-region="false"
+                          aria-label={`Back to all ${sessions.length} ${sessions.length === 1 ? "session" : "sessions"}`}
+                        >
+                          <ChevronLeft size={12} strokeWidth={2.3} />
+                          <span>Back to sessions</span>
+                          <span className="session-context-return-count">{sessions.length}</span>
+                        </SurfaceControl>
+                      </div>
+                    </BoardScroll>
+                  </BoardSurface>
+                  <BoardSurface className="session-detail-card session-detail-activity-card" tone="parchment">
+                    <div className="session-detail-activity-heading">
+                      <span className="session-detail-activity-kicker">Session log</span>
+                      <h2>Recent activity</h2>
+                    </div>
+                    <BoardScroll className="session-detail-activity-scroll" data-session-detail-card="activity">
                       {selectedSessionActivityEvents.length === 0 ? (
                         <div className="empty-text small">No events captured yet</div>
                       ) : (
@@ -2058,44 +2102,8 @@ const App = () => {
                           })}
                         </div>
                       )}
-                    </div>
-                    <div className="session-detail-actions-integrated">
-                      <div className="session-context-actions">
-                        <button className="pill-btn accent" type="button" onClick={() => void focusSelectedSession(selectedSession)} data-tauri-drag-region="false">
-                          <Focus size={12} strokeWidth={2.3} />
-                          Focus
-                        </button>
-                        {selectedSession.status === "done" ? (
-                          <button className="pill-btn" type="button" onClick={() => dismissSession(selectedSession.conversationId)} data-tauri-drag-region="false" title="Hide until fresh activity arrives">
-                            <X size={12} strokeWidth={2.4} />
-                            Clear
-                          </button>
-                        ) : null}
-                        <button
-                          className={`pill-btn danger session-history-action ${pendingRemoveHistoryId === selectedSession.conversationId ? "is-armed" : ""}`}
-                          type="button"
-                          onClick={() => requestRemoveSessionHistory(selectedSession.conversationId)}
-                          data-tauri-drag-region="false"
-                          title="Remove this session's locally stored activity"
-                          aria-label={pendingRemoveHistoryId === selectedSession.conversationId ? "Confirm remove" : "Remove history"}
-                        >
-                          <Trash2 size={12} strokeWidth={2.3} />
-                          {pendingRemoveHistoryId === selectedSession.conversationId ? "Confirm remove" : null}
-                        </button>
-                      </div>
-                      <button
-                        className="session-context-return"
-                        type="button"
-                        onClick={backToSessions}
-                        data-tauri-drag-region="false"
-                        aria-label={`Back to all ${sessions.length} ${sessions.length === 1 ? "session" : "sessions"}`}
-                      >
-                        <ChevronLeft size={12} strokeWidth={2.3} />
-                        <span>Back to sessions</span>
-                        <span className="session-context-return-count">{sessions.length}</span>
-                      </button>
-                    </div>
-                  </div>
+                    </BoardScroll>
+                  </BoardSurface>
                 </div>
               ) : activeMainTab === "pomodoro" ? (
                 <FocusToolsPanel
@@ -2107,27 +2115,15 @@ const App = () => {
                   stopwatch={stopwatch}
                 />
               ) : activeMainTab === "usage" ? (
-                <div className="usage-board halo-tab-surface halo-surface-sand" data-testid="usage-board">
-                  <div className="halo-inner-scroll" data-scroll-owner="inner">
-                    <AgentUsageList usages={agentUsages} onRefresh={refreshAgentUsage} settings={usageSettings} onSettingsChange={updateUsageSettings} />
-                  </div>
-                </div>
+                <AgentUsageList usages={agentUsages} onRefresh={refreshAgentUsage} settings={usageSettings} onSettingsChange={updateUsageSettings} />
               ) : activeMainTab === "runtime" ? (
-                <div className="runtime-board halo-tab-surface halo-surface-navy" data-testid="runtime-board">
-                  <div className="halo-inner-scroll" data-scroll-owner="inner">
-                    <Suspense fallback={<div className="empty-text small">Loading Runtime…</div>}>
-                      <RuntimeProcessesPanel monitor={runtimeMonitor} />
-                    </Suspense>
-                  </div>
-                </div>
+                <Suspense fallback={<div className="empty-text small">Loading Runtime…</div>}>
+                  <RuntimeProcessesPanel detailScrollTop={runtimeScrollTopRef.current} monitor={runtimeMonitor} />
+                </Suspense>
               ) : activeMainTab === "services" ? (
-                <div className="services-board halo-tab-surface halo-surface-teal" data-testid="services-board">
-                  <div className="halo-inner-scroll" data-scroll-owner="inner">
-                    <Suspense fallback={<div className="empty-text small">Loading Services…</div>}>
-                      <LocalServicesPanel monitor={runtimeMonitor} />
-                    </Suspense>
-                  </div>
-                </div>
+                <Suspense fallback={<div className="empty-text small">Loading Services…</div>}>
+                  <LocalServicesPanel detailScrollTop={servicesScrollTopRef.current} monitor={runtimeMonitor} />
+                </Suspense>
               ) : (
                 sessions.length === 0 ? (
                   <div className="sessions-card halo-tab-surface halo-surface-mint" data-testid="sessions-board">

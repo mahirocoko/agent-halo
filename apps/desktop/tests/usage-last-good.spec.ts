@@ -58,6 +58,19 @@ test("Usage keeps Codex values visible and labels them outdated after a refresh 
   await expect(page.getByText("1.2M tokens")).toBeVisible();
   await expect(page.getByText("Model mix")).toBeVisible();
   await expect(page.getByRole("img", { name: /Past 30 days 12\.4M tokens/ })).toBeVisible();
+  const refreshGeometry = await page.getByRole("button", { name: "Refresh usage" }).evaluate((button) => {
+    const rect = button.getBoundingClientRect();
+    return { width: rect.width, height: rect.height, radius: getComputedStyle(button).borderRadius, shape: button.dataset.surfaceControlShape };
+  });
+  expect(refreshGeometry).toEqual({ width: 28, height: 28, radius: "50%", shape: "circle" });
+  const monochromePaint = await page.evaluate(() => ({
+    providerIcon: getComputedStyle(document.querySelector<HTMLElement>(".usage-provider-title .usage-provider-icon")!).backgroundColor,
+    onlineDot: getComputedStyle(document.querySelector<HTMLElement>(".usage-side-dot")!).backgroundColor,
+    trendBars: [...document.querySelectorAll<HTMLElement>(".usage-trend-bar")].map((bar) => getComputedStyle(bar).backgroundColor),
+  }));
+  expect(monochromePaint.providerIcon).toBe("rgb(17, 17, 17)");
+  expect(monochromePaint.onlineDot).toBe("rgb(94, 168, 118)");
+  expect(new Set(monochromePaint.trendBars)).toEqual(new Set(["rgb(17, 17, 17)"]));
   await page.getByText("Daily detail · 1 days").click();
   await expect(page.getByText("960K tokens")).toBeVisible();
 
@@ -68,7 +81,7 @@ test("Usage keeps Codex values visible and labels them outdated after a refresh 
   await expect(page.getByText("Codex usage is rate limited. Try again shortly.")).toBeVisible();
 });
 
-test("Usage meters communicate remaining quota with semantic color and copy", async ({ page }) => {
+test("Usage meters communicate remaining quota with monochrome structure and copy", async ({ page }) => {
   await page.addInitScript(() => {
     (window as typeof window & { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
       invoke: async (command: string) => {
@@ -114,15 +127,48 @@ test("Usage meters communicate remaining quota with semantic color and copy", as
   await expect(meters.nth(2).getByRole("progressbar")).toHaveAttribute("aria-valuenow", "15");
   await expect(meters.nth(3).getByRole("progressbar")).toHaveAttribute("aria-valuenow", "0");
 
-  const fillColors = await meters.locator(".usage-meter-fill").evaluateAll((fills) =>
-    fills.map((fill) => getComputedStyle(fill).backgroundColor),
+  const fillPaint = await meters.locator(".usage-meter-fill").evaluateAll((fills) =>
+    fills.map((fill) => {
+      const style = getComputedStyle(fill);
+      return {
+        backgroundColor: style.backgroundColor,
+        backgroundImage: style.backgroundImage,
+        borderRadius: style.borderRadius,
+        boxShadow: style.boxShadow,
+      };
+    }),
   );
-  expect(fillColors).toEqual([
-    "rgb(25, 94, 61)",
-    "rgb(115, 60, 3)",
-    "rgb(132, 35, 35)",
-    "rgb(132, 35, 35)",
-  ]);
+  expect(fillPaint[0]).toMatchObject({ backgroundColor: "rgb(17, 17, 17)", backgroundImage: "none" });
+  expect(fillPaint[1].backgroundImage).toContain("rgb(17, 17, 17)");
+  expect(fillPaint[2]).toMatchObject({ backgroundColor: "rgb(17, 17, 17)", borderRadius: "1px" });
+  expect(fillPaint[2].boxShadow).toContain("rgb(255, 255, 255)");
+  expect(fillPaint[3]).toEqual(fillPaint[2]);
+
+  const statusPaint = await meters.locator(".usage-meter-status").evaluateAll((statuses) =>
+    statuses.map((status) => {
+      const style = getComputedStyle(status);
+      return {
+        background: style.backgroundColor,
+        color: style.color,
+        borderColor: style.borderColor,
+        boxShadow: style.boxShadow,
+      };
+    }),
+  );
+  expect(statusPaint[0]).toMatchObject({ background: "rgb(17, 17, 17)", color: "rgb(255, 255, 255)" });
+  expect(statusPaint[1]).toMatchObject({ background: "rgb(255, 255, 255)", color: "rgb(17, 17, 17)", borderColor: "rgb(17, 17, 17)" });
+  for (const danger of statusPaint.slice(2)) {
+    expect(danger).toMatchObject({ background: "rgb(17, 17, 17)", color: "rgb(255, 255, 255)" });
+    expect(danger.boxShadow).toContain("rgb(255, 255, 255)");
+  }
+
+  const dotPaint = await meters.locator(".usage-status-dot").evaluateAll((dots) =>
+    dots.map((dot) => getComputedStyle(dot).backgroundColor),
+  );
+  expect(dotPaint[0]).toBe("rgb(94, 168, 118)");
+  expect(dotPaint[1]).toBe("rgb(17, 17, 17)");
+  expect(dotPaint[2]).toBe("rgb(199, 90, 90)");
+  expect(dotPaint[3]).toBe("rgb(199, 90, 90)");
 
   const usageTabs = page.getByRole("tablist", { name: "Usage providers" });
   await usageTabs.getByRole("tab", { name: "Settings" }).click();

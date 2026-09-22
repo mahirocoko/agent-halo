@@ -5846,7 +5846,7 @@ mod display_selection_tests {
 
     #[test]
     fn claude_rate_limit_keeps_the_last_good_timestamp() {
-        let auth = claude_auth("first-access", "first-refresh");
+        let auth = claude_auth("rate-limit-access", "rate-limit-refresh");
         let snapshot = CodexUsageSnapshot {
             provider_id: "claude".to_string(),
             display_name: "Claude Code".to_string(),

@@ -140,3 +140,94 @@
 .notice-row[data-online="true"] {
   color: var(--done);
 }
+
+.surface-control {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text-2);
+  background: var(--fill);
+  font: inherit;
+  font-size: 9px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.surface-control:hover {
+  color: var(--text);
+  background: var(--fill-2);
+}
+
+.surface-control:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.surface-control[data-surface-control-size="compact"],
+.surface-control[data-surface-control-size="compact-small"] {
+  min-height: 28px;
+  padding: 4px 8px;
+}
+
+.surface-control[data-surface-control-size="compact-small"] {
+  font-size: 8px;
+}
+
+.surface-control[data-surface-control-size="icon"] {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0;
+}
+
+.surface-control[data-surface-control-shape="circle"] {
+  width: 28px;
+  min-width: 28px;
+  max-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  max-height: 28px;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.surface-control[data-surface-control-variant="primary"] {
+  min-width: 92px;
+  color: var(--surface-accent-ink);
+  background: var(--surface-accent);
+  font-weight: 750;
+}
+
+.surface-control[data-surface-control-variant="primary"]:hover {
+  background: color-mix(in srgb, var(--surface-accent) 82%, #000);
+}
+
+.surface-control[data-surface-control-variant="subtle"] {
+  color: var(--text);
+  background: var(--fill-2);
+}
+
+.surface-control[data-surface-control-variant="subtle"]:hover {
+  color: var(--surface-accent-ink);
+  background: var(--surface-accent);
+}
+
+.surface-control[data-surface-control-variant="armed-danger"] {
+  color: #fff;
+  background: #111;
+  outline: 2px solid #111;
+  outline-offset: 2px;
+  box-shadow: inset 0 0 0 1px #fff;
+}
+
+.surface-control:disabled {
+  color: var(--text-3);
+  background: var(--fill);
+  opacity: 0.5;
+  cursor: not-allowed;
+}

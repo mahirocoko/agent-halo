@@ -26,10 +26,10 @@
 
 .stopwatch-status {
   min-height: 20px; display: inline-flex; align-items: center; margin-left: auto; padding: 2px 7px;
-  border-radius: 999px; color: var(--surface-accent-ink); background: var(--surface-accent); font-size: 9px; font-weight: 700;
+  border: 1px solid #111; border-radius: 999px; color: #111; background: transparent; font-size: 9px; font-weight: 700;
 }
-.stopwatch-status[data-status="running"] { background: #155dfc; }
-.stopwatch-status[data-status="paused"] { color: #111; background: #ff9500; }
+.stopwatch-status[data-status="running"] { color: #fff; background: #111; }
+.stopwatch-status[data-status="paused"] { color: #111; background: #fff; border-style: dashed; }
 
 .stopwatch-clock {
   min-width: 8ch; padding: 26px 0 20px; color: var(--text); font-variant-numeric: tabular-nums;
@@ -37,30 +37,12 @@
 }
 
 .stopwatch-controls { flex-wrap: wrap; gap: 7px; }
-.stopwatch-control,
-.stopwatch-history-heading button {
-  min-height: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 5px;
-  padding: 5px 10px; border: 0; border-radius: 8px; color: var(--text-2); background: var(--fill);
-  font: inherit; font-size: 9px; font-weight: 650; cursor: pointer;
-}
-.stopwatch-control:hover,
-.stopwatch-history-heading button:hover { color: var(--text); background: var(--fill-2); }
-.stopwatch-control.primary { min-width: 92px; color: var(--surface-accent-ink); background: var(--surface-accent); font-weight: 750; }
-.stopwatch-control.primary:hover { background: color-mix(in srgb, var(--surface-accent) 82%, #000); }
-.stopwatch-control.danger,
-.stopwatch-history-heading button.danger { color: #111; background: #ff3849; }
-.stopwatch-control:disabled,
-.stopwatch-history-heading button:disabled {
-  color: var(--text-3); background: var(--fill); opacity: 0.5; cursor: not-allowed;
-}
-.stopwatch-control:focus-visible,
-.stopwatch-history-heading button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 
 .stopwatch-history-heading {
   min-height: 40px; gap: 7px; margin-top: 16px; border-block: 1px solid var(--hair); color: var(--text-2); font-size: 9px;
 }
 .stopwatch-history-heading > span { gap: 5px; font-weight: 750; }
-.stopwatch-history-heading button { min-height: 28px; margin-left: auto; padding: 4px 8px; font-size: 8px; }
+.stopwatch-history-heading button { margin-left: auto; }
 .stopwatch-history-empty { padding: 16px 1px; color: var(--text-3); font-size: 10px; }
 .stopwatch-history-list { overflow-y: auto; }
 .stopwatch-history-group { padding-top: 10px; }

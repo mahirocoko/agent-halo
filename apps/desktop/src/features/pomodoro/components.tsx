@@ -1,5 +1,6 @@
 import { Bell, BellOff, ChevronDown, Pause, Play, RotateCcw, SkipForward, SlidersHorizontal, Timer } from "lucide-react";
 import { useEffect, useState, type CSSProperties } from "react";
+import { SurfaceControl } from "../../components/surface-control";
 import { DEFAULT_POMODORO_SETTINGS, getPomodoroPhaseLabel } from "./model";
 import type { IPomodoroSettings } from "./types";
 import type { IUsePomodoroResult } from "./usePomodoro";
@@ -94,23 +95,23 @@ export const PomodoroPanel = ({ onResetAll, pomodoro }: IPomodoroPanelProps) => 
 
       <div className="pomodoro-controls">
         {running ? (
-          <button className="pomodoro-control primary" type="button" onClick={pomodoro.pause} data-tauri-drag-region="false">
+          <SurfaceControl className="pomodoro-control primary" surfaceControlVariant="primary" type="button" onClick={pomodoro.pause} data-tauri-drag-region="false">
             <Pause size={14} strokeWidth={2.4} />Pause
-          </button>
+          </SurfaceControl>
         ) : (
-          <button className="pomodoro-control primary" type="button" onClick={pomodoro.start} data-tauri-drag-region="false">
+          <SurfaceControl className="pomodoro-control primary" surfaceControlVariant="primary" type="button" onClick={pomodoro.start} data-tauri-drag-region="false">
             <Play size={14} strokeWidth={2.4} />{paused ? "Resume" : "Start"}
-          </button>
+          </SurfaceControl>
         )}
-        <button className="pomodoro-control" type="button" onClick={pomodoro.reset} disabled={resetDisabled} data-tauri-drag-region="false" aria-label={`Repeat ${pomodoro.phaseLabel} from full duration`}>
+        <SurfaceControl className="pomodoro-control" type="button" onClick={pomodoro.reset} disabled={resetDisabled} data-tauri-drag-region="false" aria-label={`Repeat ${pomodoro.phaseLabel} from full duration`}>
           <RotateCcw size={13} strokeWidth={2.3} />Restart
-        </button>
-        <button className="pomodoro-control" type="button" onClick={pomodoro.skip} data-tauri-drag-region="false">
+        </SurfaceControl>
+        <SurfaceControl className="pomodoro-control" type="button" onClick={pomodoro.skip} data-tauri-drag-region="false">
           <SkipForward size={13} strokeWidth={2.3} />Skip
-        </button>
-        <button className={`pomodoro-control ${resetAllArmed ? "danger" : ""}`} type="button" disabled={resetAllDisabled} onClick={() => { if (!resetAllArmed) { setResetAllArmed(true); return; } (onResetAll ?? pomodoro.resetAll)(); setResetAllArmed(false); }} data-tauri-drag-region="false" aria-label={resetAllArmed ? "Confirm reset all Pomodoro progress" : "Reset all Pomodoro progress"}>
+        </SurfaceControl>
+        <SurfaceControl className={`pomodoro-control ${resetAllArmed ? "danger" : ""}`} surfaceControlVariant={resetAllArmed ? "armed-danger" : "default"} type="button" disabled={resetAllDisabled} onClick={() => { if (!resetAllArmed) { setResetAllArmed(true); return; } (onResetAll ?? pomodoro.resetAll)(); setResetAllArmed(false); }} data-tauri-drag-region="false" aria-label={resetAllArmed ? "Confirm reset all Pomodoro progress" : "Reset all Pomodoro progress"}>
           <RotateCcw size={13} strokeWidth={2.3} />{resetAllArmed ? "Confirm reset" : "Reset progress"}
-        </button>
+        </SurfaceControl>
       </div>
       </div>
 
@@ -144,29 +145,29 @@ export const PomodoroPanel = ({ onResetAll, pomodoro }: IPomodoroPanelProps) => 
           <div className="pomodoro-settings-grid">
             <label className="pomodoro-setting-field">
               <span>Focus</span>
-              <span className="pomodoro-setting-input"><input type="number" min={1} max={120} value={settingsDraft.focusMinutes} aria-invalid={settingsErrors.focusMinutes !== null} aria-describedby={settingsErrors.focusMinutes ? "pomodoro-focus-error" : undefined} onChange={(event) => updateDraft("focusMinutes", event.currentTarget.value)} data-tauri-drag-region="false" /><small>min</small></span>
+              <span className="pomodoro-setting-input"><input name="focusMinutes" type="number" min={1} max={120} value={settingsDraft.focusMinutes} aria-invalid={settingsErrors.focusMinutes !== null} aria-describedby={settingsErrors.focusMinutes ? "pomodoro-focus-error" : undefined} onChange={(event) => updateDraft("focusMinutes", event.currentTarget.value)} data-tauri-drag-region="false" /><small>min</small></span>
               {settingsErrors.focusMinutes ? <span className="pomodoro-setting-error" id="pomodoro-focus-error">{settingsErrors.focusMinutes}</span> : null}
             </label>
             <label className="pomodoro-setting-field">
               <span>Short break</span>
-              <span className="pomodoro-setting-input"><input type="number" min={1} max={60} value={settingsDraft.shortBreakMinutes} aria-invalid={settingsErrors.shortBreakMinutes !== null} aria-describedby={settingsErrors.shortBreakMinutes ? "pomodoro-short-error" : undefined} onChange={(event) => updateDraft("shortBreakMinutes", event.currentTarget.value)} data-tauri-drag-region="false" /><small>min</small></span>
+              <span className="pomodoro-setting-input"><input name="shortBreakMinutes" type="number" min={1} max={60} value={settingsDraft.shortBreakMinutes} aria-invalid={settingsErrors.shortBreakMinutes !== null} aria-describedby={settingsErrors.shortBreakMinutes ? "pomodoro-short-error" : undefined} onChange={(event) => updateDraft("shortBreakMinutes", event.currentTarget.value)} data-tauri-drag-region="false" /><small>min</small></span>
               {settingsErrors.shortBreakMinutes ? <span className="pomodoro-setting-error" id="pomodoro-short-error">{settingsErrors.shortBreakMinutes}</span> : null}
             </label>
             <label className="pomodoro-setting-field">
               <span>Long break</span>
-              <span className="pomodoro-setting-input"><input type="number" min={1} max={120} value={settingsDraft.longBreakMinutes} aria-invalid={settingsErrors.longBreakMinutes !== null} aria-describedby={settingsErrors.longBreakMinutes ? "pomodoro-long-error" : undefined} onChange={(event) => updateDraft("longBreakMinutes", event.currentTarget.value)} data-tauri-drag-region="false" /><small>min</small></span>
+              <span className="pomodoro-setting-input"><input name="longBreakMinutes" type="number" min={1} max={120} value={settingsDraft.longBreakMinutes} aria-invalid={settingsErrors.longBreakMinutes !== null} aria-describedby={settingsErrors.longBreakMinutes ? "pomodoro-long-error" : undefined} onChange={(event) => updateDraft("longBreakMinutes", event.currentTarget.value)} data-tauri-drag-region="false" /><small>min</small></span>
               {settingsErrors.longBreakMinutes ? <span className="pomodoro-setting-error" id="pomodoro-long-error">{settingsErrors.longBreakMinutes}</span> : null}
             </label>
             <label className="pomodoro-setting-field">
               <span>Long break every</span>
-              <span className="pomodoro-setting-input"><input type="number" min={2} max={12} value={settingsDraft.longBreakEvery} aria-label="Focus sessions before long break" aria-invalid={settingsErrors.longBreakEvery !== null} aria-describedby={settingsErrors.longBreakEvery ? "pomodoro-cadence-error" : undefined} onChange={(event) => updateDraft("longBreakEvery", event.currentTarget.value)} data-tauri-drag-region="false" /><small>sessions</small></span>
+              <span className="pomodoro-setting-input"><input name="longBreakEvery" type="number" min={2} max={12} value={settingsDraft.longBreakEvery} aria-label="Focus sessions before long break" aria-invalid={settingsErrors.longBreakEvery !== null} aria-describedby={settingsErrors.longBreakEvery ? "pomodoro-cadence-error" : undefined} onChange={(event) => updateDraft("longBreakEvery", event.currentTarget.value)} data-tauri-drag-region="false" /><small>sessions</small></span>
               {settingsErrors.longBreakEvery ? <span className="pomodoro-setting-error" id="pomodoro-cadence-error">{settingsErrors.longBreakEvery}</span> : null}
             </label>
           </div>
           <div className="pomodoro-settings-actions">
             <span>{state.status === "idle" ? "Applies before the next Start" : "Current timer keeps its duration"}</span>
-            <button type="button" onClick={restoreDefaults} data-tauri-drag-region="false">Defaults</button>
-            <button className="is-primary" type="button" onClick={applySettings} disabled={!settingsValid} data-tauri-drag-region="false">Apply</button>
+            <SurfaceControl surfaceControlSize="compact" type="button" onClick={restoreDefaults} data-tauri-drag-region="false">Defaults</SurfaceControl>
+            <SurfaceControl className="is-primary" surfaceControlSize="compact" surfaceControlVariant="primary" type="button" onClick={applySettings} disabled={!settingsValid} data-tauri-drag-region="false">Apply</SurfaceControl>
           </div>
         </div>
       ) : null}

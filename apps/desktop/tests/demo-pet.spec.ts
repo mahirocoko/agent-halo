@@ -3,6 +3,7 @@ import type { Page } from "@playwright/test";
 
 const openPetSettings = async (page: Page) => {
   await page.getByRole("button", { name: "Setup" }).click();
+  await expect(page.locator(".setup-tray")).toBeVisible();
   await page.getByRole("tab", { name: "Pet" }).click();
 };
 

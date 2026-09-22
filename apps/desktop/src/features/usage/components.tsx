@@ -2,12 +2,17 @@ import { invoke } from "@tauri-apps/api/core";
 import { ExternalLink, RefreshCw, Settings, TriangleAlert } from "lucide-react";
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
+import { BoardScroll, BoardSurface } from "../../components/board-surface";
+import { SurfaceControl } from "../../components/surface-control";
+import { SurfaceStatus } from "../../components/surface-status";
 import { createAgentUsageState } from "./adapters";
 import { USAGE_METRIC_GROUPS, USAGE_PROVIDERS } from "./providers";
 import { formatAbsoluteTime, formatResetLabel } from "./settings";
@@ -29,7 +34,6 @@ interface IProviderIconProps {
 
 interface IProviderIconStyle extends CSSProperties {
   "--provider-icon": string;
-  "--provider-color": string;
 }
 
 const ProviderIcon = ({ provider, size = 14 }: IProviderIconProps) => (
@@ -39,7 +43,6 @@ const ProviderIcon = ({ provider, size = 14 }: IProviderIconProps) => (
     style={
       {
         "--provider-icon": `url(${provider.iconPath})`,
-        "--provider-color": provider.color,
         width: size,
         height: size,
       } as IProviderIconStyle
@@ -59,10 +62,13 @@ const Meter = ({ metric: value }: IMeterProps) => (
   >
     <div className="usage-meter-head">
       <span className="usage-meter-label">{value.limitLabel ?? value.label}</span>
-      <span className="usage-meter-status">
+      <SurfaceStatus
+        className="usage-meter-status"
+        tone={value.statusLevel === "ok" ? "success" : value.statusLevel === "unavailable" ? "neutral" : value.statusLevel}
+      >
         <span className="usage-status-dot" aria-hidden="true" />
         {value.statusLabel}
-      </span>
+      </SurfaceStatus>
     </div>
     <span
       className="usage-meter-track"
@@ -122,10 +128,7 @@ const Trend = ({ line, total }: ITrendProps) => {
         {points.map((point, index) => (
           <span
             className="usage-trend-bar"
-            style={{
-              height: `${Math.max(8, (point.value / max) * 100)}%`,
-              backgroundColor: line?.color,
-            }}
+            style={{ height: `${Math.max(8, (point.value / max) * 100)}%` }}
             title={`${point.label}: ${point.valueLabel ?? point.value}`}
             key={`${point.label}-${index}`}
           />
@@ -544,6 +547,8 @@ const SettingsPanel = ({ settings, onChange }: ISettingsPanelProps) => {
   );
 };
 
+let usageDetailScrollTop = 0;
+
 export interface IAgentUsageListProps {
   onRefresh: () => void;
   onSettingsChange: (settings: IUsageSettings) => void;
@@ -568,6 +573,16 @@ export const AgentUsageList = ({
         null;
   const active: UsageSidebarSelection =
     selectedId === "settings" ? "settings" : (selected?.id ?? "settings");
+  const detailScrollRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const scroller = detailScrollRef.current;
+    if (!scroller) return;
+    scroller.scrollTop = usageDetailScrollTop;
+    return () => {
+      usageDetailScrollTop = scroller.scrollTop;
+    };
+  }, []);
 
   useEffect(() => {
     if (!providers.length) {
@@ -599,92 +614,102 @@ export const AgentUsageList = ({
   };
 
   return (
-    <div className="usage-list" aria-label="Usage providers">
-      <div className="usage-list-topline">
-        <span>Usage</span>
-        <button
-          className="usage-refresh"
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onRefresh();
-          }}
-          data-tauri-drag-region="false"
-          title="Refresh usage"
-          aria-label="Refresh usage"
-        >
-          <RefreshCw size={12} strokeWidth={2.2} />
-        </button>
-      </div>
-      <div className="usage-layout">
-        <div
-          className="usage-sidebar"
-          role="tablist"
-          aria-label="Usage providers"
-        >
-          {providers.map((provider) => (
-            <button
-              id={`usage-tab-${provider.id}`}
-              className="usage-side-tab"
-              data-active={active === provider.id}
+    <div className="usage-tray" data-testid="usage-tray" aria-label="Usage providers">
+      <BoardSurface className="usage-card usage-card-navigation" tone="parchment" aria-label="Usage navigation">
+        <BoardScroll data-usage-card="navigation">
+          <div className="usage-list-topline">
+            <span>Usage</span>
+            <SurfaceControl
+              className="usage-refresh"
+              surfaceControlShape="circle"
+              surfaceControlSize="icon"
+              surfaceControlVariant="subtle"
               type="button"
-              role="tab"
-              aria-selected={active === provider.id}
-              aria-controls="usage-provider-panel"
-              tabIndex={active === provider.id ? 0 : -1}
-              onKeyDown={(event) => handleTabKeyDown(event, provider.id)}
+              onClick={(event) => {
+                event.stopPropagation();
+                onRefresh();
+              }}
+              data-tauri-drag-region="false"
+              title="Refresh usage"
+              aria-label="Refresh usage"
+            >
+              <RefreshCw size={12} strokeWidth={2.2} />
+            </SurfaceControl>
+          </div>
+          <div
+            className="usage-sidebar"
+            role="tablist"
+            aria-label="Usage providers"
+            aria-orientation="vertical"
+          >
+            {providers.map((provider) => (
+              <button
+                id={`usage-tab-${provider.id}`}
+                className="usage-side-tab"
+                data-active={active === provider.id}
+                type="button"
+                role="tab"
+                aria-selected={active === provider.id}
+                aria-controls="usage-provider-panel"
+                tabIndex={active === provider.id ? 0 : -1}
+                onKeyDown={(event) => handleTabKeyDown(event, provider.id)}
                 onClick={(event) => {
                   event.stopPropagation();
                   setSelectedId(provider.id);
                 }}
+                data-tauri-drag-region="false"
+                key={provider.id}
+                title={provider.label}
+              >
+                <ProviderIcon provider={provider} size={13} />
+                <span>{provider.label}</span>
+                {usages[provider.id]?.status === "online" ? (
+                  <><span className="usage-side-dot" aria-hidden="true" /><span className="sr-only">Online</span></>
+                ) : usages[provider.id]?.stale ? (
+                  <span className="sr-only">Outdated</span>
+                ) : null}
+              </button>
+            ))}
+            <button
+              id="usage-tab-settings"
+              className="usage-side-tab usage-side-settings"
+              data-active={active === "settings"}
+              type="button"
+              role="tab"
+              aria-selected={active === "settings"}
+              aria-controls="usage-provider-panel"
+              tabIndex={active === "settings" ? 0 : -1}
+              onKeyDown={(event) => handleTabKeyDown(event, "settings")}
+              onClick={(event) => {
+                event.stopPropagation();
+                setSelectedId("settings");
+              }}
               data-tauri-drag-region="false"
-              key={provider.id}
-              title={provider.label}
+              title="Usage settings"
             >
-              <ProviderIcon provider={provider} size={13} />
-              <span>{provider.label}</span>
-              {usages[provider.id]?.status === "online" ? (
-                <><span className="usage-side-dot" aria-hidden="true" /><span className="sr-only">Online</span></>
-              ) : usages[provider.id]?.stale ? (
-                <span className="sr-only">Outdated</span>
-              ) : null}
+              <Settings size={13} strokeWidth={2.2} />
+              <span>Settings</span>
             </button>
-          ))}
-          <button
-            id="usage-tab-settings"
-            className="usage-side-tab usage-side-settings"
-            data-active={active === "settings"}
-            type="button"
-            role="tab"
-            aria-selected={active === "settings"}
-            aria-controls="usage-provider-panel"
-            tabIndex={active === "settings" ? 0 : -1}
-            onKeyDown={(event) => handleTabKeyDown(event, "settings")}
-            onClick={(event) => {
-              event.stopPropagation();
-              setSelectedId("settings");
-            }}
-            data-tauri-drag-region="false"
-            title="Usage settings"
-          >
-            <Settings size={13} strokeWidth={2.2} />
-            <span>Settings</span>
-          </button>
-        </div>
-        <div id="usage-provider-panel" className="usage-detail-panel" role="tabpanel" aria-labelledby={`usage-tab-${active}`}>
-          {active === "settings" ? (
-            <SettingsPanel settings={settings} onChange={onSettingsChange} />
-          ) : selected ? (
-            <ProviderDetail
-              provider={selected}
-              settings={settings}
-              usage={usages[selected.id] ?? createAgentUsageState(selected.id)}
-            />
-          ) : (
-            <div className="usage-empty">No local usage providers found</div>
-          )}
-        </div>
-      </div>
+          </div>
+        </BoardScroll>
+      </BoardSurface>
+      <BoardSurface className="usage-card usage-card-detail" tone="sand" aria-label="Usage detail">
+        <BoardScroll ref={detailScrollRef} data-usage-card="detail">
+          <div id="usage-provider-panel" className="usage-detail-panel" role="tabpanel" aria-labelledby={`usage-tab-${active}`}>
+            {active === "settings" ? (
+              <SettingsPanel settings={settings} onChange={onSettingsChange} />
+            ) : selected ? (
+              <ProviderDetail
+                provider={selected}
+                settings={settings}
+                usage={usages[selected.id] ?? createAgentUsageState(selected.id)}
+              />
+            ) : (
+              <div className="usage-empty">No local usage providers found</div>
+            )}
+          </div>
+        </BoardScroll>
+      </BoardSurface>
     </div>
   );
 };

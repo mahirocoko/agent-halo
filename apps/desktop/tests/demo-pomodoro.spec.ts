@@ -118,6 +118,13 @@ test("custom durations persist and apply to idle and future phases", async ({ pa
   await page.goto("/?demo=1&demoScenario=idle");
   await openFocusTools(page);
   await page.getByRole("button", { name: /Timer settings/ }).click();
+  await expect(page.getByRole("spinbutton")).toHaveCount(4);
+  expect(await page.getByRole("spinbutton").evaluateAll((inputs) => inputs.map((input) => input.getAttribute("name")))).toEqual([
+    "focusMinutes",
+    "shortBreakMinutes",
+    "longBreakMinutes",
+    "longBreakEvery",
+  ]);
   await page.getByRole("spinbutton", { name: "Focus min" }).fill("40");
   await page.getByRole("spinbutton", { name: "Short break min" }).fill("7");
   await page.getByRole("spinbutton", { name: "Long break min" }).fill("20");

@@ -1,5 +1,6 @@
 import { Clock3, History, Pause, Play, Square, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { SurfaceControl } from "../../components/surface-control";
 import { formatStopwatchElapsed } from "./model";
 import type { IStopwatchHistoryEntry } from "./types";
 import type { IUseStopwatchResult } from "./useStopwatch";
@@ -77,13 +78,14 @@ export const StopwatchPanel = ({ stopwatch }: IStopwatchPanelProps) => {
 
       <div className="stopwatch-controls">
         {running ? (
-          <button className="stopwatch-control primary" type="button" onClick={stopwatch.pause} data-tauri-drag-region="false"><Pause size={14} strokeWidth={2.4} />Pause</button>
+          <SurfaceControl className="stopwatch-control primary" surfaceControlVariant="primary" type="button" onClick={stopwatch.pause} data-tauri-drag-region="false"><Pause size={14} strokeWidth={2.4} />Pause</SurfaceControl>
         ) : (
-          <button className="stopwatch-control primary" type="button" onClick={stopwatch.start} data-tauri-drag-region="false"><Play size={14} strokeWidth={2.4} />{paused ? "Resume" : "Start"}</button>
+          <SurfaceControl className="stopwatch-control primary" surfaceControlVariant="primary" type="button" onClick={stopwatch.start} data-tauri-drag-region="false"><Play size={14} strokeWidth={2.4} />{paused ? "Resume" : "Start"}</SurfaceControl>
         )}
-        <button className="stopwatch-control" type="button" onClick={stopwatch.finish} disabled={stopwatch.state.status === "idle"} data-tauri-drag-region="false"><Square size={12} strokeWidth={2.4} />Finish</button>
-        <button
+        <SurfaceControl className="stopwatch-control" type="button" onClick={stopwatch.finish} disabled={stopwatch.state.status === "idle"} data-tauri-drag-region="false"><Square size={12} strokeWidth={2.4} />Finish</SurfaceControl>
+        <SurfaceControl
           className={`stopwatch-control ${discardArmed ? "danger" : ""}`}
+          surfaceControlVariant={discardArmed ? "armed-danger" : "default"}
           type="button"
           disabled={stopwatch.state.status === "idle"}
           onClick={() => {
@@ -95,15 +97,17 @@ export const StopwatchPanel = ({ stopwatch }: IStopwatchPanelProps) => {
           aria-label={discardArmed ? "Confirm discard current Stopwatch session" : "Discard current Stopwatch session"}
         >
           <Trash2 size={12} strokeWidth={2.3} />{discardArmed ? "Confirm discard" : "Discard"}
-        </button>
+        </SurfaceControl>
       </div>
       </div>
 
       <div className="stopwatch-support-zone">
       <div className="stopwatch-history-heading">
         <span><History size={12} strokeWidth={2.2} />History</span>
-        <button
+        <SurfaceControl
           className={clearHistoryArmed ? "danger" : ""}
+          surfaceControlSize="compact-small"
+          surfaceControlVariant={clearHistoryArmed ? "armed-danger" : "default"}
           type="button"
           disabled={stopwatch.history.length === 0}
           onClick={() => {
@@ -115,7 +119,7 @@ export const StopwatchPanel = ({ stopwatch }: IStopwatchPanelProps) => {
           aria-label={clearHistoryArmed ? "Confirm clear all Stopwatch history" : "Clear all Stopwatch history"}
         >
           <Trash2 size={11} strokeWidth={2.3} />{clearHistoryArmed ? "Confirm clear" : "Clear history"}
-        </button>
+        </SurfaceControl>
       </div>
 
       {historyGroups.length === 0 ? (

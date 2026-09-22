@@ -91,6 +91,29 @@ orphaned sleep process was removed after interruption. This is native/human
 evidence for abrupt-process disappearance; PID-reuse behavior remains covered
 by exact-identity source logic rather than a live PID-reuse experiment.
 
+### v0.1.10 release evidence
+
+Release-preparation evidence captured on 2026-09-22:
+
+- root, desktop, Cargo, lockfile, Tauri bundle, and packaged `Info.plist`
+  versions align at `0.1.10`
+- `pnpm install --frozen-lockfile`, `pnpm check`, and `pnpm test:hooks`
+  pass; hook integration remains 7/7
+- the browser sweep passed 170 tests and exposed one 320px header-overflow
+  regression; after the compact icon padding owner was corrected, that exact
+  failing Runtime/Services test passed with one worker
+- performance budgets pass at 559,397 core dist bytes, 16,423 CSS gzip bytes,
+  and 103,314 JavaScript gzip bytes; session and bridge benchmarks also pass
+- native macOS Rust tests pass 89/89 with one ignored test, and `cargo check`
+  completes successfully; a parallel-test collision in the Claude last-good
+  fixture was removed by giving the rate-limit case its own credential identity
+- the release bundle installs and restarts successfully; the built and installed
+  native binaries are byte-identical with SHA-256
+  `d362f0863b0d0f9e99542aaeaf7eb231386abf8c89e36f783cb40fb011056d83`
+- Mahiro completed the installed visual/product gate for the Notchowl board
+  redesign, status and spacing polish, icon-only navigation, and stable 1040px
+  panel width
+
 ### v0.1.9 release evidence
 
 Release-preparation evidence captured on 2026-09-03:

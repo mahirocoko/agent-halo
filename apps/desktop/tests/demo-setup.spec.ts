@@ -50,6 +50,7 @@ test("keep awake retries a transient native synchronization failure", async ({ p
   ).__keepAwakeCalls)).toEqual([{ active: false }, { active: true }, { active: true }]);
 
   await page.getByRole("button", { name: "Setup" }).click();
+  await expect(page.locator(".setup-tray")).toBeVisible();
   await page.getByRole("tab", { name: "Display" }).click();
   await expect(page.getByText("Active · Letta is working")).toBeVisible();
 });
@@ -78,6 +79,7 @@ test("setup view stays capability-aware in browser demo", async ({ page }) => {
   await expect(page.locator(".setup-row").filter({ hasText: "Keep display awake" }).getByText("Desktop runtime required")).toBeVisible();
   await page.reload();
   await page.getByRole("button", { name: "Setup" }).click();
+  await expect(page.locator(".setup-tray")).toBeVisible();
   await page.getByRole("tab", { name: "Display" }).click();
   await expect(page.getByRole("button", { name: "Disable keep display awake" })).toBeVisible();
   await page.getByRole("button", { name: "Disable keep display awake" }).click();
@@ -120,6 +122,7 @@ test("setup selects one native display with radio keyboard semantics", async ({ 
 
   await page.goto("/?demo=1&demoScenario=idle");
   await page.getByRole("button", { name: "Setup" }).click();
+  await expect(page.locator(".setup-tray")).toBeVisible();
   await page.getByRole("tab", { name: "Display" }).click();
   await expect(page.getByText("Built-in Retina Display · 3024×1964 · Primary")).toBeVisible();
   const displayRow = page.locator(".display-setting-row");
@@ -154,6 +157,7 @@ test("disconnected preferred display falls back without claiming Primary is sele
 
   await page.goto("/?demo=1&demoScenario=idle");
   await page.getByRole("button", { name: "Setup" }).click();
+  await expect(page.locator(".setup-tray")).toBeVisible();
   await page.getByRole("tab", { name: "Display" }).click();
   const displayRow = page.locator(".display-setting-row");
   await expect(displayRow.getByText("24G2W1G4 unavailable · using Color LCD")).toBeVisible();

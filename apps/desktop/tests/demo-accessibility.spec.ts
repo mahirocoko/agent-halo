@@ -103,13 +103,24 @@ test("main section tabs provide roving keyboard navigation and panel relationshi
 
   await usageTab.click();
 
-  const codexTab = page.getByRole("tab", { name: "Codex" });
+  const usageTablist = page.getByRole("tablist", { name: "Usage providers" });
+  await expect(usageTablist).toHaveAttribute("aria-orientation", "vertical");
+  const codexTab = usageTablist.getByRole("tab", { name: "Codex" });
   await codexTab.focus();
   await page.keyboard.press("ArrowDown");
-  await expect(page.getByRole("tab", { name: "Antigravity" })).toBeFocused();
+  await expect(usageTablist.getByRole("tab", { name: "Antigravity" })).toBeFocused();
+  await page.keyboard.press("End");
+  const usageSettingsTab = usageTablist.getByRole("tab", { name: "Settings" });
+  await expect(usageSettingsTab).toBeFocused();
+  await expect(usageSettingsTab).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tabpanel", { name: "Settings" })).toBeVisible();
+  await page.keyboard.press("Home");
+  await expect(codexTab).toBeFocused();
+  await expect(codexTab).toHaveAttribute("aria-selected", "true");
 
   // Setup button outside tablist
   await page.getByRole("button", { name: "Setup" }).click();
+  await expect(page.locator(".setup-tray")).toBeVisible();
   const petTab = page.getByRole("tab", { name: "Pet" });
   await petTab.click();
   await page.getByRole("button", { name: /Choose/ }).click();
@@ -135,6 +146,7 @@ test("reduced motion disables panel, status, loading, and pet animation", async 
 test("Setup sections use vertical roving tabs and labelled panels", async ({ page }) => {
   await page.goto("/?demo=1&demoScenario=idle");
   await page.getByRole("button", { name: "Setup" }).click();
+  await expect(page.locator(".setup-tray")).toBeVisible();
   const connection = page.getByRole("tab", { name: "Connection" });
   await connection.focus();
   await page.keyboard.press("ArrowDown");
@@ -150,6 +162,7 @@ test("narrow Setup switches to horizontal tab semantics", async ({ page }) => {
   await page.setViewportSize({ width: 280, height: 440 });
   await page.goto("/?demo=1&demoScenario=idle");
   await page.getByRole("button", { name: "Setup" }).click();
+  await expect(page.locator(".setup-tray")).toBeVisible();
   await expect(page.getByRole("tablist", { name: "Setup sections" })).toHaveAttribute("aria-orientation", "horizontal");
   const connection = page.getByRole("tab", { name: "Connection" });
   await connection.focus();

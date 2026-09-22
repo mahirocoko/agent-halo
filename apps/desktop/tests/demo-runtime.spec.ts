@@ -15,6 +15,7 @@ test("Runtime and Services use separate canonical top-level tabs", async ({ page
   await runtimeTab.click();
 
   const runtimePanel = page.getByRole("tabpanel", { name: "Runtime" });
+  await expect(page.getByTestId("runtime-board")).toBeVisible();
   await expect(runtimePanel).toBeVisible();
   await expect(runtimeTab).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("tab", { name: "Processes", exact: true })).toHaveCount(0);
@@ -31,10 +32,11 @@ test("Runtime and Services use separate canonical top-level tabs", async ({ page
 
   await servicesTab.click();
   const servicesPanel = page.getByRole("tabpanel", { name: "Services" });
+  await expect(page.getByTestId("services-board")).toBeVisible();
   await expect(servicesPanel).toBeVisible();
   await expect(servicesTab).toHaveAttribute("aria-selected", "true");
   await expect(page.getByText("1 ended hidden")).toHaveCount(0);
-  await expect(page.getByText("6 local listeners")).toBeVisible();
+  await expect(servicesPanel.locator(".runtime-primary-count")).toContainText("6local listeners");
   await expect(servicesPanel.locator(".runtime-service-row")).toHaveCount(6);
   await expect(servicesPanel.locator('[data-service-group="web-frontends"]')).toContainText("Detected web frontends");
   await expect(servicesPanel.locator('[data-service-group="web-frontends"] .runtime-service-row')).toHaveCount(2);
@@ -85,28 +87,25 @@ test("Runtime and Services use separate canonical top-level tabs", async ({ page
   await expect.poll(() => page.evaluate(() => window.localStorage.getItem("agent-halo.runtime-ended-identities"))).toBe(endedBeforeReload);
 });
 
-test("only strongly evidenced web frontends use the green local-service dot", async ({ page }) => {
+test("strongly evidenced web frontends use filled monochrome service marks", async ({ page }) => {
   await page.goto("/?demo=1&demoScenario=multi");
   await page.getByRole("tab", { name: "Services", exact: true }).click();
   const serviceRows = page.getByRole("tabpanel", { name: "Services" }).locator(".runtime-service-row");
   await expect(serviceRows).toHaveCount(6);
 
-  const marks = await serviceRows.evaluateAll((rows) => rows.map((row) => ({
-    webFrontend: row.getAttribute("data-web-frontend"),
-    backgroundColor: getComputedStyle(row.querySelector<HTMLElement>(".runtime-service-mark")!).backgroundColor,
-  })));
-  const okColor = await page.locator("[data-testid='services-board']").evaluate((board) => {
-    const probe = document.createElement("span");
-    probe.style.backgroundColor = "var(--done)";
-    board.append(probe);
-    const color = getComputedStyle(probe).backgroundColor;
-    probe.remove();
-    return color;
-  });
-  expect(marks.filter((mark) => mark.webFrontend === "true")).toHaveLength(2);
-  expect(okColor).not.toBe("rgb(74, 222, 128)");
-  expect(marks.filter((mark) => mark.webFrontend === "true").every((mark) => mark.backgroundColor === okColor)).toBe(true);
-  expect(marks.filter((mark) => mark.webFrontend === "false").every((mark) => mark.backgroundColor !== okColor)).toBe(true);
+  const marks = await serviceRows.evaluateAll((rows) => rows.map((row) => {
+    const style = getComputedStyle(row.querySelector<HTMLElement>(".runtime-service-mark")!);
+    return {
+      webFrontend: row.getAttribute("data-web-frontend"),
+      backgroundColor: style.backgroundColor,
+      borderColor: style.borderColor,
+    };
+  }));
+  const webFrontends = marks.filter((mark) => mark.webFrontend === "true");
+  const otherServices = marks.filter((mark) => mark.webFrontend === "false");
+  expect(webFrontends).toHaveLength(2);
+  expect(webFrontends.every((mark) => mark.backgroundColor === "rgb(17, 17, 17)")).toBe(true);
+  expect(otherServices.every((mark) => mark.backgroundColor === "rgba(0, 0, 0, 0)" && mark.borderColor === "rgb(17, 17, 17)")).toBe(true);
 });
 
 test("detected HTTP services expose a keyboard-reachable browser action", async ({ page }) => {
@@ -203,48 +202,47 @@ test("expanded Services detail survives polling and stays inside a narrow panel"
   const geometry = await servicesPanel.evaluate((panel) => ({
     clientWidth: panel.clientWidth,
     scrollWidth: panel.scrollWidth,
-    nestedScroller: [...panel.querySelectorAll<HTMLElement>(".runtime-panel, .runtime-service-details")].some((element) => ["auto", "scroll"].includes(getComputedStyle(element).overflowY)),
+    nestedScroller: [...panel.querySelectorAll<HTMLElement>(".runtime-service-details")].some((element) => ["auto", "scroll"].includes(getComputedStyle(element).overflowY)),
   }));
   expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.clientWidth);
   expect(geometry.nestedScroller).toBe(false);
 });
 
-test("Runtime and Services share canonical roving tabs, one board scroller, and reset user scroll", async ({ page }) => {
+test("Runtime and Services share canonical roving tabs and dedicated detail scrollers", async ({ page }) => {
   await page.goto("/?demo=1&demoScenario=multi");
   const runtime = page.getByRole("tab", { name: "Runtime", exact: true });
   const services = page.getByRole("tab", { name: "Services", exact: true });
   await runtime.click();
+  await expect(page.getByTestId("runtime-board")).toBeVisible();
   await runtime.focus();
   await page.keyboard.press("ArrowRight");
   await expect(services).toBeFocused();
   await expect(services).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByTestId("services-board")).toBeVisible();
   await page.keyboard.press("Home");
   await expect(page.getByRole("tab", { name: "Sessions", exact: true })).toBeFocused();
   await page.keyboard.press("End");
   await expect(services).toBeFocused();
   await page.keyboard.press("ArrowLeft");
   await expect(runtime).toBeFocused();
+  await expect(page.getByTestId("runtime-board")).toBeVisible();
 
-  const scrollState = await page.evaluate(() => {
-    const board = document.querySelector<HTMLElement>("[data-testid='runtime-board']")!;
-    const sheet = document.querySelector<HTMLElement>("#main-panel-runtime")!;
-    const scroller = board.querySelector<HTMLElement>("[data-scroll-owner='inner']")!;
-    board.style.maxHeight = "120px";
-    const panel = document.querySelector<HTMLElement>(".runtime-panel")!;
-    panel.style.minHeight = "320px";
+  const detail = page.locator("[data-testid='runtime-board'] [data-monitor-card='detail']");
+  await detail.evaluate((scroller) => {
+    scroller.style.maxHeight = "120px";
     scroller.scrollTop = 80;
-    return {
-      before: scroller.scrollTop,
-      boardOverflow: getComputedStyle(board).overflowY,
-      scrollerOverflow: getComputedStyle(scroller).overflowY,
-      sheetOverflow: getComputedStyle(sheet).overflowY,
-      panelOverflow: getComputedStyle(panel).overflowY,
-      toolbarPosition: getComputedStyle(document.querySelector<HTMLElement>(".runtime-toolbar")!).position,
-    };
   });
-  expect(scrollState).toMatchObject({ before: 80, boardOverflow: "hidden", scrollerOverflow: "auto", sheetOverflow: "hidden", panelOverflow: "visible", toolbarPosition: "sticky" });
+  const scrollState = await detail.evaluate((scroller) => ({
+    before: scroller.scrollTop,
+    overflowY: getComputedStyle(scroller).overflowY,
+    nestedAuto: [...scroller.querySelectorAll<HTMLElement>("*")].some((element) => ["auto", "scroll"].includes(getComputedStyle(element).overflowY)),
+  }));
+  expect(scrollState).toEqual({ before: 80, overflowY: "auto", nestedAuto: false });
+
   await services.click();
-  await expect.poll(() => page.evaluate(() => document.querySelector<HTMLElement>("[data-testid='services-board'] [data-scroll-owner='inner']")!.scrollTop)).toBe(0);
+  const servicesDetail = page.locator("[data-testid='services-board'] [data-monitor-card='detail']");
+  await expect(servicesDetail).toBeVisible();
+  await expect.poll(() => servicesDetail.evaluate((scroller) => scroller.scrollTop)).toBe(0);
 });
 
 test("done-session footer actions stay owned by Sessions instead of Runtime or Services", async ({ page }) => {
@@ -330,30 +328,47 @@ test("runtime ended identities are strongly keyed and bounded", async ({ page })
   expect(result.restartedKey).not.toBe(result.originalKey);
 });
 
-test("runtime pressure colors distinguish healthy, elevated, high, critical, and unavailable states", async ({ page }) => {
+test("runtime pressure marks and shared status labels use monochrome structure", async ({ page }) => {
   await page.goto("/?demo=1&demoScenario=multi");
   await page.getByRole("tab", { name: "Runtime" }).click();
-  const colors = await page.locator(".runtime-row").first().evaluate((row) => {
+  await expect(page.getByTestId("runtime-board")).toBeVisible();
+  const paint = await page.locator(".runtime-row").first().evaluate((row) => {
     const mark = row.querySelector<HTMLElement>(".runtime-pressure-mark");
     const label = row.querySelector<HTMLElement>(".runtime-pressure-label");
     if (!mark || !label) throw new Error("Runtime pressure anatomy is unavailable");
-    return ["normal", "elevated", "high", "critical", "unavailable"].map((pressure) => {
+    const cases = [
+      ["normal", "success"],
+      ["elevated", "warning"],
+      ["high", "warning"],
+      ["critical", "danger"],
+      ["unavailable", "neutral"],
+    ] as const;
+    return cases.map(([pressure, tone]) => {
       row.setAttribute("data-pressure", pressure);
+      label.setAttribute("data-surface-status-tone", tone);
+      const markStyle = getComputedStyle(mark);
+      const labelStyle = getComputedStyle(label);
       return {
         pressure,
-        mark: getComputedStyle(mark).backgroundColor,
-        label: getComputedStyle(label).color,
-        borderStyle: getComputedStyle(label).borderStyle,
+        markBackground: markStyle.backgroundColor,
+        markBorderStyle: markStyle.borderStyle,
+        markRadius: markStyle.borderRadius,
+        markTransform: markStyle.transform,
+        labelBackground: labelStyle.backgroundColor,
+        labelInk: labelStyle.color,
+        labelBorderStyle: labelStyle.borderStyle,
+        labelShadow: labelStyle.boxShadow,
       };
     });
   });
-  expect(colors).toEqual([
-    { pressure: "normal", mark: "rgb(21, 94, 60)", label: "rgb(21, 94, 60)", borderStyle: "solid" },
-    { pressure: "elevated", mark: "rgba(0, 0, 0, 0)", label: "rgb(46, 59, 71)", borderStyle: "solid" },
-    { pressure: "high", mark: "rgb(113, 66, 5)", label: "rgb(113, 66, 5)", borderStyle: "solid" },
-    { pressure: "critical", mark: "rgb(134, 37, 41)", label: "rgb(134, 37, 41)", borderStyle: "solid" },
-    { pressure: "unavailable", mark: "rgba(0, 0, 0, 0)", label: "rgb(46, 59, 71)", borderStyle: "dashed" },
-  ]);
+
+  expect(paint[0]).toMatchObject({ markBackground: "rgb(17, 17, 17)", labelBackground: "rgb(17, 17, 17)", labelInk: "rgb(255, 255, 255)" });
+  expect(paint[1]).toMatchObject({ markBackground: "rgba(0, 0, 0, 0)", markBorderStyle: "solid", labelBackground: "rgb(255, 255, 255)", labelInk: "rgb(17, 17, 17)" });
+  expect(paint[2]).toMatchObject({ markBackground: "rgb(17, 17, 17)", markRadius: "1px", labelBackground: "rgb(255, 255, 255)" });
+  expect(paint[3]).toMatchObject({ markBackground: "rgb(17, 17, 17)", markRadius: "1px", labelBackground: "rgb(17, 17, 17)", labelInk: "rgb(255, 255, 255)" });
+  expect(paint[3].markTransform).not.toBe("none");
+  expect(paint[3].labelShadow).toContain("rgb(255, 255, 255)");
+  expect(paint[4]).toMatchObject({ markBackground: "rgba(0, 0, 0, 0)", markBorderStyle: "dashed", labelInk: "rgb(17, 17, 17)", labelBorderStyle: "dashed" });
 });
 
 test("runtime list stays readable at narrow width and reduced motion", async ({ page }) => {
@@ -364,76 +379,66 @@ test("runtime list stays readable at narrow width and reduced motion", async ({ 
 
   const panel = page.getByRole("tabpanel", { name: "Runtime" });
   await expect(panel).toBeVisible();
-  await expect(page.locator(".runtime-toolbar .is-spinning")).toHaveCount(0);
+  await expect(page.getByTestId("runtime-board")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Refresh Runtime" })).toBeVisible();
   const row = page.locator(".runtime-row").first();
+  const overviewHeader = page.locator(".runtime-overview-head");
   await expect(row).toContainText("Letta");
   await expect(row).toContainText("Subprocesses");
-  const [panelBox, rowBox, toolbarBox] = await Promise.all([panel.boundingBox(), row.boundingBox(), page.locator(".runtime-toolbar").boundingBox()]);
+  const [panelBox, rowBox, overviewHeaderBox] = await Promise.all([panel.boundingBox(), row.boundingBox(), overviewHeader.boundingBox()]);
   expect(panelBox).not.toBeNull();
   expect(rowBox).not.toBeNull();
-  expect(toolbarBox).not.toBeNull();
+  expect(overviewHeaderBox).not.toBeNull();
   expect(rowBox!.x).toBeGreaterThanOrEqual(panelBox!.x);
   expect(rowBox!.x + rowBox!.width).toBeLessThanOrEqual(panelBox!.x + panelBox!.width + 1);
-  expect(toolbarBox!.x).toBeGreaterThanOrEqual(panelBox!.x);
-  expect(toolbarBox!.x + toolbarBox!.width).toBeLessThanOrEqual(panelBox!.x + panelBox!.width + 1);
+  expect(overviewHeaderBox!.x).toBeGreaterThanOrEqual(panelBox!.x);
+  expect(overviewHeaderBox!.x + overviewHeaderBox!.width).toBeLessThanOrEqual(panelBox!.x + panelBox!.width + 1);
   expect(await panel.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
   await page.getByRole("tab", { name: "Services", exact: true }).click();
   const servicesPanel = page.getByRole("tabpanel", { name: "Services" });
   const serviceRow = servicesPanel.locator(".runtime-service-row").first();
-  const serviceToolbar = servicesPanel.locator(".runtime-toolbar");
+  const serviceHeading = servicesPanel.locator(".runtime-detail-heading");
   const openService = page.getByRole("button", { name: "Open Haabiz UI on port 5173" });
   await expect(openService).toBeVisible();
-  const [servicesBox, serviceRowBox, serviceToolbarBox, openServiceBox] = await Promise.all([
+  const [servicesBox, serviceRowBox, serviceHeadingBox, openServiceBox] = await Promise.all([
     servicesPanel.boundingBox(),
     serviceRow.boundingBox(),
-    serviceToolbar.boundingBox(),
+    serviceHeading.boundingBox(),
     openService.boundingBox(),
   ]);
   expect(servicesBox).not.toBeNull();
   expect(serviceRowBox).not.toBeNull();
-  expect(serviceToolbarBox).not.toBeNull();
+  expect(serviceHeadingBox).not.toBeNull();
   expect(openServiceBox).not.toBeNull();
   expect(serviceRowBox!.x).toBeGreaterThanOrEqual(servicesBox!.x);
   expect(serviceRowBox!.x + serviceRowBox!.width).toBeLessThanOrEqual(servicesBox!.x + servicesBox!.width + 1);
-  expect(serviceToolbarBox!.x + serviceToolbarBox!.width).toBeLessThanOrEqual(servicesBox!.x + servicesBox!.width + 1);
+  expect(serviceHeadingBox!.x + serviceHeadingBox!.width).toBeLessThanOrEqual(servicesBox!.x + servicesBox!.width + 1);
   expect(servicesBox!.x + servicesBox!.width - (openServiceBox!.x + openServiceBox!.width)).toBeGreaterThanOrEqual(8);
   expect(await servicesPanel.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
   expect(await page.locator(".sheet-header").evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
 });
 
-test("Runtime and Services boards apply cohesive muted paper tonal paint", async ({ page }) => {
+test("Runtime and Services preserve their accepted two-card material tones", async ({ page }) => {
   await page.goto("/?demo=1&demoScenario=multi");
 
-  const evaluatePaint = async (selector: string) => {
-    return page.evaluate((sel) => {
-      const el = document.querySelector<HTMLElement>(sel);
-      if (!el) return null;
-      const cs = getComputedStyle(el);
-      return {
-        color: cs.color,
-        backgroundColor: cs.backgroundColor,
-        opacity: cs.opacity,
-      };
-    }, selector);
-  };
+  const cardPaint = (board: string) => page.locator(`${board} .monitor-card`).evaluateAll((cards) => cards.map((card) => ({
+    classes: card.className,
+    backgroundColor: getComputedStyle(card).backgroundColor,
+    color: getComputedStyle(card).color,
+    opacity: getComputedStyle(card).opacity,
+  })));
 
   await page.getByRole("tab", { name: "Runtime", exact: true }).click();
-  await expect(page.locator(".runtime-board .runtime-panel")).toBeVisible();
-  const runtimeBoardPaint = await evaluatePaint(".runtime-board");
-  expect(runtimeBoardPaint?.backgroundColor).toBe("rgb(113, 127, 142)");
-  expect(runtimeBoardPaint?.opacity).toBe("1");
-  const runtimePanelPaint = await evaluatePaint(".runtime-panel");
-  expect(runtimePanelPaint?.color).toBe("rgb(23, 33, 43)");
-  const runtimeToolbarPaint = await evaluatePaint(".runtime-toolbar");
-  expect(runtimeToolbarPaint?.backgroundColor).toBe("rgb(113, 127, 142)");
+  await expect(page.getByTestId("runtime-board")).toBeVisible();
+  expect(await cardPaint("[data-testid='runtime-board']")).toEqual([
+    expect.objectContaining({ classes: expect.stringContaining("halo-surface-slate"), backgroundColor: "rgb(113, 127, 142)", color: "rgb(17, 17, 17)", opacity: "1" }),
+    expect.objectContaining({ classes: expect.stringContaining("halo-surface-navy"), backgroundColor: "rgb(113, 127, 142)", color: "rgb(17, 17, 17)", opacity: "1" }),
+  ]);
 
   await page.getByRole("tab", { name: "Services", exact: true }).click();
-  await expect(page.locator(".services-board .runtime-panel")).toBeVisible();
-  const servicesBoardPaint = await evaluatePaint(".services-board");
-  expect(servicesBoardPaint?.backgroundColor).toBe("rgb(111, 136, 136)");
-  expect(servicesBoardPaint?.opacity).toBe("1");
-  const servicesPanelPaint = await evaluatePaint(".runtime-panel");
-  expect(servicesPanelPaint?.color).toBe("rgb(23, 38, 38)");
-  const servicesToolbarPaint = await evaluatePaint(".runtime-toolbar");
-  expect(servicesToolbarPaint?.backgroundColor).toBe("rgb(111, 136, 136)");
+  await expect(page.getByTestId("services-board")).toBeVisible();
+  expect(await cardPaint("[data-testid='services-board']")).toEqual([
+    expect.objectContaining({ classes: expect.stringContaining("halo-surface-slate"), backgroundColor: "rgb(113, 127, 142)", color: "rgb(17, 17, 17)", opacity: "1" }),
+    expect.objectContaining({ classes: expect.stringContaining("halo-surface-teal"), backgroundColor: "rgb(111, 136, 136)", color: "rgb(17, 17, 17)", opacity: "1" }),
+  ]);
 });

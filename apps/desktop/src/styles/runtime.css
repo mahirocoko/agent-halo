@@ -1,15 +1,55 @@
-.runtime-panel {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0;
-  min-width: 0;
-  min-height: 0;
-  padding: 0 0 12px;
+.halo-surface[data-panel-view="runtime"][data-state="open"],
+.halo-surface[data-panel-view="runtime"][data-state="open"] .sheet-inner,
+.halo-surface[data-panel-view="services"][data-state="open"],
+.halo-surface[data-panel-view="services"][data-state="open"] .sheet-inner {
+  max-height: 500px;
 }
 
-.runtime-toolbar,
+.monitor-tray {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  min-inline-size: 0;
+  min-block-size: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.monitor-tray > .monitor-card {
+  inline-size: auto;
+  min-inline-size: 0;
+  min-block-size: 0;
+}
+
+.monitor-tray > .monitor-card.monitor-overview-card {
+  inline-size: 240px;
+  flex: 0 0 240px;
+}
+
+.monitor-tray > .monitor-card.monitor-detail-card {
+  inline-size: auto;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  flex: 1 1 0;
+}
+
+.monitor-overview-card .halo-inner-scroll {
+  position: absolute;
+  inset: 0;
+  padding: 12px;
+  scrollbar-gutter: auto;
+}
+
+.monitor-detail-card .halo-inner-scroll {
+  position: relative;
+  inset: auto;
+  min-block-size: 0;
+  padding: 6px 12px 12px;
+  scrollbar-gutter: auto;
+}
+
+.runtime-overview-head,
 .runtime-row-main,
-.runtime-toolbar-actions,
 .runtime-row-status,
 .runtime-metrics,
 .runtime-reason {
@@ -17,58 +57,276 @@
   align-items: center;
 }
 
-.runtime-toolbar {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  min-height: 42px;
-  justify-content: space-between;
-  gap: 8px;
-  padding-top: 8px;
-  border-bottom: 1px solid var(--hair);
-  background: var(--surface-base, var(--surface));
+.runtime-overview-head {
+  gap: 9px;
+  min-inline-size: 0;
 }
 
-.runtime-subtitle,
-.runtime-footnote {
-  color: var(--text-2);
+.runtime-overview-head > div {
+  min-inline-size: 0;
+  flex: 1;
+}
+
+.runtime-overview-head h2,
+.runtime-detail-heading h2 {
+  margin: 0;
+  color: var(--surface-ink);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  line-height: 1.1;
+}
+
+.runtime-overview-icon {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  flex: none;
+  color: #fff;
+  background: #111;
+}
+
+.runtime-overview-kicker {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--surface-ink-3);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.runtime-primary-count {
+  display: grid;
+  gap: 1px;
+  margin: 28px 0 22px;
+}
+
+.runtime-primary-count strong {
+  color: var(--surface-ink);
+  font-size: 44px;
+  font-weight: 780;
+  letter-spacing: -0.055em;
+  line-height: 0.9;
+  font-variant-numeric: tabular-nums;
+}
+
+.runtime-primary-count span,
+.runtime-footnote,
+.runtime-ended-count {
+  color: var(--surface-ink-3);
   font-size: 10px;
 }
 
-.runtime-toolbar-actions {
-  margin-left: auto;
-  gap: 6px;
+.runtime-primary-count span {
+  font-weight: 700;
 }
 
-.runtime-toolbar .gear-btn:disabled {
-  color: var(--text-3);
-  background: var(--fill);
-  cursor: default;
+.runtime-summary-list {
+  display: grid;
+  gap: 0;
+  border-top: 1px solid var(--surface-line);
+}
+
+.runtime-summary-list > div {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid var(--surface-line);
+  color: var(--surface-ink-2);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.runtime-summary-list .surface-status {
+  min-inline-size: 24px;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.runtime-ended-count {
+  display: block;
+  margin-top: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.runtime-footnote {
+  margin: auto 0 0;
+  padding-top: 18px;
+  line-height: 1.35;
+}
+
+.runtime-detail-heading {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  padding: 12px 12px 10px;
+  border-bottom: 1px solid var(--surface-line);
 }
 
 .runtime-service-groups {
   display: grid;
-  gap: 8px;
+  gap: 14px;
 }
 
-.runtime-service-groups .session-section-head {
-  position: relative;
-  top: 0;
+.runtime-section-heading {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--surface-ink);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
 }
 
 .runtime-group-count {
-  color: var(--text-2);
-  font-size: 10px;
+  min-inline-size: 24px;
+  padding: 4px 7px;
+  border-radius: 999px;
+  color: #fff;
+  background: #111;
+  font-size: 9px;
   line-height: 1;
   text-align: center;
 }
 
-.runtime-service-row {
+.runtime-list {
   display: grid;
   gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--surface-line);
+}
+
+.runtime-row,
+.runtime-service-row {
+  display: grid;
   min-width: 0;
-  padding: 7px 2px;
-  border-bottom: 1px solid var(--hair);
+  border-bottom: 1px solid var(--surface-line);
+}
+
+.runtime-row {
+  gap: 6px;
+  padding: 11px 2px;
+}
+
+.runtime-service-row {
+  gap: 0;
+  padding: 8px 2px;
+}
+
+.runtime-row-main {
+  min-width: 0;
+  gap: 8px;
+}
+
+.runtime-pressure-mark {
+  width: 7px;
+  height: 7px;
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--surface-ink-3);
+}
+
+.runtime-row[data-pressure="normal"] .runtime-pressure-mark {
+  background: #111;
+}
+
+.runtime-row[data-pressure="elevated"] .runtime-pressure-mark {
+  border: 1px solid #111;
+  background: transparent;
+}
+
+.runtime-row[data-pressure="high"] .runtime-pressure-mark {
+  border-radius: 1px;
+  background: #111;
+}
+
+.runtime-row[data-pressure="critical"] .runtime-pressure-mark {
+  border-radius: 1px;
+  background: #111;
+  box-shadow: 0 0 0 1px #fff, 0 0 0 2px #111;
+  transform: rotate(45deg);
+}
+
+.runtime-row[data-pressure="unavailable"] .runtime-pressure-mark {
+  border: 1px dashed #111;
+  background: transparent;
+}
+
+.runtime-identity {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+}
+
+.runtime-project,
+.runtime-conversation {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runtime-project {
+  color: var(--surface-ink);
+  font-size: 11px;
+  font-weight: 720;
+}
+
+.runtime-conversation {
+  color: var(--surface-ink-2);
+  font-size: 10px;
+}
+
+.runtime-pressure-label {
+  flex: none;
+  text-transform: capitalize;
+}
+
+.runtime-row-status {
+  flex: none;
+  gap: 5px;
+}
+
+.runtime-hide-btn {
+  color: var(--surface-ink-3);
+}
+
+.runtime-metrics {
+  flex-wrap: wrap;
+  gap: 14px;
+  padding-left: 15px;
+  color: var(--surface-ink-2);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.runtime-metrics b {
+  color: var(--surface-ink);
+  font-weight: 650;
+}
+
+.runtime-reason {
+  gap: 8px;
+  padding-left: 15px;
+  color: var(--surface-ink-2);
+  font-size: 10px;
+}
+
+.runtime-reason > :first-child {
+  min-width: 0;
+  flex: 1;
 }
 
 .runtime-service-disclosure {
@@ -80,7 +338,7 @@
   margin: 0;
   padding: 0;
   border: 0;
-  color: inherit;
+  color: var(--surface-ink);
   background: transparent;
   font: inherit;
   text-align: left;
@@ -89,13 +347,13 @@
 
 .runtime-service-disclosure:focus-visible {
   border-radius: 3px;
-  outline: 1px solid var(--text-2);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 3px;
 }
 
 .runtime-service-chevron {
   flex: 0 0 auto;
-  color: var(--text-3);
+  color: var(--surface-ink-3);
 }
 
 .runtime-service-row[data-expanded="true"] .runtime-service-chevron {
@@ -106,9 +364,9 @@
   display: grid;
   gap: 8px;
   min-width: 0;
-  margin: 7px 9px 0 14px;
-  padding-top: 8px;
-  border-top: 1px solid var(--hair);
+  margin: 8px 8px 0 15px;
+  padding-top: 9px;
+  border-top: 1px solid var(--surface-line);
 }
 
 .runtime-service-detail-list {
@@ -134,11 +392,11 @@
 }
 
 .runtime-service-detail-list dt {
-  color: var(--text-3);
+  color: var(--surface-ink-3);
 }
 
 .runtime-service-detail-list dd {
-  color: var(--text-2);
+  color: var(--surface-ink-2);
   overflow-wrap: anywhere;
 }
 
@@ -150,7 +408,7 @@
 
 .runtime-service-confirm p {
   margin: 0;
-  color: var(--text-2);
+  color: var(--surface-ink-2);
   font-size: 10px;
   line-height: 1.35;
 }
@@ -168,213 +426,99 @@
 .runtime-service-control-error {
   min-width: 0;
   flex: 1;
-  color: var(--text-3);
+  color: var(--surface-ink-3);
   font-size: 10px;
 }
 
 .runtime-service-control-error {
-  color: var(--danger);
+  color: #111;
+  font-weight: 800;
+  text-decoration: underline;
 }
 
 .runtime-service-kind {
-  color: var(--text-2);
+  color: var(--surface-ink-2);
   font-size: 10px;
 }
 
+.runtime-service-mark {
+  border: 1px solid #111;
+  background: transparent;
+}
+
 .runtime-service-row[data-web-frontend="true"] .runtime-service-mark {
-  background: var(--done);
+  background: #111;
 }
 
 .row-btn.runtime-service-open {
   width: 24px;
   height: 24px;
-  margin-right: 9px;
+  margin-right: 8px;
 }
 
-.runtime-alert-count {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--waiting);
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
+.runtime-empty {
+  min-height: 160px;
+  padding: 16px 0;
 }
 
-.runtime-ended-count {
-  color: var(--text-3);
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+.services-board .monitor-detail-card .empty-text.small {
+  padding: 24px 8px;
+  text-align: center;
+  color: var(--surface-ink-3);
 }
 
-.runtime-list {
-  display: grid;
-  gap: 0;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  border-top: 1px solid var(--hair);
-}
+@container halo-panel (max-width: 640px) {
+  .monitor-tray {
+    flex-direction: column;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
 
-.runtime-row {
-  display: grid;
-  gap: 6px;
-  padding: 10px 2px;
-  border-bottom: 1px solid var(--hair);
-}
+  .monitor-tray > .monitor-card {
+    inline-size: 100%;
+    min-inline-size: 0;
+    block-size: auto;
+  }
 
-.runtime-row-main {
-  min-width: 0;
-  gap: 8px;
-}
+  .monitor-tray > .monitor-card.monitor-overview-card {
+    inline-size: 100%;
+    min-block-size: 210px;
+    flex: none;
+  }
 
-.runtime-pressure-mark {
-  width: 6px;
-  height: 6px;
-  box-sizing: border-box;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: var(--text-3);
-}
+  .monitor-tray > .monitor-card.monitor-detail-card {
+    inline-size: 100%;
+    min-block-size: 420px;
+    grid-template-rows: auto auto;
+    flex: none;
+  }
 
-.runtime-row[data-pressure="normal"] .runtime-pressure-mark {
-  background: var(--done);
-}
+  .monitor-card .halo-inner-scroll {
+    position: relative;
+    inset: auto;
+    overflow: visible;
+  }
 
-.runtime-row[data-pressure="elevated"] .runtime-pressure-mark {
-  border: 1px solid var(--waiting);
-  background: transparent;
-}
+  .monitor-overview-card .halo-inner-scroll {
+    min-block-size: 210px;
+    padding: 12px;
+  }
 
-.runtime-row[data-pressure="high"] .runtime-pressure-mark {
-  background: var(--waiting);
-}
+  .monitor-detail-card .halo-inner-scroll {
+    min-block-size: 0;
+    padding: 6px 12px 12px;
+  }
 
-.runtime-row[data-pressure="critical"] .runtime-pressure-mark {
-  background: var(--danger);
-}
+  .runtime-primary-count {
+    margin: 18px 0 14px;
+  }
 
-.runtime-identity {
-  display: grid;
-  min-width: 0;
-  flex: 1;
-}
-
-.runtime-project,
-.runtime-conversation {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.runtime-project {
-  color: var(--text);
-  font-size: 11px;
-  font-weight: 620;
-}
-
-.runtime-conversation {
-  color: var(--text-2);
-  font-size: 10px;
-}
-
-.runtime-pressure-label {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 6px;
-  border: 1px solid var(--hair);
-  border-radius: 999px;
-  color: var(--text-2);
-  background: var(--fill);
-  font-size: 10px;
-  text-transform: capitalize;
-}
-
-.runtime-row[data-pressure="normal"] .runtime-pressure-label {
-  border-color: color-mix(in srgb, var(--done) 28%, transparent);
-  color: var(--done);
-  background: color-mix(in srgb, var(--done) 12%, transparent);
-}
-
-.runtime-row[data-pressure="elevated"] .runtime-pressure-label {
-  border-color: color-mix(in srgb, var(--waiting) 28%, transparent);
-  color: var(--text-2);
-  background: transparent;
-}
-
-.runtime-row[data-pressure="high"] .runtime-pressure-label {
-  border-color: color-mix(in srgb, var(--waiting) 28%, transparent);
-  color: var(--waiting);
-  background: color-mix(in srgb, var(--waiting) 12%, transparent);
-}
-
-.runtime-row[data-pressure="critical"] .runtime-pressure-label {
-  border-color: color-mix(in srgb, var(--danger) 28%, transparent);
-  color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 12%, transparent);
-}
-
-.runtime-row[data-pressure="unavailable"] .runtime-pressure-label {
-  border-style: dashed;
-  color: var(--text-2);
-  background: transparent;
-}
-
-.runtime-row[data-pressure="unavailable"] .runtime-pressure-mark {
-  border: 1px solid var(--text-3);
-  background: transparent;
-}
-
-.runtime-row-status {
-  flex: none;
-  gap: 5px;
-}
-
-.runtime-hide-btn {
-  color: var(--text-3);
-}
-
-.runtime-metrics {
-  flex-wrap: wrap;
-  gap: 14px;
-  padding-left: 14px;
-  color: var(--text-2);
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-}
-
-.runtime-metrics b {
-  color: var(--text);
-  font-weight: 560;
-}
-
-.runtime-reason {
-  gap: 8px;
-  padding-left: 14px;
-  color: var(--text-2);
-  font-size: 10px;
-}
-
-.runtime-reason > :first-child {
-  min-width: 0;
-  flex: 1;
-}
-
-.runtime-footnote {
-  padding: 10px 2px 2px;
+  .runtime-footnote {
+    margin-top: 14px;
+  }
 }
 
 @media (max-width: 360px) {
-  .runtime-toolbar {
-    flex-wrap: wrap;
-    padding-bottom: 6px;
-  }
-
-  .runtime-toolbar-actions {
-    width: 100%;
-    justify-content: flex-end;
-  }
-
   .runtime-metrics {
     align-items: flex-start;
     flex-direction: column;
@@ -389,15 +533,10 @@
   .runtime-service-detail-list > div {
     grid-template-columns: 72px minmax(0, 1fr);
   }
-
-}
-
-.runtime-empty {
-  min-height: 176px;
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .runtime-toolbar .is-spinning {
+  .runtime-overview-head .is-spinning {
     animation: runtime-spin 0.8s linear infinite;
   }
 }

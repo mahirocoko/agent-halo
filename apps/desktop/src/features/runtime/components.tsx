@@ -1,10 +1,65 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { ChevronRight, ExternalLink, RefreshCw, TriangleAlert, X } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { Activity, ChevronRight, ExternalLink, RefreshCw, Server, X } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
+import { BoardScroll, BoardSurface } from "../../components/board-surface";
+import { SurfaceControl } from "../../components/surface-control";
+import { SurfaceStatus, type ISurfaceStatusProps } from "../../components/surface-status";
 import { formatLocalServiceEndpoint, formatLocalServiceUptime, formatRuntimeBytes, formatRuntimeCpu, localServiceListenerKey } from "./model";
 import type { ILocalService, ILocalServiceControlResult, IRuntimeMonitorView, IRuntimeSessionView, LocalServiceControlMode } from "./types";
 
 const runtimeRowKey = (row: IRuntimeSessionView): string => `${row.processId}:${row.conversationId}`;
+
+const useMonitorDetailScroll = (contentCount: number, scrollTop: number) => {
+  const detailScrollRef = useRef<HTMLDivElement>(null);
+  const restoredRef = useRef(false);
+
+  useLayoutEffect(() => {
+    if (restoredRef.current) return;
+    let frame = 0;
+    let cancelled = false;
+
+    const restore = () => {
+      const scroller = detailScrollRef.current;
+      if (!scroller) return;
+      if (scrollTop === 0) {
+        restoredRef.current = true;
+        return;
+      }
+      const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+      if (maxScrollTop === 0) return;
+      scroller.scrollTop = Math.min(scrollTop, maxScrollTop);
+      restoredRef.current = true;
+    };
+
+    frame = window.requestAnimationFrame(() => {
+      const scroller = detailScrollRef.current;
+      const surface = scroller?.closest<HTMLElement>(".halo-surface");
+      const animations = surface?.getAnimations() ?? [];
+      if (animations.length === 0) {
+        restore();
+        return;
+      }
+      void Promise.allSettled(animations.map((animation) => animation.finished)).then(() => {
+        if (cancelled) return;
+        frame = window.requestAnimationFrame(restore);
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(frame);
+    };
+  }, [contentCount, scrollTop]);
+
+  return detailScrollRef;
+};
+
+const pressureTone = (pressure: IRuntimeSessionView["pressure"]): ISurfaceStatusProps["tone"] => {
+  if (pressure === "normal") return "success";
+  if (pressure === "critical") return "danger";
+  if (pressure === "unavailable") return "neutral";
+  return "warning";
+};
 
 const openLocalServiceWindow = (url: string): boolean => {
   try {
@@ -16,9 +71,7 @@ const openLocalServiceWindow = (url: string): boolean => {
 
 const openLocalService = async (service: ILocalService): Promise<boolean> => {
   if (!service.url) return false;
-  if (typeof window.__TAURI_INTERNALS__ === "undefined") {
-    return openLocalServiceWindow(service.url);
-  }
+  if (typeof window.__TAURI_INTERNALS__ === "undefined") return openLocalServiceWindow(service.url);
   try {
     await invoke("open_external_url", { url: service.url });
     return true;
@@ -158,6 +211,13 @@ const LocalServiceRow = ({ expanded, onControl, onOpen, onResult, onToggle, serv
   );
 };
 
+const RuntimeSectionHeading = ({ count, headingId, label }: { count: number; headingId: string; label: string }) => (
+  <div className="runtime-section-heading">
+    <span id={headingId}>{label}</span>
+    <span className="runtime-group-count">{count}</span>
+  </div>
+);
+
 const LocalServiceGroup = ({ expandedKey, id, label, onControl, onOpen, onResult, onToggle, services }: {
   expandedKey: string | null;
   id: string;
@@ -172,10 +232,7 @@ const LocalServiceGroup = ({ expandedKey, id, label, onControl, onOpen, onResult
   const headingId = `runtime-services-${id}-heading`;
   return (
     <section data-service-group={id} aria-labelledby={headingId}>
-      <div className="session-section-head">
-        <span id={headingId}>{label}</span>
-        <span className="runtime-group-count">{services.length}</span>
-      </div>
+      <RuntimeSectionHeading count={services.length} headingId={headingId} label={label} />
       <ul className="runtime-list">
         {services.map((service) => {
           const key = localServiceListenerKey(service);
@@ -198,7 +255,7 @@ const RuntimeRow = ({ onHide, row }: { onHide: (row: IRuntimeSessionView) => voi
           <span className="runtime-conversation">{row.conversationId}</span>
         </div>
         <div className="runtime-row-status">
-          <span className="runtime-pressure-label">{row.pressure === "unavailable" ? "Unavailable" : row.pressure}</span>
+          <SurfaceStatus className="runtime-pressure-label" tone={pressureTone(row.pressure)}>{row.pressure === "unavailable" ? "Unavailable" : row.pressure}</SurfaceStatus>
           {row.pressure === "unavailable" ? (
             <button className="row-btn runtime-hide-btn" type="button" onClick={() => onHide(row)} aria-label={`Hide unavailable runtime row for ${row.project}`} title="Hide until Runtime refresh">
               <X size={11} strokeWidth={2.2} />
@@ -219,10 +276,24 @@ const RuntimeRow = ({ onHide, row }: { onHide: (row: IRuntimeSessionView) => voi
   );
 };
 
-export const RuntimeProcessesPanel = ({ monitor }: { monitor: IRuntimeMonitorView }) => {
+const OverviewHeader = ({ children, icon, title, titleId }: { children: ReactNode; icon: ReactNode; title: string; titleId: string }) => (
+  <div className="runtime-overview-head">
+    <span className="runtime-overview-icon" aria-hidden="true">{icon}</span>
+    <div>
+      <span className="runtime-overview-kicker">Monitor</span>
+      <h2 id={titleId}>{title}</h2>
+    </div>
+    {children}
+  </div>
+);
+
+export const RuntimeProcessesPanel = ({ detailScrollTop, monitor }: { detailScrollTop: number; monitor: IRuntimeMonitorView }) => {
   const [hiddenRows, setHiddenRows] = useState<Set<string>>(() => new Set());
   const rows = useMemo(() => monitor.rows.filter((row) => !hiddenRows.has(runtimeRowKey(row))), [hiddenRows, monitor.rows]);
-  const alertCount = rows.filter((row) => row.pressure === "high" || row.pressure === "critical").length;
+  const detailScrollRef = useMonitorDetailScroll(rows.length, detailScrollTop);
+  const warningCount = rows.filter((row) => row.pressure === "elevated" || row.pressure === "high").length;
+  const criticalCount = rows.filter((row) => row.pressure === "critical").length;
+  const unavailableCount = rows.filter((row) => row.pressure === "unavailable").length;
   const hiddenSummary = [
     monitor.endedCount > 0 ? `${monitor.endedCount} ended hidden` : null,
     monitor.omittedCount > 0 ? `${monitor.omittedCount} older not sampled` : null,
@@ -231,47 +302,62 @@ export const RuntimeProcessesPanel = ({ monitor }: { monitor: IRuntimeMonitorVie
     setHiddenRows(new Set());
     monitor.refreshProcesses();
   };
-  const hide = (row: IRuntimeSessionView) => {
-    setHiddenRows((current) => new Set(current).add(runtimeRowKey(row)));
-  };
+  const hide = (row: IRuntimeSessionView) => setHiddenRows((current) => new Set(current).add(runtimeRowKey(row)));
+
   return (
-    <section className="runtime-panel" aria-label="Runtime process monitor">
-      <div className="runtime-toolbar">
-        <div className="runtime-subtitle">Agent and subprocess pressure</div>
-        <div className="runtime-toolbar-actions">
+    <div className="monitor-tray runtime-board" data-testid="runtime-board" aria-label="Runtime process monitor">
+      <BoardSurface className="monitor-card monitor-overview-card" tone="slate" aria-labelledby="runtime-overview-title">
+        <BoardScroll data-monitor-card="overview">
+          <OverviewHeader icon={<Activity size={18} strokeWidth={2.1} />} title="Runtime" titleId="runtime-overview-title">
+            <SurfaceControl surfaceControlShape="circle" surfaceControlSize="icon" surfaceControlVariant="subtle" type="button" onClick={refresh} disabled={monitor.loading} aria-busy={monitor.loading} aria-label={monitor.loading ? "Refreshing Runtime" : "Refresh Runtime"} title="Refresh process pressure">
+              <RefreshCw size={13} className={monitor.loading ? "is-spinning" : undefined} />
+            </SurfaceControl>
+          </OverviewHeader>
+          <div className="runtime-primary-count"><strong>{rows.length}</strong><span>visible processes</span></div>
+          <div className="runtime-summary-list" aria-label="Runtime summary">
+            <div><span>Critical</span><SurfaceStatus tone={criticalCount > 0 ? "danger" : "success"}>{criticalCount}</SurfaceStatus></div>
+            <div><span>Elevated or high</span><SurfaceStatus tone={warningCount > 0 ? "warning" : "success"}>{warningCount}</SurfaceStatus></div>
+            <div><span>Unavailable</span><SurfaceStatus tone="neutral">{unavailableCount}</SurfaceStatus></div>
+          </div>
           {hiddenSummary ? <span className="runtime-ended-count" role="status" aria-live="polite" aria-atomic="true">{hiddenSummary}</span> : null}
-          {alertCount > 0 ? <span className="runtime-alert-count"><TriangleAlert size={12} /> {alertCount}</span> : null}
-          <button className="gear-btn" type="button" onClick={refresh} disabled={monitor.loading} aria-busy={monitor.loading} aria-label={monitor.loading ? "Refreshing Runtime" : "Refresh Runtime"} title="Refresh process pressure">
-            <RefreshCw size={13} className={monitor.loading ? "is-spinning" : undefined} />
-          </button>
+          <p className="runtime-footnote">Read-only · 100% CPU equals one logical core · no process controls</p>
+        </BoardScroll>
+      </BoardSurface>
+      <BoardSurface className="monitor-card monitor-detail-card" tone="navy" aria-labelledby="runtime-detail-title">
+        <div className="runtime-detail-heading">
+          <div><span className="runtime-overview-kicker">Live monitor</span><h2 id="runtime-detail-title">Process pressure</h2></div>
         </div>
-      </div>
-      {monitor.error ? <div className="notice-row compact" data-online="false" role="status">{monitor.error}</div> : null}
-      {rows.length === 0 ? (
-        <div className="empty-state runtime-empty">
-          <div className="empty-text">{monitor.endedCount > 0 ? "No live agent processes" : "No PID-aware events yet"}</div>
-          <div className="empty-text small">{monitor.endedCount > 0 ? `${monitor.endedCount} ended runtime ${monitor.endedCount === 1 ? "record is" : "records are"} hidden` : "Install the current mod or hooks, then reload active sessions."}</div>
-        </div>
-      ) : (
-        <ul className="runtime-list">
-          {rows.map((row) => <RuntimeRow key={runtimeRowKey(row)} row={row} onHide={hide} />)}
-        </ul>
-      )}
-      <div className="runtime-footnote">Read-only · 100% CPU equals one logical core · no process controls</div>
-    </section>
+        <BoardScroll ref={detailScrollRef} data-monitor-card="detail">
+          {monitor.error ? <div className="notice-row compact" data-online="false" role="status">{monitor.error}</div> : null}
+          {rows.length === 0 ? (
+            <div className="empty-state runtime-empty">
+              <div className="empty-text">{monitor.endedCount > 0 ? "No live agent processes" : "No PID-aware events yet"}</div>
+              <div className="empty-text small">{monitor.endedCount > 0 ? `${monitor.endedCount} ended runtime ${monitor.endedCount === 1 ? "record is" : "records are"} hidden` : "Install the current mod or hooks, then reload active sessions."}</div>
+            </div>
+          ) : (
+            <ul className="runtime-list">
+              {rows.map((row) => <RuntimeRow key={runtimeRowKey(row)} row={row} onHide={hide} />)}
+            </ul>
+          )}
+        </BoardScroll>
+      </BoardSurface>
+    </div>
   );
 };
 
-export const LocalServicesPanel = ({ monitor }: { monitor: IRuntimeMonitorView }) => {
+export const LocalServicesPanel = ({ detailScrollTop, monitor }: { detailScrollTop: number; monitor: IRuntimeMonitorView }) => {
   const [serviceOpenError, setServiceOpenError] = useState<string | null>(null);
   const [expandedServiceKey, setExpandedServiceKey] = useState<string | null>(null);
   const [controlAnnouncement, setControlAnnouncement] = useState("");
   const webFrontends = useMemo(() => monitor.services.filter((service) => service.webFrontend), [monitor.services]);
   const lettaServices = useMemo(() => monitor.services.filter((service) => !service.webFrontend && service.owner), [monitor.services]);
   const otherServices = useMemo(() => monitor.services.filter((service) => !service.webFrontend && !service.owner), [monitor.services]);
+  const detailScrollRef = useMonitorDetailScroll(monitor.services.length, detailScrollTop);
+
   useEffect(() => {
     if (expandedServiceKey && !monitor.services.some((service) => localServiceListenerKey(service) === expandedServiceKey)) setExpandedServiceKey(null);
   }, [expandedServiceKey, monitor.services]);
+
   const openService = async (service: ILocalService) => {
     setServiceOpenError(null);
     if (!(await openLocalService(service))) setServiceOpenError("Could not open local service");
@@ -286,44 +372,51 @@ export const LocalServicesPanel = ({ monitor }: { monitor: IRuntimeMonitorView }
         processId: service.processId,
         bindAddress: service.bindAddress,
         port: service.port,
-        status: "notAllowed",
+        status: "notAllowed" as const,
         signal: null,
         stillListening: true,
         error: "Process identity is unavailable",
       });
     }
-    return monitor.controlLocalService({
-      processId: service.processId,
-      processStartTimeMs: service.processStartTimeMs,
-      bindAddress: service.bindAddress,
-      port: service.port,
-      mode,
-    });
+    return monitor.controlLocalService({ processId: service.processId, processStartTimeMs: service.processStartTimeMs, bindAddress: service.bindAddress, port: service.port, mode });
   };
+
   return (
-    <section className="runtime-panel" aria-label="Local services">
-      <div className="runtime-toolbar">
-        <div className="runtime-subtitle">{monitor.services.length} local listeners</div>
-        <div className="runtime-toolbar-actions">
+    <div className="monitor-tray services-board" data-testid="services-board" aria-label="Local services">
+      <BoardSurface className="monitor-card monitor-overview-card" tone="slate" aria-labelledby="services-overview-title">
+        <BoardScroll data-monitor-card="overview">
+          <OverviewHeader icon={<Server size={18} strokeWidth={2.1} />} title="Services" titleId="services-overview-title">
+            <SurfaceControl surfaceControlShape="circle" surfaceControlSize="icon" surfaceControlVariant="subtle" type="button" onClick={monitor.refreshServices} disabled={monitor.servicesLoading} aria-busy={monitor.servicesLoading} aria-label={monitor.servicesLoading ? "Refreshing Services" : "Refresh Services"} title="Refresh local services">
+              <RefreshCw size={13} className={monitor.servicesLoading ? "is-spinning" : undefined} />
+            </SurfaceControl>
+          </OverviewHeader>
+          <div className="runtime-primary-count"><strong>{monitor.services.length}</strong><span>local listeners</span></div>
+          <div className="runtime-summary-list" aria-label="Service summary">
+            <div><span>Web frontends</span><SurfaceStatus tone={webFrontends.length > 0 ? "success" : "neutral"}>{webFrontends.length}</SurfaceStatus></div>
+            <div><span>Letta services</span><SurfaceStatus tone="info">{lettaServices.length}</SurfaceStatus></div>
+            <div><span>Other listeners</span><SurfaceStatus tone="neutral">{otherServices.length}</SurfaceStatus></div>
+          </div>
           {monitor.servicesLoading ? <span className="runtime-ended-count" role="status">Checking…</span> : null}
-          <button className="gear-btn" type="button" onClick={monitor.refreshServices} disabled={monitor.servicesLoading} aria-busy={monitor.servicesLoading} aria-label={monitor.servicesLoading ? "Refreshing Services" : "Refresh Services"} title="Refresh local services">
-            <RefreshCw size={13} className={monitor.servicesLoading ? "is-spinning" : undefined} />
-          </button>
-        </div>
-      </div>
-      {monitor.servicesError ? <div className="notice-row compact" data-online="false" role="status">{monitor.servicesError}</div> : null}
-      {serviceOpenError ? <div className="notice-row compact" data-online="false" role="status">{serviceOpenError}</div> : null}
-      <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">{controlAnnouncement}</span>
-      {monitor.services.length === 0 ? (
-        <div className="empty-text small">No listening TCP services detected</div>
-      ) : (
-        <div className="runtime-service-groups">
-          <LocalServiceGroup expandedKey={expandedServiceKey} id="web-frontends" label="Detected web frontends" services={webFrontends} onControl={controlService} onOpen={openService} onResult={setControlAnnouncement} onToggle={toggleService} />
-          <LocalServiceGroup expandedKey={expandedServiceKey} id="letta-services" label="Letta services" services={lettaServices} onControl={controlService} onOpen={openService} onResult={setControlAnnouncement} onToggle={toggleService} />
-          <LocalServiceGroup expandedKey={expandedServiceKey} id="other" label="Other listeners" services={otherServices} onControl={controlService} onOpen={openService} onResult={setControlAnnouncement} onToggle={toggleService} />
-        </div>
-      )}
-      <div className="runtime-footnote">Web evidence first · exact Letta ancestry · Stop requires confirmation</div>
-    </section>
+          <p className="runtime-footnote">Web evidence first · exact Letta ancestry · Stop requires confirmation</p>
+        </BoardScroll>
+      </BoardSurface>
+      <BoardSurface className="monitor-card monitor-detail-card" tone="teal" aria-labelledby="services-detail-title">
+        <div className="runtime-detail-heading"><div><span className="runtime-overview-kicker">Local machine</span><h2 id="services-detail-title">Listening services</h2></div></div>
+        <BoardScroll ref={detailScrollRef} data-monitor-card="detail">
+          {monitor.servicesError ? <div className="notice-row compact" data-online="false" role="status">{monitor.servicesError}</div> : null}
+          {serviceOpenError ? <div className="notice-row compact" data-online="false" role="status">{serviceOpenError}</div> : null}
+          <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">{controlAnnouncement}</span>
+          {monitor.services.length === 0 ? (
+            <div className="empty-text small">No listening TCP services detected</div>
+          ) : (
+            <div className="runtime-service-groups">
+              <LocalServiceGroup expandedKey={expandedServiceKey} id="web-frontends" label="Detected web frontends" services={webFrontends} onControl={controlService} onOpen={openService} onResult={setControlAnnouncement} onToggle={toggleService} />
+              <LocalServiceGroup expandedKey={expandedServiceKey} id="letta-services" label="Letta services" services={lettaServices} onControl={controlService} onOpen={openService} onResult={setControlAnnouncement} onToggle={toggleService} />
+              <LocalServiceGroup expandedKey={expandedServiceKey} id="other" label="Other listeners" services={otherServices} onControl={controlService} onOpen={openService} onResult={setControlAnnouncement} onToggle={toggleService} />
+            </div>
+          )}
+        </BoardScroll>
+      </BoardSurface>
+    </div>
   );
 };

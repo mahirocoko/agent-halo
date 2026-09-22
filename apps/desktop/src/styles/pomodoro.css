@@ -52,17 +52,18 @@
   align-items: center;
   margin-left: auto;
   padding: 2px 7px;
+  border: 1px solid #111;
   border-radius: 999px;
-  color: var(--surface-accent-ink);
-  background: var(--surface-accent);
+  color: #111;
+  background: transparent;
   font-size: 9px;
   font-weight: 700;
   white-space: nowrap;
 }
 
-.pomodoro-status[data-status="running"] { background: #155dfc; }
-.pomodoro-status[data-status="paused"] { color: #111; background: #ff9500; }
-.pomodoro-status[data-status="done"] { color: #111; background: #16c456; }
+.pomodoro-status[data-status="running"] { color: #fff; background: #111; }
+.pomodoro-status[data-status="paused"] { color: #111; background: #fff; border-style: dashed; }
+.pomodoro-status[data-status="done"] { color: #111; background: #fff; border: 3px double #111; border-radius: 3px; font-weight: 900; }
 
 .pomodoro-clock {
   min-width: 0;
@@ -109,47 +110,6 @@
   flex-wrap: wrap;
   gap: 7px;
   padding-top: 13px;
-}
-
-.pomodoro-control,
-.pomodoro-settings-actions button {
-  min-height: 34px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  padding: 5px 10px;
-  border: 0;
-  border-radius: 8px;
-  color: var(--text-2);
-  background: var(--fill);
-  font: inherit;
-  font-size: 9px;
-  font-weight: 650;
-  cursor: pointer;
-}
-
-.pomodoro-control:hover,
-.pomodoro-settings-actions button:hover { color: var(--text); background: var(--fill-2); }
-
-.pomodoro-control.primary,
-.pomodoro-settings-actions button.is-primary {
-  min-width: 92px;
-  color: var(--surface-accent-ink);
-  background: var(--surface-accent);
-  font-weight: 750;
-}
-
-.pomodoro-control.primary:hover,
-.pomodoro-settings-actions button.is-primary:hover { background: color-mix(in srgb, var(--surface-accent) 82%, #000); }
-.pomodoro-control.danger { color: #111; background: #ff3849; }
-
-.pomodoro-control:disabled,
-.pomodoro-settings-actions button:disabled {
-  color: var(--text-3);
-  background: var(--fill);
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .pomodoro-cycle-row {
@@ -212,24 +172,22 @@
 .pomodoro-setting-input input::-webkit-inner-spin-button,
 .pomodoro-setting-input input::-webkit-outer-spin-button { display: none; }
 .pomodoro-setting-input:focus-within { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
-.pomodoro-setting-input:has(input[aria-invalid="true"]) { border-color: #ff3849; }
+.pomodoro-setting-input:has(input[aria-invalid="true"]) { border: 2px dashed #111; }
 .pomodoro-setting-input small { color: var(--text-3); font-size: 8px; }
-.pomodoro-setting-error { color: #5d0010; font-size: 8px; font-weight: 750; line-height: 1.2; }
+.pomodoro-setting-error { color: #111; font-size: 8px; font-weight: 900; line-height: 1.2; }
 
 .pomodoro-settings-actions {
   min-height: 36px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
   padding-top: 8px; color: var(--text-3); font-size: 8px;
 }
 .pomodoro-settings-actions span { margin-right: auto; }
-.pomodoro-settings-actions button { min-height: 28px; padding: 4px 8px; }
 
-.pomodoro-control:focus-visible,
-.pomodoro-settings-toggle:focus-visible,
-.pomodoro-settings-actions button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.pomodoro-settings-toggle:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 
 .pomodoro-notification { align-self: flex-start; gap: 5px; max-width: 100%; min-height: 26px; margin-top: 6px; padding: 4px 7px; border-radius: 7px; color: var(--text-2); background: var(--fill); font-size: 9px; line-height: 1.3; }
-.pomodoro-notification[data-available="false"] svg { color: var(--surface-warn); }
-.pomodoro-notification[data-error="true"] { color: #111; background: #ff3849; }
+.pomodoro-notification[data-available="false"] svg { color: #111; }
+.pomodoro-notification[data-available="false"] { border: 1px dashed #111; }
+.pomodoro-notification[data-error="true"] { color: #fff; background: #111; font-weight: 800; box-shadow: inset 0 0 0 1px #fff; }
 
 @container focus-tools (max-width: 360px) {
   .pomodoro-time { font-size: 46px; }

@@ -128,11 +128,13 @@
 
 .header-tab-discrete {
   position: relative;
+  inline-size: 26px;
+  block-size: 26px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  padding: 4px 6px;
+  gap: 0;
+  padding: 0;
   font-size: 11px;
   font-weight: 500;
   color: var(--text-2, rgba(255, 255, 255, 0.65));
@@ -144,6 +146,10 @@
   outline: none;
   transition: color 120ms ease;
   flex: none;
+}
+
+.header-tab-discrete .tab-label {
+  display: none;
 }
 
 .header-tab-discrete:hover {
@@ -209,8 +215,9 @@
     gap: 3px;
   }
   .header-tab-discrete {
-    padding: 4px;
-    font-size: 11px;
+    inline-size: 24px;
+    block-size: 24px;
+    padding: 0;
     gap: 0;
   }
   .header-tab-discrete .tab-label {
@@ -249,6 +256,14 @@
 
 /* Tactile Pastel Surfaces with Local Seamless Noise Grain */
 .halo-tab-surface {
+  --surface-ink: #111;
+  --surface-ink-2: rgba(17, 17, 17, 0.72);
+  --surface-ink-3: rgba(17, 17, 17, 0.56);
+  --surface-line: rgba(17, 17, 17, 0.18);
+  --surface-fill: rgba(17, 17, 17, 0.08);
+  --surface-fill-2: rgba(255, 255, 255, 0.34);
+  --surface-accent: #111;
+  --surface-accent-ink: #fff;
   --text: var(--surface-ink);
   --text-2: var(--surface-ink-2);
   --text-3: var(--surface-ink-3);
@@ -257,13 +272,13 @@
   --fill-2: var(--surface-fill-2);
   --accent: var(--surface-accent);
   --accent-ink: var(--surface-accent-ink);
-  --waiting: var(--surface-warn);
-  --done: var(--surface-ok);
-  --danger: var(--surface-danger);
-  --focus-ring: var(--surface-ink);
-  --scrollbar-track: color-mix(in srgb, var(--surface-ink) 8%, transparent);
-  --scrollbar-thumb: color-mix(in srgb, var(--surface-ink) 28%, transparent);
-  --scrollbar-thumb-hover: color-mix(in srgb, var(--surface-ink) 42%, transparent);
+  --waiting: #111;
+  --done: #111;
+  --danger: #111;
+  --focus-ring: #111;
+  --scrollbar-track: rgba(17, 17, 17, 0.08);
+  --scrollbar-thumb: rgba(17, 17, 17, 0.28);
+  --scrollbar-thumb-hover: rgba(17, 17, 17, 0.42);
   position: relative;
   display: flex;
   flex-direction: column;
@@ -348,93 +363,27 @@
 /* Surface Themes - Muted Dyed-Paper Palette Family (L* ~ 55%-65%) */
 .halo-surface-mint {
   --surface-base: #8ea594;
-  --surface-ink: #121a14;
-  --surface-ink-2: #1c2b20;
-  --surface-ink-3: #26392b;
-  --surface-line: rgba(18, 26, 20, 0.16);
-  --surface-fill: rgba(18, 26, 20, 0.08);
-  --surface-fill-2: rgba(18, 26, 20, 0.14);
-  --surface-accent: #1e2d21;
-  --surface-accent-ink: #f0f4f1;
-  --surface-ok: #155e34;
-  --surface-warn: #6e4004;
-  --surface-danger: #8a2024;
 }
 
 .halo-surface-lavender {
   --surface-base: #8c87a1;
-  --surface-ink: #151020;
-  --surface-ink-2: #231c34;
-  --surface-ink-3: #322748;
-  --surface-line: rgba(21, 16, 32, 0.16);
-  --surface-fill: rgba(21, 16, 32, 0.08);
-  --surface-fill-2: rgba(21, 16, 32, 0.14);
-  --surface-accent: #271f38;
-  --surface-accent-ink: #f3f0f7;
-  --surface-ok: #1c593d;
-  --surface-warn: #683804;
-  --surface-danger: #801d2e;
 }
 
 .halo-surface-sand {
   --surface-base: #a39e6a;
-  --surface-ink: #1c1a0e;
-  --surface-ink-2: #2c2816;
-  --surface-ink-3: #3c361e;
-  --surface-line: rgba(28, 26, 14, 0.16);
-  --surface-fill: rgba(28, 26, 14, 0.08);
-  --surface-fill-2: rgba(28, 26, 14, 0.14);
-  --surface-accent: #302c17;
-  --surface-accent-ink: #f7f5ed;
-  --surface-ok: #195e3d;
-  --surface-warn: #733c03;
-  --surface-danger: #842323;
 }
 
 .halo-surface-parchment {
   --surface-base: #9b9683;
-  --surface-ink: #1a1810;
-  --surface-ink-2: #2a271b;
-  --surface-ink-3: #3a3625;
-  --surface-line: rgba(26, 24, 16, 0.16);
-  --surface-fill: rgba(26, 24, 16, 0.08);
-  --surface-fill-2: rgba(26, 24, 16, 0.14);
-  --surface-accent: #29271c;
-  --surface-accent-ink: #f7f5ef;
-  --surface-ok: #185e3d;
-  --surface-warn: #733c03;
-  --surface-danger: #842323;
 }
 
 .halo-surface-slate,
 .halo-surface-navy {
   --surface-base: #717f8e;
-  --surface-ink: #0c1217;
-  --surface-ink-2: #162029;
-  --surface-ink-3: #1f2b37;
-  --surface-line: rgba(12, 18, 23, 0.16);
-  --surface-fill: rgba(12, 18, 23, 0.07);
-  --surface-fill-2: rgba(12, 18, 23, 0.13);
-  --surface-accent: #192430;
-  --surface-accent-ink: #edf2f7;
-  --surface-ok: #155e3c;
-  --surface-warn: #714205;
-  --surface-danger: #862529;
 }
 
 .halo-surface-teal {
   --surface-base: #6f8888;
-  --surface-ink: #0d1717;
-  --surface-ink-2: #172828;
-  --surface-ink-3: #203636;
-  --surface-line: rgba(13, 23, 23, 0.16);
-  --surface-fill: rgba(13, 23, 23, 0.07);
-  --surface-fill-2: rgba(13, 23, 23, 0.13);
-  --surface-accent: #182828;
-  --surface-accent-ink: #edf5f5;
-  --surface-ok: #135d3d;
-  --surface-warn: #6e4104;
-  --surface-danger: #852226;
 }
 
 /* ========================================================= */
@@ -520,8 +469,11 @@
 }
 
 .sessions-card-head .session-section-action[data-armed="true"] {
-  background: color-mix(in srgb, var(--surface-danger) 18%, transparent);
-  color: var(--surface-danger);
+  color: #fff;
+  background: #111;
+  outline: 2px solid #111;
+  outline-offset: 1px;
+  box-shadow: inset 0 0 0 1px #fff;
 }
 
 .sessions-card-recent {
@@ -882,401 +834,6 @@
     min-block-size: 100%;
     overflow: visible;
     padding: 12px;
-  }
-}
-
-/* ========================================================= */
-/* USAGE SURFACE STYLES                                      */
-/* ========================================================= */
-
-.usage-board {
-  gap: 8px;
-}
-
-.usage-board .usage-list {
-  background: transparent;
-  color: var(--surface-ink);
-  overflow: visible;
-}
-
-.usage-board .usage-layout,
-.usage-board .usage-sidebar,
-.usage-board .usage-detail-panel {
-  overflow: visible;
-}
-
-.usage-board .usage-sidebar {
-  border-right-color: var(--surface-line);
-}
-
-.usage-board .usage-list-topline,
-.usage-board .usage-setting-desc,
-.usage-board .usage-freshness,
-.usage-board .usage-group-empty,
-.usage-board .usage-meter-foot,
-.usage-board .usage-value-row,
-.usage-board .usage-local-history-head,
-.usage-board .usage-trend-head,
-.usage-board .usage-history-pair dt,
-.usage-board .usage-insight-label,
-.usage-board .usage-daily-tokens,
-.usage-board .usage-daily-token,
-.usage-board .usage-model-share {
-  color: var(--text-3);
-}
-
-.usage-board .usage-side-tab {
-  color: var(--surface-ink-2);
-}
-
-.usage-board .usage-side-tab:hover,
-.usage-board .usage-side-tab[data-active="true"] {
-  background: var(--surface-accent);
-  color: var(--surface-accent-ink);
-}
-
-.usage-board .usage-side-settings,
-.usage-board .usage-metric-group,
-.usage-board .usage-value-rows,
-.usage-board .usage-local-history {
-  border-color: var(--surface-line);
-}
-
-.usage-board .usage-setting-title,
-.usage-board .usage-provider-title,
-.usage-board .usage-group-title,
-.usage-board .usage-meter-label {
-  color: var(--text);
-}
-
-.usage-board .usage-plan,
-.usage-board .usage-group-models,
-.usage-board .usage-value-row dd,
-.usage-board .usage-chip,
-.usage-board .usage-history-pair dd,
-.usage-board .usage-trend-head strong,
-.usage-board .usage-daily-token dd,
-.usage-board .usage-model-share strong {
-  color: var(--text-2);
-}
-
-.usage-board .usage-plan,
-.usage-board .usage-chip {
-  border-color: var(--surface-line);
-}
-
-.usage-board .usage-local-history-head small,
-.usage-board .usage-trend-note {
-  color: var(--surface-ink-3);
-}
-
-.usage-board .usage-provider-link {
-  border-color: var(--surface-line);
-  background: var(--surface-fill-2);
-  color: var(--surface-ink-2);
-}
-
-.usage-board .usage-provider-link:hover {
-  background: #fff8ea;
-  color: var(--surface-ink);
-}
-
-.usage-board .usage-setting-segment,
-.usage-board .usage-setting-option {
-  border-color: var(--surface-line);
-}
-
-.usage-board .usage-setting-segment,
-.usage-board .usage-meter-track {
-  background: var(--surface-fill);
-}
-
-.usage-board .usage-provider-note {
-  background: color-mix(in srgb, var(--surface-warn) 22%, transparent);
-  color: var(--surface-warn);
-}
-
-.usage-board .usage-meter-status {
-  color: var(--surface-ok);
-}
-
-.usage-board .usage-meter[data-level="warning"] .usage-meter-status {
-  color: var(--surface-warn);
-}
-
-.usage-board .usage-meter[data-level="danger"] .usage-meter-status {
-  color: var(--surface-danger);
-}
-
-.usage-board .usage-summary-card,
-.usage-board .usage-stat-card {
-  background: #fff4d8;
-  border: 1px solid var(--surface-line);
-  color: var(--surface-ink);
-  box-shadow: 0 1px 3px rgba(42, 24, 8, 0.08);
-}
-
-.usage-board .pill-btn,
-.usage-board .btn {
-  background: var(--surface-accent);
-  color: var(--surface-accent-ink);
-  border: none;
-}
-
-/* ========================================================= */
-/* RUNTIME & SERVICES SURFACE STYLES (Readable Dark Surface) */
-/* ========================================================= */
-
-.runtime-board,
-.services-board {
-  padding: 10px 14px;
-}
-
-.runtime-board .runtime-panel,
-.services-board .runtime-panel {
-  background: transparent;
-  color: var(--surface-ink);
-  overflow: visible;
-}
-
-.runtime-board .runtime-toolbar,
-.services-board .runtime-toolbar {
-  background: var(--surface-base);
-  border-bottom-color: var(--surface-line);
-  color: var(--surface-ink);
-}
-
-.runtime-board .runtime-subtitle,
-.runtime-board .runtime-footnote,
-.services-board .runtime-subtitle,
-.services-board .runtime-footnote {
-  color: var(--surface-ink-2);
-}
-
-.runtime-board .runtime-service-disclosure,
-.services-board .runtime-service-disclosure {
-  color: var(--surface-ink);
-}
-
-/* ========================================================= */
-/* SETTINGS BOARD CORRECTION (Authoritative Requirement D)    */
-/* ========================================================= */
-
-.settings-board .setup-body {
-  padding: 0;
-  color: var(--surface-ink);
-  max-width: 100%;
-  overflow: visible;
-  gap: 8px;
-}
-
-.settings-board .setup-layout {
-  max-width: 100%;
-  min-inline-size: 0;
-  overflow: visible;
-  gap: 12px;
-}
-
-.settings-board .setup-sidebar {
-  height: fit-content;
-  align-self: start;
-  border-right: 1px solid var(--surface-line);
-  padding-right: 8px;
-  gap: 4px;
-}
-
-.settings-board .setup-side-tab {
-  color: var(--surface-ink-2);
-  border-radius: 8px;
-  font-weight: 600;
-  transition: background 120ms ease, color 120ms ease;
-}
-
-.settings-board .setup-side-tab:hover {
-  color: var(--surface-ink);
-  background: var(--surface-fill);
-}
-
-.settings-board .setup-side-tab[data-active="true"] {
-  background: var(--surface-accent);
-  color: var(--surface-accent-ink);
-}
-
-.settings-board .setup-side-tab:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
-}
-
-.settings-board .setup-section-heading > span {
-  color: var(--surface-ink);
-  font-weight: 700;
-}
-
-.settings-board .setup-section-heading small {
-  color: var(--surface-ink-2);
-}
-
-.settings-board .setup-row {
-  background: var(--surface-fill);
-  border: 1px solid var(--surface-line);
-  border-radius: 12px;
-  padding: 9px 12px;
-  gap: 8px;
-  box-shadow: none;
-  color: var(--surface-ink);
-  transition: background 120ms ease;
-}
-
-.settings-board .setup-row:hover {
-  background: var(--surface-fill-2);
-}
-
-.settings-board .setup-row.passive {
-  background: transparent;
-  border: 1px dashed var(--surface-line);
-  box-shadow: none;
-}
-
-.session-detail-actions-integrated {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 16px;
-  padding-top: 12px;
-  padding-bottom: 4px;
-  border-top: 1px solid var(--surface-line);
-  flex: none;
-}
-
-.session-detail-actions-integrated .session-context-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.session-detail-actions-integrated .session-context-return {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--surface-ink);
-  background: transparent;
-  border: 1px solid var(--surface-line);
-  border-radius: 6px;
-  padding: 4px 8px;
-  cursor: pointer;
-  transition: background 120ms ease;
-}
-
-.session-detail-actions-integrated .session-context-return:hover {
-  background: var(--surface-fill-2);
-}
-
-.settings-board .setup-title {
-  color: var(--surface-ink);
-  font-weight: 600;
-}
-
-.settings-board .setup-detail {
-  color: var(--surface-ink-2);
-}
-
-.settings-board .pill-btn,
-.settings-board .row-btn,
-.settings-board .btn {
-  background: var(--surface-accent);
-  color: var(--surface-accent-ink);
-  border: none;
-  border-radius: 8px;
-}
-
-.settings-board .pill-btn:hover,
-.settings-board .row-btn:hover,
-.settings-board .btn:hover {
-  background: color-mix(in srgb, var(--surface-accent) 82%, #000);
-}
-
-.settings-board .pill-btn:focus-visible,
-.settings-board .row-btn:focus-visible,
-.settings-board .btn:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
-}
-
-.settings-board .pill-btn.accent,
-.settings-board .btn.accent {
-  background: var(--surface-accent);
-  color: var(--surface-accent-ink);
-}
-
-.session-detail-board .detail-body {
-  height: auto;
-  min-height: 0;
-  flex: none;
-  overflow: visible;
-  max-height: none;
-  padding: 0;
-}
-
-.session-detail-board .action-list {
-  overflow: visible;
-  max-height: none;
-}
-
-.session-detail-board .detail-path,
-.session-detail-board .capability-note,
-.session-detail-board .detail-section-label,
-.session-detail-board .action-detail,
-.session-detail-board .empty-text {
-  color: var(--surface-ink-2);
-}
-
-.session-detail-board .action-tool,
-.session-detail-board .status-text {
-  color: var(--surface-ink);
-}
-
-.session-detail-board .action-row[data-kind="thinking"] .action-tool,
-.session-detail-board .action-row[data-kind="planning"] .action-tool {
-  color: var(--surface-accent);
-}
-
-.session-detail-board .action-row[data-kind="editing"] .action-tool,
-.session-detail-board .action-row[data-kind="shell"] .action-tool,
-.session-detail-board .action-row[data-kind="tool"] .action-tool {
-  color: #6b3a0e;
-}
-
-.session-detail-board .action-row[data-kind="delegating"] .action-tool,
-.session-detail-board .action-row[data-kind="visual"] .action-tool,
-.session-detail-board .action-row[data-kind="model"] .action-tool,
-.session-detail-board .action-row[data-kind="skill"] .action-tool {
-  color: #4a2678;
-}
-
-.session-detail-board .action-mark {
-  background: var(--surface-ink-3);
-}
-
-@container halo-panel (max-width: 380px) {
-  .settings-board .setup-sidebar {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    padding: 0 0 8px;
-    border-right: 0;
-    border-bottom: 1px solid var(--surface-line);
-  }
-
-  .settings-board .setup-side-tab {
-    gap: 3px;
-    padding-inline: 3px;
-  }
-
-  .settings-board .setup-side-tab span {
-    overflow: visible;
-    font-size: 9.5px;
-    text-overflow: clip;
   }
 }
 

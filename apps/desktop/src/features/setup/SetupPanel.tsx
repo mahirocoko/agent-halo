@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { ArrowRight, Bot, Check, Coffee, Download, Dumbbell, Focus, Monitor as MonitorIcon, Play, PlugZap, RefreshCw } from "lucide-react";
 import type { IAgentHaloBridgeCapabilities } from "@agent-halo/protocol";
+import { BoardScroll, BoardSurface } from "../../components/board-surface";
 import { HaloBotBody, HALO_PET_ROSTER, type HaloPetName } from "../session/HaloPet";
 import { getHaloBotLoadoutLabel, getHaloBotParts, HALO_BOT_COMBINATION_COUNT, HALO_BOT_PART_CATALOG, HALO_BOT_PART_CATEGORIES, setHaloBotPart, type HaloBotLoadout, type HaloBotPartCategory } from "../session/haloBot";
 import { DEFAULT_HALO_PET_MOTION_MAPPING, HALO_PET_MOTIONS, type HaloPetMotion, type HaloPetMotionMapping, type HaloPetSemanticState } from "../session/petMotion";
@@ -10,6 +11,11 @@ import type { CompletionPetSize } from "../pet/preferences";
 
 type SetupCategory = "connection" | "pet" | "display";
 const SETUP_CATEGORIES: SetupCategory[] = ["connection", "pet", "display"];
+const SETUP_CATEGORY_COPY: Record<SetupCategory, { title: string; detail: string }> = {
+  connection: { title: "Connection", detail: "Bridge and agent integration" },
+  pet: { title: "Pet", detail: "Companion identity and completion preview" },
+  display: { title: "Display", detail: "Screen placement and power behavior" },
+};
 const COMPLETION_PET_SIZES: CompletionPetSize[] = ["small", "medium", "large"];
 
 const completionPetSizeLabel = (size: CompletionPetSize): string => size === "small" ? "1×" : size === "medium" ? "1.5×" : "2×";
@@ -95,7 +101,7 @@ export interface ISetupPanelProps {
 
 export const SetupPanel = ({ capabilities, canUseNativeControls, completionPetEnabled, completionPetSize, connectionTitle, displayError, displayLoading, displayState, guidance, haloBotLoadout, isConnected, keepAwakeActive, keepAwakeEnabled, keepAwakeError, movementBreakEnabled, pet, petMotionMapping, petPreviewState, petPreviewStatus, modStatus, agyHookStatus, nativeAction, onCheckBridge, onCompletionPetEnabledChange, onCompletionPetSizeChange, onDisplayChange, onDisplayRefresh, onHaloBotLoadoutChange, onInstallMod, onInstallAgyHooks, onKeepAwakeChange, onMovementBreakEnabledChange, onPetChange, onPetMotionChange, onPetMotionReset, onShowPetPreview }: ISetupPanelProps) => {
   const [activeCategory, setActiveCategory] = useState<SetupCategory>("connection");
-  const [compactNavigation, setCompactNavigation] = useState(() => window.matchMedia("(max-width: 380px)").matches);
+  const [compactNavigation, setCompactNavigation] = useState(() => window.matchMedia("(max-width: 640px)").matches);
   const [petPickerOpen, setPetPickerOpen] = useState(false);
   const [loadoutPickerOpen, setLoadoutPickerOpen] = useState(false);
   const [displayPickerOpen, setDisplayPickerOpen] = useState(false);
@@ -241,25 +247,33 @@ export const SetupPanel = ({ capabilities, canUseNativeControls, completionPetEn
   }, [displayPickerOpen, displayFocusTarget, displayLoading, displays.length]);
 
   useEffect(() => {
-    const query = window.matchMedia("(max-width: 380px)");
+    const query = window.matchMedia("(max-width: 640px)");
     const update = () => setCompactNavigation(query.matches);
     query.addEventListener("change", update);
     return () => query.removeEventListener("change", update);
   }, []);
 
-  return (
-    <div className="setup-body" onKeyDown={handleSetupKeyDown}>
-      <div className="setup-layout">
-        <div className="setup-sidebar" role="tablist" aria-label="Setup sections" aria-orientation={compactNavigation ? "horizontal" : "vertical"}>
-          <button className="setup-side-tab" id="setup-tab-connection" type="button" role="tab" aria-selected={activeCategory === "connection"} aria-controls="setup-panel-connection" tabIndex={activeCategory === "connection" ? 0 : -1} data-active={activeCategory === "connection"} onClick={() => selectCategory("connection")} onKeyDown={(event) => handleCategoryKeyDown(event, "connection")}><PlugZap size={12} strokeWidth={2.2} /><span>Connection</span></button>
-          <button className="setup-side-tab" id="setup-tab-pet" type="button" role="tab" aria-selected={activeCategory === "pet"} aria-controls="setup-panel-pet" tabIndex={activeCategory === "pet" ? 0 : -1} data-active={activeCategory === "pet"} onClick={() => selectCategory("pet")} onKeyDown={(event) => handleCategoryKeyDown(event, "pet")}><Bot size={12} strokeWidth={2.2} /><span>Pet</span></button>
-          <button className="setup-side-tab" id="setup-tab-display" type="button" role="tab" aria-selected={activeCategory === "display"} aria-controls="setup-panel-display" tabIndex={activeCategory === "display" ? 0 : -1} data-active={activeCategory === "display"} onClick={() => selectCategory("display")} onKeyDown={(event) => handleCategoryKeyDown(event, "display")}><MonitorIcon size={12} strokeWidth={2.2} /><span>Display</span></button>
-        </div>
+  const activeCategoryCopy = SETUP_CATEGORY_COPY[activeCategory];
 
-        <div className="setup-category-panel" id={`setup-panel-${activeCategory}`} role="tabpanel" aria-labelledby={`setup-tab-${activeCategory}`}>
+  return (
+    <div className="setup-tray" data-testid="settings-board" onKeyDown={handleSetupKeyDown}>
+      <BoardSurface className="setup-card setup-navigation-card" tone="slate" aria-label="Setup navigation">
+        <BoardScroll data-setup-card="navigation">
+          <div className="setup-navigation-heading"><strong>Setup</strong><small>Agent Halo preferences</small></div>
+          <div className="setup-sidebar" role="tablist" aria-label="Setup sections" aria-orientation={compactNavigation ? "horizontal" : "vertical"}>
+            <button className="setup-side-tab" id="setup-tab-connection" type="button" role="tab" aria-selected={activeCategory === "connection"} aria-controls="setup-panel-connection" tabIndex={activeCategory === "connection" ? 0 : -1} data-active={activeCategory === "connection"} onClick={() => selectCategory("connection")} onKeyDown={(event) => handleCategoryKeyDown(event, "connection")}><PlugZap size={12} strokeWidth={2.2} /><span>Connection</span></button>
+            <button className="setup-side-tab" id="setup-tab-pet" type="button" role="tab" aria-selected={activeCategory === "pet"} aria-controls="setup-panel-pet" tabIndex={activeCategory === "pet" ? 0 : -1} data-active={activeCategory === "pet"} onClick={() => selectCategory("pet")} onKeyDown={(event) => handleCategoryKeyDown(event, "pet")}><Bot size={12} strokeWidth={2.2} /><span>Pet</span></button>
+            <button className="setup-side-tab" id="setup-tab-display" type="button" role="tab" aria-selected={activeCategory === "display"} aria-controls="setup-panel-display" tabIndex={activeCategory === "display" ? 0 : -1} data-active={activeCategory === "display"} onClick={() => selectCategory("display")} onKeyDown={(event) => handleCategoryKeyDown(event, "display")}><MonitorIcon size={12} strokeWidth={2.2} /><span>Display</span></button>
+          </div>
+        </BoardScroll>
+      </BoardSurface>
+
+      <BoardSurface className="setup-card setup-detail-card" tone="parchment" aria-label={`${activeCategoryCopy.title} settings`}>
+        <div className="setup-detail-heading"><span>{activeCategoryCopy.title}</span><small>{activeCategoryCopy.detail}</small></div>
+        <BoardScroll className="setup-detail-body" data-setup-card="detail">
+          <div className="setup-category-panel" id={`setup-panel-${activeCategory}`} role="tabpanel" aria-labelledby={`setup-tab-${activeCategory}`}>
           {activeCategory === "connection" ? (
             <>
-              <div className="setup-section-heading"><span>Connection</span><small>Bridge and agent integration</small></div>
               <div className="setup-row"><span className="bridge-dot" data-connected={isConnected} title={connectionTitle} /><span className="setup-copy"><span className="setup-title">Bridge</span><span className="setup-detail">{connectionTitle}</span></span><button className="pill-btn" type="button" onClick={onCheckBridge} data-tauri-drag-region="false"><Check size={12} strokeWidth={2.3} />Check</button></div>
               <div className="setup-row"><span className="status-slot"><Download className="setup-icon" size={14} strokeWidth={2.3} /></span><span className="setup-copy"><span className="setup-title">Letta mod</span><span className="setup-detail">{modStatus.installed === true ? `Installed · ${shortenPath(modStatus.path)}` : modStatus.installed === false ? `Not installed · ${shortenPath(modStatus.path)}` : canUseNativeControls ? "Checking install state" : "Tauri runtime needed"}</span></span><button className="pill-btn accent" type="button" onClick={onInstallMod} data-tauri-drag-region="false"><Download size={12} strokeWidth={2.3} />{modStatus.installed ? "Reinstall" : "Install"}</button></div>
               <div className="setup-row"><span className="status-slot"><Download className="setup-icon" size={14} strokeWidth={2.3} /></span><span className="setup-copy"><span className="setup-title">AGY hooks</span><span className="setup-detail">{agyHookStatus.installed === true ? `Installed · ${shortenPath(agyHookStatus.path)}` : agyHookStatus.installed === false ? `Not installed · ${shortenPath(agyHookStatus.path)}` : canUseNativeControls ? "Checking install state" : "Tauri runtime needed"}</span></span><button className="pill-btn accent" type="button" onClick={onInstallAgyHooks} data-tauri-drag-region="false"><Download size={12} strokeWidth={2.3} />{agyHookStatus.installed ? "Reinstall" : "Install"}</button></div>
@@ -271,7 +285,6 @@ export const SetupPanel = ({ capabilities, canUseNativeControls, completionPetEn
 
           {activeCategory === "pet" ? (
             <>
-              <div className="setup-section-heading"><span>Pet</span><small>Companion identity and completion preview</small></div>
               <div className="setup-row pet-setting-row"><span className="pet-current-preview"><SetupPetPreview pet={pet} loadout={haloBotLoadout} /></span><span className="setup-copy"><span className="setup-title">{PET_LABELS[pet]}</span><span className="setup-detail" id="pet-preview-availability">{pet === "halo-bot" ? `${getHaloBotLoadoutLabel(haloBotLoadout)} · ${haloBotLoadout.toUpperCase()} · used across Agent Halo` : canUseNativeControls ? "Used across Agent Halo" : "Desktop runtime required to preview"}</span></span><span className="setup-row-actions"><button ref={petPickerTriggerRef} className="pill-btn" type="button" onClick={() => { if (petPickerOpen) closePetPicker(); else { setLoadoutPickerOpen(false); setPetPickerOpen(true); } }} data-tauri-drag-region="false" aria-controls="pet-picker" aria-expanded={petPickerOpen}><Bot size={12} strokeWidth={2.3} />{petPickerOpen ? "Close" : "Choose"}</button><button className={`pill-btn accent pet-preview-button ${petPreviewState === "stale" ? "is-stale" : ""}`} type="button" disabled={!canUseNativeControls || petPreviewState === "showing"} onClick={() => void onShowPetPreview()} data-tauri-drag-region="false" aria-label={petPreviewState === "stale" ? "Update Completion Pet preview" : "Show Completion Pet preview"} aria-describedby="pet-preview-availability">{petPreviewState === "stale" ? <RefreshCw size={12} strokeWidth={2.3} /> : petPreviewState === "shown" ? <Check size={12} strokeWidth={2.3} /> : <Play size={12} strokeWidth={2.3} />}{petPreviewState === "showing" ? "Showing…" : petPreviewState === "stale" ? "Update Pet" : petPreviewState === "shown" ? "Show again" : "Show Pet"}</button></span></div>
               {petPickerOpen ? (
                 <div className="pet-picker" id="pet-picker" role="radiogroup" aria-label="Pet">
@@ -332,7 +345,6 @@ export const SetupPanel = ({ capabilities, canUseNativeControls, completionPetEn
 
           {activeCategory === "display" ? (
             <>
-              <div className="setup-section-heading"><span>Display</span><small>Screen placement and power behavior</small></div>
               <div className="setup-row display-setting-row"><span className="status-slot"><MonitorIcon className="setup-icon" size={14} strokeWidth={2.2} /></span><span className="setup-copy"><span className="setup-title">Target display</span><span className="setup-detail">{!canUseNativeControls ? "Desktop runtime required" : displayLoading ? "Reading connected displays" : displayError ? displayError : displayState?.fallbackActive ? `${displayState.preferredDisplayName || "Saved display"} unavailable · using ${activeDisplay?.name ?? "Primary"}` : activeDisplay ? `${activeDisplay.name} · ${displayResolutionLabel(activeDisplay)}${activeDisplay.isPrimary ? " · Primary" : ""}` : "No connected display found"}</span></span><button ref={displayPickerTriggerRef} className="pill-btn" type="button" disabled={!canUseNativeControls || displays.length === 0} aria-busy={displayLoading} onClick={() => { if (displayPickerOpen) closeDisplayPicker(); else { setDisplayPickerOpen(true); void onDisplayRefresh(); } }} data-tauri-drag-region="false" aria-controls="display-picker" aria-expanded={displayPickerOpen}><MonitorIcon size={12} strokeWidth={2.2} />{displayPickerOpen ? "Close" : "Choose"}</button></div>
               {displayPickerOpen ? (
                 <div className="display-picker" id="display-picker" role="radiogroup" aria-label="Display" aria-busy={displayLoading}>{displays.map((display, index) => <button className="display-option" data-selected={display.id === displayRadioSelection} disabled={displayLoading} id={`display-option-${index}`} type="button" role="radio" aria-checked={display.id === displayRadioSelection} tabIndex={display.id === displayFocusTarget ? 0 : -1} onClick={() => { if (displayInteractionBusyRef.current) return; displayInteractionBusyRef.current = true; void onDisplayChange(display.id).finally(() => { displayInteractionBusyRef.current = false; }); closeDisplayPicker(); }} onKeyDown={(event) => handleDisplayKeyDown(event, index)} data-tauri-drag-region="false" key={display.id}><MonitorIcon size={16} strokeWidth={2.1} aria-hidden="true" /><span className="display-option-copy"><span>{display.name}</span><small>{displayResolutionLabel(display)}{display.isPrimary ? " · Primary" : ""}</small></span><span className="display-option-mark" aria-hidden="true">{display.id === displayRadioSelection ? "✓" : ""}</span></button>)}</div>
@@ -340,8 +352,9 @@ export const SetupPanel = ({ capabilities, canUseNativeControls, completionPetEn
               <div className="setup-row"><span className="status-slot"><Coffee className="setup-icon" size={14} strokeWidth={2.3} /></span><span className="setup-copy"><span className="setup-title">Keep display awake</span><span className="setup-detail">{!keepAwakeEnabled ? "Off · display follows macOS idle settings" : !canUseNativeControls ? "Desktop runtime required" : keepAwakeError ? `Unavailable · ${keepAwakeError}` : keepAwakeActive ? "Active · Letta is working" : "On · waiting for active work"}</span></span><button className={`pill-btn ${keepAwakeEnabled ? "accent" : ""}`} type="button" onClick={() => onKeepAwakeChange(!keepAwakeEnabled)} data-tauri-drag-region="false" aria-label={`${keepAwakeEnabled ? "Disable" : "Enable"} keep display awake`}>{keepAwakeEnabled ? "On" : "Off"}</button></div>
             </>
           ) : null}
-        </div>
-      </div>
+          </div>
+        </BoardScroll>
+      </BoardSurface>
     </div>
   );
 };
