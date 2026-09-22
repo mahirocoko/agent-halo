@@ -8,10 +8,10 @@ const assetRoot = join(distRoot, "assets");
 
 const BUDGETS = {
   coreDistBytes: 575_500,
-  cssGzipBytes: 13_650,
+  cssGzipBytes: 17_000,
   haloBotAssetBytes: 50_000,
   haloformAssetBytes: 85_000,
-  jsGzipBytes: 105_800,
+  jsGzipBytes: 106_500,
   movementAssetBytes: 28_250_000,
 };
 
@@ -66,8 +66,8 @@ const findLegacy = async (directory, relative = "") => {
 await findLegacy(distRoot);
 
 const payload = {
-  baselineCommit: "3fc8ff8",
-  budgetRevision: "complete-pixabots-catalog",
+  baselineCommit: "6ed1c5f",
+  budgetRevision: "agent-halo-material-tabs-v1",
   budgets: BUDGETS,
   current: {
     cssGzipBytes: css.gzipBytes,

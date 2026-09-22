@@ -1,0 +1,1293 @@
+/* Agent Halo UI board styles — restored canonical IA & Halo-owned navigation */
+
+/* Header Branding & Identity */
+.sheet-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex: none;
+  min-height: 34px;
+  box-sizing: border-box;
+  padding: 0;
+  margin-bottom: 14px;
+}
+
+.header-camera-corridor {
+  flex: 1 1 auto;
+  min-width: var(--camera-width, 190px);
+  height: 100%;
+  pointer-events: none;
+}
+
+.header-right-wing {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex: none;
+}
+
+.header-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: none;
+}
+
+.header-brand-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  flex: none;
+}
+
+.header-brand-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #f2f3f5;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.header-setup-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-2);
+  cursor: pointer;
+  flex: none;
+  margin-left: 4px;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.header-setup-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+
+.header-setup-btn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.header-close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-2);
+  cursor: pointer;
+  flex: none;
+  margin-left: 6px;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.header-close-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+
+.header-close-btn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Discrete Header Tabs Rail — Halo-Owned */
+.header-tabs-rail {
+  display: inline-flex;
+  align-items: center;
+  background: transparent;
+  border: none;
+  flex: none;
+}
+
+.header-tablist {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  flex: none;
+}
+
+.header-tab-discrete {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-2, rgba(255, 255, 255, 0.65));
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 6px;
+  white-space: nowrap;
+  outline: none;
+  transition: color 120ms ease;
+  flex: none;
+}
+
+.header-tab-discrete:hover {
+  color: #ffffff;
+}
+
+.header-tab-discrete[data-active="true"] {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.header-tab-discrete:focus-visible {
+  box-shadow: 0 0 0 2px var(--focus-ring);
+}
+
+/* Halo-Specific Pastel Signal Underline Indicator */
+.tab-active-indicator {
+  position: absolute;
+  bottom: -3px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 14px;
+  height: 2px;
+  border-radius: 1px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.header-tab-discrete[data-active="true"] .tab-active-indicator {
+  opacity: 1;
+}
+
+.tab-active-indicator[data-tab="sessions"] {
+  background-color: #8ea594;
+}
+
+.tab-active-indicator[data-tab="pomodoro"] {
+  background-color: #8c87a1;
+}
+
+.tab-active-indicator[data-tab="usage"] {
+  background-color: #a39e6a;
+}
+
+.tab-active-indicator[data-tab="runtime"] {
+  background-color: #717f8e;
+}
+
+.tab-active-indicator[data-tab="services"] {
+  background-color: #6f8888;
+}
+
+/* Compact query: triggers ONLY on actual small viewport constraints (< 640px) */
+@container halo-panel (max-width: 640px) {
+  .sheet-header {
+    display: flex;
+    justify-content: space-between;
+  }
+  .header-camera-corridor {
+    display: none;
+  }
+  .header-tablist {
+    gap: 3px;
+  }
+  .header-tab-discrete {
+    padding: 4px;
+    font-size: 11px;
+    gap: 0;
+  }
+  .header-tab-discrete .tab-label {
+    display: none;
+  }
+}
+
+@container halo-panel (max-width: 400px) {
+  .sheet-header {
+    gap: 4px;
+  }
+  .header-brand {
+    gap: 4px;
+  }
+  .header-brand-name,
+  .agent-badge {
+    display: none;
+  }
+  .header-close-btn,
+  .header-setup-btn {
+    margin-left: 2px;
+    width: 22px;
+    height: 22px;
+  }
+}
+
+/* Entrance Choreography */
+@keyframes halo-surface-in {
+  0% {
+    transform: translateY(4px);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+/* Tactile Pastel Surfaces with Local Seamless Noise Grain */
+.halo-tab-surface {
+  --text: var(--surface-ink);
+  --text-2: var(--surface-ink-2);
+  --text-3: var(--surface-ink-3);
+  --hair: var(--surface-line);
+  --fill: var(--surface-fill);
+  --fill-2: var(--surface-fill-2);
+  --accent: var(--surface-accent);
+  --accent-ink: var(--surface-accent-ink);
+  --waiting: var(--surface-warn);
+  --done: var(--surface-ok);
+  --danger: var(--surface-danger);
+  --focus-ring: var(--surface-ink);
+  --scrollbar-track: color-mix(in srgb, var(--surface-ink) 8%, transparent);
+  --scrollbar-thumb: color-mix(in srgb, var(--surface-ink) 28%, transparent);
+  --scrollbar-thumb-hover: color-mix(in srgb, var(--surface-ink) 42%, transparent);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  inline-size: 100%;
+  min-inline-size: 0;
+  min-block-size: 0;
+  box-sizing: border-box;
+  border-radius: 20px;
+  padding: 0;
+  color: var(--surface-ink);
+  background-color: var(--surface-base);
+  border: 0;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.22);
+  overflow: hidden;
+  animation: halo-surface-in 160ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Explicit Inner Scroll Viewport inside every board */
+.halo-inner-scroll {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  inline-size: 100%;
+  min-inline-size: 0;
+  min-block-size: 0;
+  box-sizing: border-box;
+  padding: 14px 16px 20px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+.halo-inner-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.halo-inner-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.halo-inner-scroll::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border-radius: 3px;
+}
+
+.halo-inner-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+
+/* Texture Grain Overlay — behind content, pointer-events none, 128px tile repeat */
+.halo-tab-surface::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0.08;
+  mix-blend-mode: overlay;
+  background-image: url("../assets/textures/noise-tile.png");
+  background-repeat: repeat;
+  background-size: 128px 128px;
+  z-index: 1;
+}
+
+.halo-tab-surface > * {
+  position: relative;
+  z-index: 2;
+}
+
+@media (prefers-contrast: more) {
+  .halo-tab-surface::after {
+    display: none !important;
+  }
+}
+
+/* Surface Themes - Muted Dyed-Paper Palette Family (L* ~ 55%-65%) */
+.halo-surface-mint {
+  --surface-base: #8ea594;
+  --surface-ink: #121a14;
+  --surface-ink-2: #1c2b20;
+  --surface-ink-3: #26392b;
+  --surface-line: rgba(18, 26, 20, 0.16);
+  --surface-fill: rgba(18, 26, 20, 0.08);
+  --surface-fill-2: rgba(18, 26, 20, 0.14);
+  --surface-accent: #1e2d21;
+  --surface-accent-ink: #f0f4f1;
+  --surface-ok: #155e34;
+  --surface-warn: #6e4004;
+  --surface-danger: #8a2024;
+}
+
+.halo-surface-lavender {
+  --surface-base: #8c87a1;
+  --surface-ink: #151020;
+  --surface-ink-2: #231c34;
+  --surface-ink-3: #322748;
+  --surface-line: rgba(21, 16, 32, 0.16);
+  --surface-fill: rgba(21, 16, 32, 0.08);
+  --surface-fill-2: rgba(21, 16, 32, 0.14);
+  --surface-accent: #271f38;
+  --surface-accent-ink: #f3f0f7;
+  --surface-ok: #1c593d;
+  --surface-warn: #683804;
+  --surface-danger: #801d2e;
+}
+
+.halo-surface-sand {
+  --surface-base: #a39e6a;
+  --surface-ink: #1c1a0e;
+  --surface-ink-2: #2c2816;
+  --surface-ink-3: #3c361e;
+  --surface-line: rgba(28, 26, 14, 0.16);
+  --surface-fill: rgba(28, 26, 14, 0.08);
+  --surface-fill-2: rgba(28, 26, 14, 0.14);
+  --surface-accent: #302c17;
+  --surface-accent-ink: #f7f5ed;
+  --surface-ok: #195e3d;
+  --surface-warn: #733c03;
+  --surface-danger: #842323;
+}
+
+.halo-surface-parchment {
+  --surface-base: #9b9683;
+  --surface-ink: #1a1810;
+  --surface-ink-2: #2a271b;
+  --surface-ink-3: #3a3625;
+  --surface-line: rgba(26, 24, 16, 0.16);
+  --surface-fill: rgba(26, 24, 16, 0.08);
+  --surface-fill-2: rgba(26, 24, 16, 0.14);
+  --surface-accent: #29271c;
+  --surface-accent-ink: #f7f5ef;
+  --surface-ok: #185e3d;
+  --surface-warn: #733c03;
+  --surface-danger: #842323;
+}
+
+.halo-surface-slate,
+.halo-surface-navy {
+  --surface-base: #717f8e;
+  --surface-ink: #0c1217;
+  --surface-ink-2: #162029;
+  --surface-ink-3: #1f2b37;
+  --surface-line: rgba(12, 18, 23, 0.16);
+  --surface-fill: rgba(12, 18, 23, 0.07);
+  --surface-fill-2: rgba(12, 18, 23, 0.13);
+  --surface-accent: #192430;
+  --surface-accent-ink: #edf2f7;
+  --surface-ok: #155e3c;
+  --surface-warn: #714205;
+  --surface-danger: #862529;
+}
+
+.halo-surface-teal {
+  --surface-base: #6f8888;
+  --surface-ink: #0d1717;
+  --surface-ink-2: #172828;
+  --surface-ink-3: #203636;
+  --surface-line: rgba(13, 23, 23, 0.16);
+  --surface-fill: rgba(13, 23, 23, 0.07);
+  --surface-fill-2: rgba(13, 23, 23, 0.13);
+  --surface-accent: #182828;
+  --surface-accent-ink: #edf5f5;
+  --surface-ok: #135d3d;
+  --surface-warn: #6e4104;
+  --surface-danger: #852226;
+}
+
+/* ========================================================= */
+/* SESSIONS SURFACE STYLES                                   */
+/* ========================================================= */
+
+.sessions-tray {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  inline-size: 100%;
+  min-inline-size: 0;
+  flex: 1 1 auto;
+  min-block-size: 0;
+  gap: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+  overflow: hidden;
+}
+
+.sessions-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 0;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.22);
+}
+
+.sessions-card .halo-inner-scroll {
+  position: absolute;
+  inset: 0;
+  padding: 12px;
+  scrollbar-gutter: auto;
+}
+
+.sessions-card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+  padding: 0 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--surface-ink);
+  flex-shrink: 0;
+}
+
+.sessions-card-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--surface-ink);
+}
+
+.sessions-card-head .session-section-count {
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--surface-fill-2);
+  color: var(--surface-ink);
+}
+
+.sessions-card-head .session-section-action {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 6px;
+  border: 0;
+  background: var(--surface-fill-2);
+  color: var(--surface-ink);
+  cursor: pointer;
+  margin-left: auto;
+  transition: background 120ms ease;
+}
+
+.sessions-card-head .session-section-action:hover {
+  background: color-mix(in srgb, var(--surface-ink) 20%, transparent);
+}
+
+.sessions-card-head .session-section-action[data-armed="true"] {
+  background: color-mix(in srgb, var(--surface-danger) 18%, transparent);
+  color: var(--surface-danger);
+}
+
+.sessions-card-recent {
+  container-type: inline-size;
+}
+
+.sessions-card-recent .event-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sessions-card-recent .event-row {
+  display: grid;
+  grid-template-columns: 54px minmax(68px, 0.8fr) minmax(0, 1.2fr);
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 2px;
+  font-size: 10px;
+  line-height: 1.25;
+}
+
+.sessions-card-recent .event-time {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  white-space: nowrap;
+}
+
+.sessions-card-recent .event-type,
+.sessions-card-recent .event-detail {
+  overflow-wrap: anywhere;
+}
+
+.sessions-card-recent .event-type {
+  color: var(--surface-ink-2);
+  font-weight: 650;
+}
+
+@container (max-width: 240px) {
+  .sessions-card-recent .event-row {
+    grid-template-columns: 54px minmax(0, 1fr);
+  }
+
+  .sessions-card-recent .event-detail {
+    grid-column: 1 / -1;
+  }
+}
+
+.sessions-divider {
+  width: 12px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  background: transparent;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+  z-index: 3;
+  outline: none;
+}
+
+.sessions-divider:focus-visible {
+  outline: 2px solid var(--focus-ring, #ffffff);
+  outline-offset: -1px;
+  border-radius: 4px;
+}
+
+.sessions-grip {
+  width: 4px;
+  height: 28px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  pointer-events: none;
+  transition: background 120ms ease, transform 120ms ease;
+}
+
+.sessions-divider:hover .sessions-grip,
+.sessions-divider:focus-visible .sessions-grip {
+  background: rgba(255, 255, 255, 0.52);
+  transform: scaleY(1.15);
+}
+
+.sessions-card .session-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.sessions-card .session-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-ink) 5%, transparent);
+  border: 0;
+  box-shadow: none;
+  gap: 8px;
+  min-width: 0;
+  transition: background 120ms ease;
+}
+
+.sessions-card .session-row:hover {
+  background: color-mix(in srgb, var(--surface-ink) 14%, transparent);
+}
+
+.sessions-card .session-row:focus-within {
+  background: color-mix(in srgb, var(--surface-ink) 11%, transparent);
+}
+
+.sessions-card .session-row.session-group {
+  background: color-mix(in srgb, var(--surface-ink) 6.5%, transparent);
+}
+
+.sessions-card .session-row.session-group:hover {
+  background: color-mix(in srgb, var(--surface-ink) 15%, transparent);
+}
+
+.sessions-card .session-row-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 66px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: 8px;
+  row-gap: 2px;
+  padding: 0;
+  outline: none;
+}
+
+.sessions-card .session-row-main:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+  border-radius: 6px;
+}
+
+.sessions-card .session-group-main {
+  grid-template-columns: 14px 66px minmax(0, 1fr);
+}
+
+.sessions-card .session-group-main .session-disclosure {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  align-self: center;
+  color: var(--surface-ink-2);
+}
+
+.sessions-card .session-pet {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  align-self: center;
+}
+
+.sessions-card .session-group-main .session-pet {
+  grid-column: 2;
+}
+
+.sessions-card .session-child-row {
+  background: color-mix(in srgb, var(--surface-ink) 4%, transparent);
+  border: 0;
+  border-radius: 8px;
+}
+
+.sessions-card .session-child-row:hover {
+  background: color-mix(in srgb, var(--surface-ink) 12%, transparent);
+}
+
+.sessions-card .session-child-list {
+  list-style: none;
+  margin: 4px 0 2px 14px;
+  padding: 0;
+  border-left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sessions-card .session-child-row .session-row-main {
+  grid-template-columns: 20px minmax(0, 1fr);
+}
+
+.sessions-card .session-child-row .status-slot {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  align-self: center;
+}
+
+.sessions-card .session-label {
+  grid-column: 2;
+  grid-row: 1;
+  gap: 1.5px;
+  overflow: visible;
+}
+
+.sessions-card .session-group-main .session-label {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.sessions-card .row-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 0;
+  background: var(--surface-fill-2);
+  color: var(--surface-ink);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 120ms ease;
+}
+
+.sessions-card .row-btn:hover {
+  color: var(--surface-ink);
+  background: color-mix(in srgb, var(--surface-ink) 20%, transparent);
+}
+
+.sessions-card .row-btn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+@container halo-panel (max-width: 640px) {
+  .sessions-tray {
+    flex-direction: column;
+    gap: 12px;
+    overflow-y: auto;
+  }
+
+  .sessions-card {
+    width: 100% !important;
+    min-width: 0 !important;
+    flex: none !important;
+  }
+
+  .sessions-card .halo-inner-scroll {
+    position: relative;
+    inset: auto;
+    overflow: visible;
+    padding: 12px;
+  }
+
+  .sessions-card .session-row {
+    padding-inline: 6px;
+  }
+
+  .sessions-card .session-row-main {
+    column-gap: 6px;
+  }
+
+  .sessions-divider {
+    display: none !important;
+  }
+}
+
+/* ========================================================= */
+/* FOCUS TOOLS SURFACE STYLES                                */
+/* ========================================================= */
+
+.halo-surface[data-panel-view="pomodoro"][data-state="open"],
+.halo-surface[data-panel-view="pomodoro"][data-state="open"] .sheet-inner {
+  max-height: 500px;
+}
+
+.focus-tools-container {
+  container: focus-tools / inline-size;
+  min-inline-size: 0;
+  min-block-size: 0;
+  display: flex;
+  flex: 1 1 auto;
+}
+
+.focus-tools-tray {
+  min-inline-size: 0;
+  min-block-size: 0;
+  display: flex;
+  flex: 1 1 auto;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.focus-tool-card {
+  min-inline-size: 0;
+  min-block-size: 0;
+}
+
+.focus-tool-card-pomodoro {
+  flex: 40 1 0;
+}
+
+.focus-tool-card-stopwatch {
+  flex: 32 1 0;
+}
+
+.focus-tool-card-move {
+  flex: 28 1 0;
+}
+
+.focus-tool-card .halo-inner-scroll {
+  position: absolute;
+  inset: 0;
+  padding: 12px;
+  scrollbar-gutter: auto;
+}
+
+.focus-tool-card-stopwatch .halo-inner-scroll {
+  overflow-y: hidden;
+}
+
+.focus-tool-card .btn {
+  border: 0;
+  color: var(--surface-accent-ink);
+  background: var(--surface-accent);
+}
+
+.focus-tool-card .btn:hover {
+  background: color-mix(in srgb, var(--surface-accent) 82%, #000);
+}
+
+.focus-tool-card .btn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+@container focus-tools (max-width: 640px) {
+  .focus-tools-tray {
+    flex-direction: column;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .focus-tool-card {
+    inline-size: 100%;
+    flex: none;
+  }
+
+  .focus-tool-card-pomodoro {
+    min-block-size: 430px;
+  }
+
+  .focus-tool-card-stopwatch {
+    min-block-size: 330px;
+  }
+
+  .focus-tool-card-move {
+    min-block-size: 350px;
+  }
+
+  .focus-tool-card .halo-inner-scroll {
+    position: relative;
+    inset: auto;
+    min-block-size: 100%;
+    overflow: visible;
+    padding: 12px;
+  }
+}
+
+/* ========================================================= */
+/* USAGE SURFACE STYLES                                      */
+/* ========================================================= */
+
+.usage-board {
+  gap: 8px;
+}
+
+.usage-board .usage-list {
+  background: transparent;
+  color: var(--surface-ink);
+  overflow: visible;
+}
+
+.usage-board .usage-layout,
+.usage-board .usage-sidebar,
+.usage-board .usage-detail-panel {
+  overflow: visible;
+}
+
+.usage-board .usage-sidebar {
+  border-right-color: var(--surface-line);
+}
+
+.usage-board .usage-list-topline,
+.usage-board .usage-setting-desc,
+.usage-board .usage-freshness,
+.usage-board .usage-group-empty,
+.usage-board .usage-meter-foot,
+.usage-board .usage-value-row,
+.usage-board .usage-local-history-head,
+.usage-board .usage-trend-head,
+.usage-board .usage-history-pair dt,
+.usage-board .usage-insight-label,
+.usage-board .usage-daily-tokens,
+.usage-board .usage-daily-token,
+.usage-board .usage-model-share {
+  color: var(--text-3);
+}
+
+.usage-board .usage-side-tab {
+  color: var(--surface-ink-2);
+}
+
+.usage-board .usage-side-tab:hover,
+.usage-board .usage-side-tab[data-active="true"] {
+  background: var(--surface-accent);
+  color: var(--surface-accent-ink);
+}
+
+.usage-board .usage-side-settings,
+.usage-board .usage-metric-group,
+.usage-board .usage-value-rows,
+.usage-board .usage-local-history {
+  border-color: var(--surface-line);
+}
+
+.usage-board .usage-setting-title,
+.usage-board .usage-provider-title,
+.usage-board .usage-group-title,
+.usage-board .usage-meter-label {
+  color: var(--text);
+}
+
+.usage-board .usage-plan,
+.usage-board .usage-group-models,
+.usage-board .usage-value-row dd,
+.usage-board .usage-chip,
+.usage-board .usage-history-pair dd,
+.usage-board .usage-trend-head strong,
+.usage-board .usage-daily-token dd,
+.usage-board .usage-model-share strong {
+  color: var(--text-2);
+}
+
+.usage-board .usage-plan,
+.usage-board .usage-chip {
+  border-color: var(--surface-line);
+}
+
+.usage-board .usage-local-history-head small,
+.usage-board .usage-trend-note {
+  color: var(--surface-ink-3);
+}
+
+.usage-board .usage-provider-link {
+  border-color: var(--surface-line);
+  background: var(--surface-fill-2);
+  color: var(--surface-ink-2);
+}
+
+.usage-board .usage-provider-link:hover {
+  background: #fff8ea;
+  color: var(--surface-ink);
+}
+
+.usage-board .usage-setting-segment,
+.usage-board .usage-setting-option {
+  border-color: var(--surface-line);
+}
+
+.usage-board .usage-setting-segment,
+.usage-board .usage-meter-track {
+  background: var(--surface-fill);
+}
+
+.usage-board .usage-provider-note {
+  background: color-mix(in srgb, var(--surface-warn) 22%, transparent);
+  color: var(--surface-warn);
+}
+
+.usage-board .usage-meter-status {
+  color: var(--surface-ok);
+}
+
+.usage-board .usage-meter[data-level="warning"] .usage-meter-status {
+  color: var(--surface-warn);
+}
+
+.usage-board .usage-meter[data-level="danger"] .usage-meter-status {
+  color: var(--surface-danger);
+}
+
+.usage-board .usage-summary-card,
+.usage-board .usage-stat-card {
+  background: #fff4d8;
+  border: 1px solid var(--surface-line);
+  color: var(--surface-ink);
+  box-shadow: 0 1px 3px rgba(42, 24, 8, 0.08);
+}
+
+.usage-board .pill-btn,
+.usage-board .btn {
+  background: var(--surface-accent);
+  color: var(--surface-accent-ink);
+  border: none;
+}
+
+/* ========================================================= */
+/* RUNTIME & SERVICES SURFACE STYLES (Readable Dark Surface) */
+/* ========================================================= */
+
+.runtime-board,
+.services-board {
+  padding: 10px 14px;
+}
+
+.runtime-board .runtime-panel,
+.services-board .runtime-panel {
+  background: transparent;
+  color: var(--surface-ink);
+  overflow: visible;
+}
+
+.runtime-board .runtime-toolbar,
+.services-board .runtime-toolbar {
+  background: var(--surface-base);
+  border-bottom-color: var(--surface-line);
+  color: var(--surface-ink);
+}
+
+.runtime-board .runtime-subtitle,
+.runtime-board .runtime-footnote,
+.services-board .runtime-subtitle,
+.services-board .runtime-footnote {
+  color: var(--surface-ink-2);
+}
+
+.runtime-board .runtime-service-disclosure,
+.services-board .runtime-service-disclosure {
+  color: var(--surface-ink);
+}
+
+/* ========================================================= */
+/* SETTINGS BOARD CORRECTION (Authoritative Requirement D)    */
+/* ========================================================= */
+
+.settings-board .setup-body {
+  padding: 0;
+  color: var(--surface-ink);
+  max-width: 100%;
+  overflow: visible;
+  gap: 8px;
+}
+
+.settings-board .setup-layout {
+  max-width: 100%;
+  min-inline-size: 0;
+  overflow: visible;
+  gap: 12px;
+}
+
+.settings-board .setup-sidebar {
+  height: fit-content;
+  align-self: start;
+  border-right: 1px solid var(--surface-line);
+  padding-right: 8px;
+  gap: 4px;
+}
+
+.settings-board .setup-side-tab {
+  color: var(--surface-ink-2);
+  border-radius: 8px;
+  font-weight: 600;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.settings-board .setup-side-tab:hover {
+  color: var(--surface-ink);
+  background: var(--surface-fill);
+}
+
+.settings-board .setup-side-tab[data-active="true"] {
+  background: var(--surface-accent);
+  color: var(--surface-accent-ink);
+}
+
+.settings-board .setup-side-tab:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.settings-board .setup-section-heading > span {
+  color: var(--surface-ink);
+  font-weight: 700;
+}
+
+.settings-board .setup-section-heading small {
+  color: var(--surface-ink-2);
+}
+
+.settings-board .setup-row {
+  background: var(--surface-fill);
+  border: 1px solid var(--surface-line);
+  border-radius: 12px;
+  padding: 9px 12px;
+  gap: 8px;
+  box-shadow: none;
+  color: var(--surface-ink);
+  transition: background 120ms ease;
+}
+
+.settings-board .setup-row:hover {
+  background: var(--surface-fill-2);
+}
+
+.settings-board .setup-row.passive {
+  background: transparent;
+  border: 1px dashed var(--surface-line);
+  box-shadow: none;
+}
+
+.session-detail-actions-integrated {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 12px;
+  padding-bottom: 4px;
+  border-top: 1px solid var(--surface-line);
+  flex: none;
+}
+
+.session-detail-actions-integrated .session-context-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.session-detail-actions-integrated .session-context-return {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--surface-ink);
+  background: transparent;
+  border: 1px solid var(--surface-line);
+  border-radius: 6px;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.session-detail-actions-integrated .session-context-return:hover {
+  background: var(--surface-fill-2);
+}
+
+.settings-board .setup-title {
+  color: var(--surface-ink);
+  font-weight: 600;
+}
+
+.settings-board .setup-detail {
+  color: var(--surface-ink-2);
+}
+
+.settings-board .pill-btn,
+.settings-board .row-btn,
+.settings-board .btn {
+  background: var(--surface-accent);
+  color: var(--surface-accent-ink);
+  border: none;
+  border-radius: 8px;
+}
+
+.settings-board .pill-btn:hover,
+.settings-board .row-btn:hover,
+.settings-board .btn:hover {
+  background: color-mix(in srgb, var(--surface-accent) 82%, #000);
+}
+
+.settings-board .pill-btn:focus-visible,
+.settings-board .row-btn:focus-visible,
+.settings-board .btn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.settings-board .pill-btn.accent,
+.settings-board .btn.accent {
+  background: var(--surface-accent);
+  color: var(--surface-accent-ink);
+}
+
+.session-detail-board .detail-body {
+  height: auto;
+  min-height: 0;
+  flex: none;
+  overflow: visible;
+  max-height: none;
+  padding: 0;
+}
+
+.session-detail-board .action-list {
+  overflow: visible;
+  max-height: none;
+}
+
+.session-detail-board .detail-path,
+.session-detail-board .capability-note,
+.session-detail-board .detail-section-label,
+.session-detail-board .action-detail,
+.session-detail-board .empty-text {
+  color: var(--surface-ink-2);
+}
+
+.session-detail-board .action-tool,
+.session-detail-board .status-text {
+  color: var(--surface-ink);
+}
+
+.session-detail-board .action-row[data-kind="thinking"] .action-tool,
+.session-detail-board .action-row[data-kind="planning"] .action-tool {
+  color: var(--surface-accent);
+}
+
+.session-detail-board .action-row[data-kind="editing"] .action-tool,
+.session-detail-board .action-row[data-kind="shell"] .action-tool,
+.session-detail-board .action-row[data-kind="tool"] .action-tool {
+  color: #6b3a0e;
+}
+
+.session-detail-board .action-row[data-kind="delegating"] .action-tool,
+.session-detail-board .action-row[data-kind="visual"] .action-tool,
+.session-detail-board .action-row[data-kind="model"] .action-tool,
+.session-detail-board .action-row[data-kind="skill"] .action-tool {
+  color: #4a2678;
+}
+
+.session-detail-board .action-mark {
+  background: var(--surface-ink-3);
+}
+
+@container halo-panel (max-width: 380px) {
+  .settings-board .setup-sidebar {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    padding: 0 0 8px;
+    border-right: 0;
+    border-bottom: 1px solid var(--surface-line);
+  }
+
+  .settings-board .setup-side-tab {
+    gap: 3px;
+    padding-inline: 3px;
+  }
+
+  .settings-board .setup-side-tab span {
+    overflow: visible;
+    font-size: 9.5px;
+    text-overflow: clip;
+  }
+}
+
+/* Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  .halo-tab-surface,
+  .header-tab-discrete,
+  .tab-active-indicator,
+  .settings-board {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}

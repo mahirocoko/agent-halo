@@ -1,4 +1,10 @@
 import { expect, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
+
+const openPetSettings = async (page: Page) => {
+  await page.getByRole("button", { name: "Setup" }).click();
+  await page.getByRole("tab", { name: "Pet" }).click();
+};
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => window.localStorage.clear());
@@ -19,10 +25,24 @@ test("every surface uses the Halo Bot default with one stable loadout and no ran
   await expect(pet.locator(".pixabot-layer")).toHaveCount(4);
   const signal = pet.locator(".halo-pet-signal");
   await expect(signal).toHaveCSS("background-size", "80px 20px");
+  await expect(pet).toHaveCSS("width", "66px");
+  await expect(pet).toHaveCSS("height", "36px");
   await expect(signal).toHaveCSS("left", "40px");
   await expect(signal).toHaveCSS("top", "8px");
   await expect(signal).toHaveCSS("width", "20px");
   await expect(signal).toHaveCSS("height", "20px");
+
+  const separation = await pet.evaluate((element) => {
+    const body = element.querySelector<HTMLElement>(".halo-pet-body")!.getBoundingClientRect();
+    const signal = element.querySelector<HTMLElement>(".halo-pet-signal")!.getBoundingClientRect();
+    const owner = element.getBoundingClientRect();
+    return {
+      bodySignalGap: signal.left - body.right,
+      signalInsideOwner: signal.right <= owner.right,
+    };
+  });
+  expect(separation.bodySignalGap).toBeGreaterThanOrEqual(4);
+  expect(separation.signalInsideOwner).toBe(true);
 
   const dimensions = await pet.evaluate(async (element) => {
     const body = getComputedStyle(element.querySelector('.pixabot-layer[data-category="body"] .pixabot-part')!).backgroundImage.match(/url\(["']?(.*?)["']?\)/)?.[1];
@@ -103,8 +123,7 @@ test("setup selects one global pet and persists the preference", async ({ page }
   await page.goto("/?demo=1&demoScenario=long-llm");
   await expect(page.locator(".session-row .halo-pet")).toHaveAttribute("data-pet", "halo-bot");
 
-  await page.getByRole("button", { name: "Setup" }).click();
-  await page.getByRole("tab", { name: "Pet" }).click();
+  await openPetSettings(page);
   const petRow = page.locator(".pet-setting-row");
   await petRow.getByRole("button", { name: /Choose/ }).click();
   const picker = page.getByRole("radiogroup", { name: "Pet", exact: true });
@@ -146,8 +165,7 @@ test("setup selects one global pet and persists the preference", async ({ page }
 
 test("Halo Bot exposes the complete layered Pixabots catalog and persists any valid combination", async ({ page }) => {
   await page.goto("/?demo=1&demoScenario=long-llm");
-  await page.getByRole("button", { name: "Setup" }).click();
-  await page.getByRole("tab", { name: "Pet" }).click();
+  await openPetSettings(page);
 
   await expect(page.getByText(/Pixabot · 3051 · 10,752 combinations/)).toBeVisible();
   await expect(page.getByRole("group", { name: "Halo Bot loadout" })).toHaveCount(0);
@@ -193,8 +211,7 @@ test("Halo Bot exposes the complete layered Pixabots catalog and persists any va
 
 test("Letta state motion mapping changes only body presentation and persists", async ({ page }) => {
   await page.goto("/?demo=1&demoScenario=long-llm");
-  await page.getByRole("button", { name: "Setup" }).click();
-  await page.getByRole("tab", { name: "Pet" }).click();
+  await openPetSettings(page);
   const workingMotion = page.getByRole("combobox", { name: "Working Letta state motion" });
   await expect(workingMotion).toHaveValue("working");
   await workingMotion.selectOption("idle");
@@ -247,8 +264,7 @@ test("invalid motion mapping values normalize independently to truthful defaults
 
 test("Setup labels Completion Pet after Focus and keeps manual Pet available when automatic offers are Off", async ({ page }) => {
   await page.goto("/?demo=1&demoScenario=idle");
-  await page.getByRole("button", { name: "Setup" }).click();
-  await page.getByRole("tab", { name: "Pet" }).click();
+  await openPetSettings(page);
   const row = page.locator(".setup-row").filter({ has: page.locator(".setup-title", { hasText: /^Completion Pet after Focus$/ }) });
   await expect(row).toContainText("Shows automatically after a completed Focus");
   const toggle = row.getByRole("switch", { name: "Disable completion pet after Focus" });
@@ -262,8 +278,7 @@ test("Setup labels Completion Pet after Focus and keeps manual Pet available whe
 
 test("Offer movement after Focus is opt-in with truthful local camera copy", async ({ page }) => {
   await page.goto("/?demo=1&demoScenario=idle");
-  await page.getByRole("button", { name: "Setup" }).click();
-  await page.getByRole("tab", { name: "Pet" }).click();
+  await openPetSettings(page);
   const row = page.locator(".setup-row").filter({ has: page.locator(".setup-title", { hasText: /^Offer movement after Focus$/ }) });
   await expect(row).toContainText("Off after Focus · manual Move remains available");
   const toggle = row.getByRole("switch", { name: "Enable movement offer after Focus" });
@@ -293,8 +308,7 @@ test("disabling future Movement Breaks does not dismiss an active completion Pet
     };
   });
   await page.goto("/?demo=1&demoScenario=idle");
-  await page.getByRole("button", { name: "Setup" }).click();
-  await page.getByRole("tab", { name: "Pet" }).click();
+  await openPetSettings(page);
   await page.getByRole("switch", { name: "Disable movement offer after Focus" }).click();
   await expect.poll(() => page.evaluate(() => window.localStorage.getItem("agent-halo.movement-break-enabled"))).toBe("false");
   expect(await page.evaluate(() => (window as typeof window & { __movementSettingCalls: Array<{ command: string }> }).__movementSettingCalls.some((call) => call.command === "hide_completion_pet"))).toBe(false);
@@ -318,8 +332,7 @@ test("Pet Setup persists floating size and shows an isolated native preview", as
     };
   });
   await page.goto("/?demo=1&demoScenario=idle");
-  await page.getByRole("button", { name: "Setup" }).click();
-  await page.getByRole("tab", { name: "Pet" }).click();
+  await openPetSettings(page);
   const sizes = page.getByRole("radiogroup", { name: "Completion Pet size" });
   await expect(sizes.getByRole("radio", { name: "2×" })).toHaveAttribute("aria-checked", "true");
   await expect(sizes.getByRole("radio", { name: "2×" })).toHaveAttribute("tabindex", "0");

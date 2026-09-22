@@ -1,4 +1,9 @@
 import { expect, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
+
+const openUsage = async (page: Page) => {
+  await page.getByRole("tab", { name: "Usage" }).click();
+};
 
 test("Usage keeps Codex values visible and labels them outdated after a refresh failure", async ({ page }) => {
   await page.addInitScript(() => {
@@ -44,7 +49,7 @@ test("Usage keeps Codex values visible and labels them outdated after a refresh 
   await page.goto("/");
   await page.getByRole("button", { name: "Open Agent Halo" }).click();
   await expect(page.getByRole("region", { name: "Agent Halo panel" })).toBeVisible();
-  await page.getByRole("tab", { name: "Usage" }).click();
+  await openUsage(page);
   await expect(page.getByText("58% left")).toBeVisible();
   await expect(page.getByText("Rate Limit Resets")).toBeVisible();
   await expect(page.getByText("1 available")).toBeVisible();
@@ -91,7 +96,7 @@ test("Usage meters communicate remaining quota with semantic color and copy", as
 
   await page.goto("/");
   await page.getByRole("button", { name: "Open Agent Halo" }).click();
-  await page.getByRole("tab", { name: "Usage" }).click();
+  await openUsage(page);
 
   const meters = page.locator(".usage-meter");
   await expect(meters).toHaveCount(4);
@@ -113,15 +118,16 @@ test("Usage meters communicate remaining quota with semantic color and copy", as
     fills.map((fill) => getComputedStyle(fill).backgroundColor),
   );
   expect(fillColors).toEqual([
-    "rgb(74, 222, 128)",
-    "rgb(255, 178, 61)",
-    "rgb(255, 107, 102)",
-    "rgb(255, 107, 102)",
+    "rgb(25, 94, 61)",
+    "rgb(115, 60, 3)",
+    "rgb(132, 35, 35)",
+    "rgb(132, 35, 35)",
   ]);
 
-  await page.getByRole("tab", { name: "Settings" }).click();
+  const usageTabs = page.getByRole("tablist", { name: "Usage providers" });
+  await usageTabs.getByRole("tab", { name: "Settings" }).click();
   await page.getByRole("radio", { name: "Used" }).click();
-  await page.getByRole("tab", { name: "Codex" }).click();
+  await usageTabs.getByRole("tab", { name: "Codex" }).click();
 
   await expect(meters.nth(0)).toHaveAttribute("data-level", "ok");
   await expect(meters.nth(0)).toContainText("Available");
@@ -168,7 +174,7 @@ test("Usage marks a native cached Status response as outdated instead of online"
 
   await page.goto("/");
   await page.getByRole("button", { name: "Open Agent Halo" }).click();
-  await page.getByRole("tab", { name: "Usage" }).click();
+  await openUsage(page);
   await page.getByRole("tab", { name: "Claude Code Online" }).click();
   await expect(page.getByText("75% left")).toBeVisible();
 
@@ -203,7 +209,7 @@ test("Usage does not label a status-only provider response as outdated", async (
 
   await page.goto("/");
   await page.getByRole("button", { name: "Open Agent Halo" }).click();
-  await page.getByRole("tab", { name: "Usage" }).click();
+  await openUsage(page);
   await page.getByRole("tab", { name: "Claude Code" }).click();
 
   await expect(page.getByText("Claude Code usage unavailable.")).toBeVisible();
@@ -233,7 +239,7 @@ test("Usage keeps a valid empty Antigravity summary online as no quota data", as
 
   await page.goto("/");
   await page.getByRole("button", { name: "Open Agent Halo" }).click();
-  await page.getByRole("tab", { name: "Usage" }).click();
+  await openUsage(page);
   await page.getByRole("tab", { name: "Antigravity Online" }).click();
 
   await expect(page.getByText("No quota data from current source")).toBeVisible();
@@ -262,7 +268,7 @@ test("Usage hydrates a persisted last-good snapshot before a reload refresh comp
 
   await page.goto("/");
   await page.getByRole("button", { name: "Open Agent Halo" }).click();
-  await page.getByRole("tab", { name: "Usage" }).click();
+  await openUsage(page);
 
   await expect(page.getByText("58% left")).toBeVisible();
   await expect(page.locator(".usage-freshness[data-stale='true']")).toContainText("Outdated");

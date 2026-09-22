@@ -20,7 +20,11 @@
 
 .notch-wrap.is-open,
 .notch-wrap.is-closing {
-  width: min(var(--panel-width, 560px), 100vw);
+  width: min(var(--panel-width, 1076px), calc(100vw - 24px));
+}
+
+.notch-wrap.is-open {
+  transition: width 0.32s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .halo-surface {
@@ -29,6 +33,8 @@
   height: var(--closed-height, 36px);
   display: flex;
   overflow: hidden;
+  container-type: inline-size;
+  container-name: halo-panel;
   color: var(--text);
   background: transparent;
   border-radius: 0;
@@ -36,8 +42,8 @@
   cursor: default;
   transform-origin: top center;
   transition:
-    width 0.32s cubic-bezier(0.22, 1, 0.36, 1),
-    height 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+    width 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+    height 0.32s cubic-bezier(0.16, 1, 0.3, 1);
   will-change: width, height;
 }
 
@@ -57,10 +63,22 @@
 }
 
 .halo-surface[data-state="open"] {
-  width: min(var(--panel-width, 560px), 100vw);
+  width: min(var(--panel-width, 1076px), calc(100vw - 24px));
   min-height: 218px;
   max-height: 440px;
   height: var(--panel-height, 218px);
+  transition:
+    width 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+    height 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notch-wrap,
+  .notch-wrap.is-open,
+  .halo-surface,
+  .halo-surface[data-state="open"] {
+    transition: none !important;
+  }
 }
 
 .halo-surface[data-state="closing"] {
@@ -69,7 +87,7 @@
 }
 
 .halo-surface[role="button"]:focus-visible {
-  outline: 1px solid rgba(255, 157, 61, 0.78);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 

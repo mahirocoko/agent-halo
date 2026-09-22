@@ -15,8 +15,10 @@ test("overview uses dense trusted metadata and contextual Focus", async ({ page 
   await expect(page.getByText("LC", { exact: true })).toHaveCount(0);
 
   const focus = row.getByRole("button", { name: "Focus agent-halo session in Ghostty" });
+  await expect(focus).toBeVisible();
   await expect(focus).toHaveCSS("opacity", "0");
   await row.hover();
+  await expect(focus).toBeVisible();
   await expect(focus).toHaveCSS("opacity", "1");
 });
 

@@ -1,14 +1,9 @@
-
 .sheet-body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 0 0 18px;
-  scrollbar-gutter: stable;
-}
-
-.sheet-body[data-view="usage"] {
-  margin-right: 0;
+  flex: 1 1 auto;
+  min-block-size: 0;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   padding: 0;
 }

@@ -340,7 +340,7 @@
 }
 
 .movement-error {
-  color: #ff6b6b;
+  color: var(--danger);
   font-size: 10px;
   line-height: 1.35;
 }
@@ -366,20 +366,20 @@
 }
 
 .movement-actions button.is-primary {
-  border-color: rgba(255, 157, 61, 0.48);
+  border-color: color-mix(in srgb, var(--accent) 48%, transparent);
   color: var(--accent);
 }
 
 .movement-actions button.is-danger {
-  border-color: rgba(255, 107, 102, 0.42);
+  border-color: color-mix(in srgb, var(--danger) 42%, transparent);
   color: var(--danger);
-  background: rgba(255, 107, 102, 0.1);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
 }
 
 .movement-actions button.is-danger:hover,
 .movement-actions button.is-danger:focus-visible {
-  border-color: rgba(255, 107, 102, 0.64);
-  background: rgba(255, 107, 102, 0.16);
+  border-color: color-mix(in srgb, var(--danger) 64%, transparent);
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
 }
 
 .movement-safety {

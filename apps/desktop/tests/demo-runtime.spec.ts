@@ -95,9 +95,18 @@ test("only strongly evidenced web frontends use the green local-service dot", as
     webFrontend: row.getAttribute("data-web-frontend"),
     backgroundColor: getComputedStyle(row.querySelector<HTMLElement>(".runtime-service-mark")!).backgroundColor,
   })));
+  const okColor = await page.locator("[data-testid='services-board']").evaluate((board) => {
+    const probe = document.createElement("span");
+    probe.style.backgroundColor = "var(--done)";
+    board.append(probe);
+    const color = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return color;
+  });
   expect(marks.filter((mark) => mark.webFrontend === "true")).toHaveLength(2);
-  expect(marks.filter((mark) => mark.webFrontend === "true").every((mark) => mark.backgroundColor === "rgb(74, 222, 128)")).toBe(true);
-  expect(marks.filter((mark) => mark.webFrontend === "false").every((mark) => mark.backgroundColor !== "rgb(74, 222, 128)")).toBe(true);
+  expect(okColor).not.toBe("rgb(74, 222, 128)");
+  expect(marks.filter((mark) => mark.webFrontend === "true").every((mark) => mark.backgroundColor === okColor)).toBe(true);
+  expect(marks.filter((mark) => mark.webFrontend === "false").every((mark) => mark.backgroundColor !== okColor)).toBe(true);
 });
 
 test("detected HTTP services expose a keyboard-reachable browser action", async ({ page }) => {
@@ -200,7 +209,7 @@ test("expanded Services detail survives polling and stays inside a narrow panel"
   expect(geometry.nestedScroller).toBe(false);
 });
 
-test("Runtime and Services share canonical roving tabs, one outer scroller, and reset user scroll", async ({ page }) => {
+test("Runtime and Services share canonical roving tabs, one board scroller, and reset user scroll", async ({ page }) => {
   await page.goto("/?demo=1&demoScenario=multi");
   const runtime = page.getByRole("tab", { name: "Runtime", exact: true });
   const services = page.getByRole("tab", { name: "Services", exact: true });
@@ -217,31 +226,37 @@ test("Runtime and Services share canonical roving tabs, one outer scroller, and 
   await expect(runtime).toBeFocused();
 
   const scrollState = await page.evaluate(() => {
-    const outer = document.querySelector<HTMLElement>("#main-panel-runtime")!;
-    outer.style.maxHeight = "120px";
-    outer.scrollTop = 80;
+    const board = document.querySelector<HTMLElement>("[data-testid='runtime-board']")!;
+    const sheet = document.querySelector<HTMLElement>("#main-panel-runtime")!;
+    const scroller = board.querySelector<HTMLElement>("[data-scroll-owner='inner']")!;
+    board.style.maxHeight = "120px";
     const panel = document.querySelector<HTMLElement>(".runtime-panel")!;
+    panel.style.minHeight = "320px";
+    scroller.scrollTop = 80;
     return {
-      before: outer.scrollTop,
-      outerOverflow: getComputedStyle(outer).overflowY,
+      before: scroller.scrollTop,
+      boardOverflow: getComputedStyle(board).overflowY,
+      scrollerOverflow: getComputedStyle(scroller).overflowY,
+      sheetOverflow: getComputedStyle(sheet).overflowY,
       panelOverflow: getComputedStyle(panel).overflowY,
       toolbarPosition: getComputedStyle(document.querySelector<HTMLElement>(".runtime-toolbar")!).position,
     };
   });
-  expect(scrollState).toMatchObject({ before: 80, outerOverflow: "auto", panelOverflow: "visible", toolbarPosition: "sticky" });
+  expect(scrollState).toMatchObject({ before: 80, boardOverflow: "hidden", scrollerOverflow: "auto", sheetOverflow: "hidden", panelOverflow: "visible", toolbarPosition: "sticky" });
   await services.click();
-  await expect.poll(() => page.evaluate(() => document.querySelector<HTMLElement>("#main-panel-services")!.scrollTop)).toBe(0);
+  await expect.poll(() => page.evaluate(() => document.querySelector<HTMLElement>("[data-testid='services-board'] [data-scroll-owner='inner']")!.scrollTop)).toBe(0);
 });
 
 test("done-session footer actions stay owned by Sessions instead of Runtime or Services", async ({ page }) => {
   await page.goto("/?demo=1&demoScenario=done");
-  await expect(page.getByRole("button", { name: "Close" })).toBeVisible();
+  const footerClose = () => page.locator(".sheet-footer").getByRole("button", { name: "Close", exact: true });
+  await expect(footerClose()).toBeVisible();
   await page.getByRole("tab", { name: "Runtime", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Close" })).toHaveCount(0);
+  await expect(footerClose()).toHaveCount(0);
   await page.getByRole("tab", { name: "Services", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Close" })).toHaveCount(0);
+  await expect(footerClose()).toHaveCount(0);
   await page.getByRole("tab", { name: "Sessions", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Close" })).toBeVisible();
+  await expect(footerClose()).toBeVisible();
 });
 
 test("runtime ended identities are strongly keyed and bounded", async ({ page }) => {
@@ -333,11 +348,11 @@ test("runtime pressure colors distinguish healthy, elevated, high, critical, and
     });
   });
   expect(colors).toEqual([
-    { pressure: "normal", mark: "rgb(74, 222, 128)", label: "rgb(74, 222, 128)", borderStyle: "solid" },
-    { pressure: "elevated", mark: "rgba(0, 0, 0, 0)", label: "rgb(160, 160, 168)", borderStyle: "solid" },
-    { pressure: "high", mark: "rgb(255, 178, 61)", label: "rgb(255, 178, 61)", borderStyle: "solid" },
-    { pressure: "critical", mark: "rgb(255, 107, 102)", label: "rgb(255, 107, 102)", borderStyle: "solid" },
-    { pressure: "unavailable", mark: "rgba(0, 0, 0, 0)", label: "rgb(160, 160, 168)", borderStyle: "dashed" },
+    { pressure: "normal", mark: "rgb(21, 94, 60)", label: "rgb(21, 94, 60)", borderStyle: "solid" },
+    { pressure: "elevated", mark: "rgba(0, 0, 0, 0)", label: "rgb(46, 59, 71)", borderStyle: "solid" },
+    { pressure: "high", mark: "rgb(113, 66, 5)", label: "rgb(113, 66, 5)", borderStyle: "solid" },
+    { pressure: "critical", mark: "rgb(134, 37, 41)", label: "rgb(134, 37, 41)", borderStyle: "solid" },
+    { pressure: "unavailable", mark: "rgba(0, 0, 0, 0)", label: "rgb(46, 59, 71)", borderStyle: "dashed" },
   ]);
 });
 
@@ -384,4 +399,41 @@ test("runtime list stays readable at narrow width and reduced motion", async ({ 
   expect(servicesBox!.x + servicesBox!.width - (openServiceBox!.x + openServiceBox!.width)).toBeGreaterThanOrEqual(8);
   expect(await servicesPanel.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
   expect(await page.locator(".sheet-header").evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+});
+
+test("Runtime and Services boards apply cohesive muted paper tonal paint", async ({ page }) => {
+  await page.goto("/?demo=1&demoScenario=multi");
+
+  const evaluatePaint = async (selector: string) => {
+    return page.evaluate((sel) => {
+      const el = document.querySelector<HTMLElement>(sel);
+      if (!el) return null;
+      const cs = getComputedStyle(el);
+      return {
+        color: cs.color,
+        backgroundColor: cs.backgroundColor,
+        opacity: cs.opacity,
+      };
+    }, selector);
+  };
+
+  await page.getByRole("tab", { name: "Runtime", exact: true }).click();
+  await expect(page.locator(".runtime-board .runtime-panel")).toBeVisible();
+  const runtimeBoardPaint = await evaluatePaint(".runtime-board");
+  expect(runtimeBoardPaint?.backgroundColor).toBe("rgb(113, 127, 142)");
+  expect(runtimeBoardPaint?.opacity).toBe("1");
+  const runtimePanelPaint = await evaluatePaint(".runtime-panel");
+  expect(runtimePanelPaint?.color).toBe("rgb(23, 33, 43)");
+  const runtimeToolbarPaint = await evaluatePaint(".runtime-toolbar");
+  expect(runtimeToolbarPaint?.backgroundColor).toBe("rgb(113, 127, 142)");
+
+  await page.getByRole("tab", { name: "Services", exact: true }).click();
+  await expect(page.locator(".services-board .runtime-panel")).toBeVisible();
+  const servicesBoardPaint = await evaluatePaint(".services-board");
+  expect(servicesBoardPaint?.backgroundColor).toBe("rgb(111, 136, 136)");
+  expect(servicesBoardPaint?.opacity).toBe("1");
+  const servicesPanelPaint = await evaluatePaint(".runtime-panel");
+  expect(servicesPanelPaint?.color).toBe("rgb(23, 38, 38)");
+  const servicesToolbarPaint = await evaluatePaint(".runtime-toolbar");
+  expect(servicesToolbarPaint?.backgroundColor).toBe("rgb(111, 136, 136)");
 });

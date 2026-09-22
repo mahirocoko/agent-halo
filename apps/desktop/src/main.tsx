@@ -41,7 +41,6 @@ import { useStopwatch } from "./features/stopwatch/useStopwatch";
 import { readCompletionPetEnabled, readCompletionPetSize, writeCompletionPetEnabled, writeCompletionPetSize, type CompletionPetSize } from "./features/pet/preferences";
 import { buildCompanionProjection } from "./features/pet/companionProjection";
 import type { ICompletionPetActionRequest, ICompletionPetSummon } from "./features/pet/types";
-import { SetupPanel } from "./features/setup/SetupPanel";
 import type { IDisplayStateSnapshot } from "./features/setup/display";
 import { readUsageSettings, writeUsageSettings } from "./features/usage/adapters";
 import { AgentUsageList } from "./features/usage/components";
@@ -71,15 +70,32 @@ const LocalServicesPanel = lazy(async () => {
   const module = await import("./features/runtime/components");
   return { default: module.LocalServicesPanel };
 });
+const SetupPanel = lazy(async () => {
+  const module = await import("./features/setup/SetupPanel");
+  return { default: module.SetupPanel };
+});
 const DEFAULT_CAMERA_NOTCH_WIDTH = 184;
 const DEFAULT_CLOSED_NOTCH_HEIGHT = 36;
 const MIN_LIVE_ACTIVITY_WING_WIDTH = 66;
 const MAX_LIVE_ACTIVITY_WING_WIDTH = 110;
 const LIVE_ACTIVITY_TEXT_WIDTH_BUFFER = 52;
-const PANEL_WINDOW_WIDTH = 560;
+type MainPanelTab = "sessions" | "pomodoro" | "usage" | "runtime" | "services";
+type PanelWidthView = MainPanelTab | "session-detail" | "setup";
+
+const PANEL_WIDTH_BY_VIEW: Record<PanelWidthView, number> = {
+  sessions: 1040,
+  "session-detail": 1020,
+  pomodoro: 1020,
+  usage: 1120,
+  runtime: 1100,
+  services: 1080,
+  setup: 980,
+};
+
 const MIN_PANEL_WINDOW_WIDTH = 280;
 const PANEL_MIN_HEIGHT = 218;
 const PANEL_MAX_HEIGHT = 440;
+const FOCUS_PANEL_HEIGHT = 500;
 const ACTIVITY_COLLAPSE_MS = 220;
 const HOVER_OPEN_DELAY_MS = 24;
 const HOVER_CLOSE_DELAY_MS = 170;
@@ -89,6 +105,7 @@ const CLOSED_TOP_SHOULDER_RADIUS = 11;
 const OPEN_TOP_SHOULDER_RADIUS = 19;
 const CLOSED_BOTTOM_RADIUS = 15;
 const PANEL_BOTTOM_RADIUS = 22;
+
 interface INativeActionState {
   bridgeOnline: boolean | null;
   message: string | null;
@@ -108,8 +125,6 @@ interface INotchMetrics {
   cameraWidth: number;
   closedHeight: number;
 }
-
-type MainPanelTab = "sessions" | "pomodoro" | "usage" | "runtime" | "services";
 
 const estimateLiveActivityWingWidth = (label: string): number => {
   const textWidth = Math.ceil(label.length * 5.6);
@@ -138,10 +153,14 @@ const buildNotchShapePath = (width: number, height: number, topRadius: number, b
 const waitForNextPaint = () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
 
 const clampPanelHeight = (value: number): number => Math.min(PANEL_MAX_HEIGHT, Math.max(PANEL_MIN_HEIGHT, Math.ceil(value)));
-const getPanelWindowWidth = (): number => Math.min(
-  PANEL_WINDOW_WIDTH,
-  Math.max(MIN_PANEL_WINDOW_WIDTH, DEMO_MODE ? window.innerWidth : window.screen.availWidth),
-);
+const focusPanelHeight = (availableHeight?: number): number => Math.max(PANEL_MIN_HEIGHT, Math.min(FOCUS_PANEL_HEIGHT, availableHeight ?? FOCUS_PANEL_HEIGHT));
+const getAvailableFocusPanelHeight = (): number => focusPanelHeight(DEMO_MODE ? window.innerHeight : undefined);
+const resolvePanelWidthView = (setupOpen: boolean, hasSessionDetail: boolean, activeMainTab: MainPanelTab): PanelWidthView => {
+  if (setupOpen) return "setup";
+  if (hasSessionDetail) return "session-detail";
+  return activeMainTab;
+};
+const getAvailablePanelWidth = (): number => Math.max(MIN_PANEL_WINDOW_WIDTH, DEMO_MODE ? window.innerWidth : window.screen.availWidth);
 
 interface IStatusView {
   status: AgentHaloPresenceStatus | "stale";
@@ -175,8 +194,34 @@ const writeKeepAwakeEnabled = (enabled: boolean) => {
 
 const getGroupRemovalId = (groupKey: string, group: IWorkspaceSessionGroup) => [groupKey, ...group.sessions.map((session) => session.conversationId).sort()].join("\n");
 
+type SessionsCardRatios = [number, number, number];
+const DEFAULT_SESSIONS_RATIOS: SessionsCardRatios = [0.39, 0.41, 0.2];
+const SESSIONS_CARD_MIN_WIDTH = 190;
+
+type SessionsCardScroll = {
+  active: number;
+  completed: number;
+  recent: number;
+};
+
+type DragDividerState = {
+  divider: number;
+  startX: number;
+  startWidths: [number, number, number];
+  totalAvail: number;
+};
+
 const App = () => {
   const { capabilities, connection, lastLiveEvent, now, presence, recentEvents, refreshCapabilities, sessionEventRegistry, setSessionEventRegistry, view } = useAgentHaloPresence({ demoMode: DEMO_MODE, demoScenario: DEMO_SCENARIO });
+  const sessionsTrayRef = useRef<HTMLDivElement | null>(null);
+  const sessionsRatiosRef = useRef<SessionsCardRatios>(DEFAULT_SESSIONS_RATIOS);
+  const [sessionsRatios, setSessionsRatios] = useState<SessionsCardRatios>(() => sessionsRatiosRef.current);
+  const sessionsCardScrollRef = useRef<SessionsCardScroll>({
+    active: 0,
+    completed: 0,
+    recent: 0,
+  });
+  const activeDragDividerRef = useRef<DragDividerState | null>(null);
   const [usageSettings, setUsageSettings] = useState<IUsageSettings>(readUsageSettings);
   const [pet, setPet] = useState<HaloPetName>(readHaloPetPreference);
   const [haloBotLoadout, setHaloBotLoadout] = useState<HaloBotLoadout>(readHaloBotLoadoutPreference);
@@ -205,12 +250,15 @@ const App = () => {
   const [panelOpen, setPanelOpen] = useState(DEMO_MODE && !DEMO_COLLAPSED);
   const [renderPanel, setRenderPanel] = useState(DEMO_MODE && !DEMO_COLLAPSED);
   const [panelHeight, setPanelHeight] = useState(PANEL_MIN_HEIGHT);
-  const [panelWindowWidth, setPanelWindowWidth] = useState(getPanelWindowWidth);
+  const [availablePanelWidth, setAvailablePanelWidth] = useState(getAvailablePanelWidth);
+  const [availableFocusPanelHeight, setAvailableFocusPanelHeight] = useState(getAvailableFocusPanelHeight);
   const [panelFocusRequestId, setPanelFocusRequestId] = useState(0);
   const [hoverExpandSuppressed, setHoverExpandSuppressed] = useState(false);
   const [activeMainTab, setActiveMainTab] = useState<MainPanelTab>("sessions");
-  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [setupOpen, setSetupOpen] = useState(false);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const panelWidthView = resolvePanelWidthView(setupOpen, selectedSessionId !== null, activeMainTab);
+  const panelWindowWidth = Math.min(PANEL_WIDTH_BY_VIEW[panelWidthView], availablePanelWidth);
   const [modStatus, setModStatus] = useState<IModStatus>({ path: null, installed: null });
   const [agyHookStatus, setAgyHookStatus] = useState<{ path: string | null; installed: boolean | null }>({ path: null, installed: null });
   const [notchMetrics, setNotchMetrics] = useState<INotchMetrics>({ cameraWidth: DEFAULT_CAMERA_NOTCH_WIDTH, closedHeight: DEFAULT_CLOSED_NOTCH_HEIGHT });
@@ -280,6 +328,7 @@ const App = () => {
           return;
         }
         if (action.action === "open-focus") {
+          rememberFocusOrigin();
           shouldFocusPanelRef.current = true;
           nativeFocusRequestRef.current = true;
           setPanelFocusRequestId((current) => current + 1);
@@ -457,19 +506,15 @@ const App = () => {
     ? "Setup"
     : selectedSession
       ? selectedSession.project
-      : activeMainTab === "pomodoro"
-        ? "Focus"
-        : activeMainTab === "usage"
-          ? "Usage"
-          : activeMainTab === "runtime"
-            ? "Runtime"
-            : activeMainTab === "services"
-              ? "Services"
-          : sessionGroups.length === 0
-          ? "Agent Halo"
-          : sessionGroups.length === 1
-            ? sessionGroups[0].sessions.length === 1 ? "1 session" : `${sessionGroups[0].sessions.length} sessions`
-            : `${sessionGroups.length} workspaces`;
+      : activeMainTab === "sessions"
+        ? "Agent Halo"
+        : activeMainTab === "pomodoro"
+          ? "Focus"
+          : activeMainTab === "usage"
+            ? "Usage"
+            : activeMainTab === "runtime"
+              ? "Runtime"
+              : "Services";
   const activitySession =
     sessions.find((session) => session.status === "attention") ??
     sessions.find((session) => session.status === "error" && now.getTime() - Date.parse(session.lastActivityAt) <= STALE_AFTER_MS) ??
@@ -702,10 +747,15 @@ const App = () => {
   }, [canUseNativeControls]);
 
   useEffect(() => {
-    const updatePanelWidth = () => setPanelWindowWidth(getPanelWindowWidth());
-    updatePanelWidth();
-    window.addEventListener("resize", updatePanelWidth);
-    return () => window.removeEventListener("resize", updatePanelWidth);
+    const updateAvailablePanelSize = () => {
+      const nextWidth = getAvailablePanelWidth();
+      const nextFocusHeight = getAvailableFocusPanelHeight();
+      setAvailablePanelWidth((current) => (current === nextWidth ? current : nextWidth));
+      setAvailableFocusPanelHeight((current) => (current === nextFocusHeight ? current : nextFocusHeight));
+    };
+    updateAvailablePanelSize();
+    window.addEventListener("resize", updateAvailablePanelSize);
+    return () => window.removeEventListener("resize", updateAvailablePanelSize);
   }, []);
 
   useEffect(() => {
@@ -743,7 +793,12 @@ const App = () => {
       return;
     }
 
-    if ((activeMainTab === "usage" || activeMainTab === "runtime" || activeMainTab === "services") && !setupOpen && !selectedSessionId) {
+    if (!setupOpen && !selectedSessionId && activeMainTab === "pomodoro") {
+      setPanelHeight(availableFocusPanelHeight);
+      return;
+    }
+
+    if (setupOpen || ((activeMainTab === "usage" || activeMainTab === "runtime" || activeMainTab === "services") && !selectedSessionId)) {
       setPanelHeight(PANEL_MAX_HEIGHT);
       return;
     }
@@ -756,7 +811,23 @@ const App = () => {
       if (element.classList.contains("sheet-body")) {
         const style = window.getComputedStyle(element);
         const padding = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
-        const bodyContent = Array.from(element.children).reduce((bodyTotal, bodyChild) => bodyTotal + Math.ceil((bodyChild as HTMLElement).scrollHeight), 0);
+        const bodyContent = Array.from(element.children).reduce((bodyTotal, bodyChild) => {
+          const innerScrolls = (bodyChild as HTMLElement).querySelectorAll<HTMLElement>("[data-scroll-owner='inner']");
+          if (innerScrolls.length > 1) {
+            const first = innerScrolls[0].getBoundingClientRect();
+            const second = innerScrolls[1].getBoundingClientRect();
+            const isStacked = Math.abs(first.left - second.left) < 10 && Math.abs(first.top - second.top) > 10;
+            if (isStacked) {
+              const totalScroll = Array.from(innerScrolls).reduce((sum, scroller) => sum + scroller.scrollHeight, 0);
+              return bodyTotal + Math.ceil(totalScroll);
+            }
+            const maxScroll = Math.max(...Array.from(innerScrolls).map((scroller) => scroller.scrollHeight));
+            return bodyTotal + Math.ceil(maxScroll);
+          }
+          const innerScroll = (bodyChild as HTMLElement).querySelector<HTMLElement>("[data-scroll-owner='inner']");
+          const childHeight = innerScroll ? innerScroll.scrollHeight : (bodyChild as HTMLElement).scrollHeight;
+          return bodyTotal + Math.ceil(childHeight);
+        }, 0);
         return total + padding + bodyContent;
       }
       return total + Math.ceil(element.getBoundingClientRect().height);
@@ -775,7 +846,7 @@ const App = () => {
     observer.observe(target);
     for (const child of Array.from(target.children)) observer.observe(child);
     return () => observer.disconnect();
-  }, [activeMainTab, agentUsages, renderPanel, selectedSessionId, sessionGroups.length, setupOpen]);
+  }, [activeMainTab, agentUsages, availableFocusPanelHeight, renderPanel, selectedSessionId, sessionGroups.length, setupOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -927,13 +998,168 @@ const App = () => {
     });
   };
 
+  const setupOriginTabRef = useRef<MainPanelTab>("sessions");
+  const tabScrollTopRef = useRef<Record<MainPanelTab, number>>({
+    sessions: 0,
+    pomodoro: 0,
+    usage: 0,
+    runtime: 0,
+    services: 0,
+  });
+
+  const saveCurrentTabScroll = () => {
+    if (setupOpen || selectedSessionId) return;
+    if (activeMainTab === "sessions") {
+      const activeScroller = sheetInnerRef.current?.querySelector<HTMLElement>("[data-scroll-card='active']");
+      const completedScroller = sheetInnerRef.current?.querySelector<HTMLElement>("[data-scroll-card='completed']");
+      const recentScroller = sheetInnerRef.current?.querySelector<HTMLElement>("[data-scroll-card='recent']");
+      if (activeScroller) sessionsCardScrollRef.current.active = activeScroller.scrollTop;
+      if (completedScroller) sessionsCardScrollRef.current.completed = completedScroller.scrollTop;
+      if (recentScroller) sessionsCardScrollRef.current.recent = recentScroller.scrollTop;
+    } else {
+      const inner = sheetInnerRef.current?.querySelector<HTMLElement>("[data-scroll-owner='inner']");
+      if (inner) {
+        tabScrollTopRef.current[activeMainTab] = inner.scrollTop;
+      }
+    }
+  };
+
+  const restoreTabScroll = (tab: MainPanelTab) => {
+    window.requestAnimationFrame(() => {
+      if (tab === "sessions") {
+        const activeScroller = sheetInnerRef.current?.querySelector<HTMLElement>("[data-scroll-card='active']");
+        const completedScroller = sheetInnerRef.current?.querySelector<HTMLElement>("[data-scroll-card='completed']");
+        const recentScroller = sheetInnerRef.current?.querySelector<HTMLElement>("[data-scroll-card='recent']");
+        if (activeScroller) activeScroller.scrollTop = sessionsCardScrollRef.current.active;
+        if (completedScroller) completedScroller.scrollTop = sessionsCardScrollRef.current.completed;
+        if (recentScroller) recentScroller.scrollTop = sessionsCardScrollRef.current.recent;
+      } else {
+        const inner = sheetInnerRef.current?.querySelector<HTMLElement>("[data-scroll-owner='inner']");
+        if (inner) {
+          inner.scrollTop = tabScrollTopRef.current[tab] ?? 0;
+        }
+      }
+    });
+  };
+
+  const handleDividerPointerDown = (dividerIndex: number, event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    const tray = sessionsTrayRef.current;
+    if (!tray) return;
+    const trayRect = tray.getBoundingClientRect();
+    const totalAvail = Math.max(0, trayRect.width - 24);
+    if (totalAvail < SESSIONS_CARD_MIN_WIDTH * 3) return;
+
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const startWidths: [number, number, number] = [
+      sessionsRatiosRef.current[0] * totalAvail,
+      sessionsRatiosRef.current[1] * totalAvail,
+      sessionsRatiosRef.current[2] * totalAvail,
+    ];
+    activeDragDividerRef.current = {
+      divider: dividerIndex,
+      startX: event.clientX,
+      startWidths,
+      totalAvail,
+    };
+  };
+
+  const handleDividerPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = activeDragDividerRef.current;
+    if (!drag) return;
+    const deltaX = event.clientX - drag.startX;
+    const { divider, startWidths, totalAvail } = drag;
+
+    if (divider === 0) {
+      const combined01 = startWidths[0] + startWidths[1];
+      const newW0 = Math.max(SESSIONS_CARD_MIN_WIDTH, Math.min(combined01 - SESSIONS_CARD_MIN_WIDTH, startWidths[0] + deltaX));
+      const newW1 = combined01 - newW0;
+      const nextRatios: SessionsCardRatios = [
+        newW0 / totalAvail,
+        newW1 / totalAvail,
+        startWidths[2] / totalAvail,
+      ];
+      sessionsRatiosRef.current = nextRatios;
+      setSessionsRatios(nextRatios);
+    } else if (divider === 1) {
+      const combined12 = startWidths[1] + startWidths[2];
+      const newW1 = Math.max(SESSIONS_CARD_MIN_WIDTH, Math.min(combined12 - SESSIONS_CARD_MIN_WIDTH, startWidths[1] + deltaX));
+      const newW2 = combined12 - newW1;
+      const nextRatios: SessionsCardRatios = [
+        startWidths[0] / totalAvail,
+        newW1 / totalAvail,
+        newW2 / totalAvail,
+      ];
+      sessionsRatiosRef.current = nextRatios;
+      setSessionsRatios(nextRatios);
+    }
+  };
+
+  const handleDividerPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (activeDragDividerRef.current) {
+      try {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      } catch {
+        // Ignore
+      }
+      activeDragDividerRef.current = null;
+    }
+  };
+
+  const handleDividerKeyDown = (dividerIndex: number, event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    const tray = sessionsTrayRef.current;
+    const trayRect = tray?.getBoundingClientRect();
+    const totalAvail = Math.max(0, (trayRect?.width ?? 960) - 24);
+    if (totalAvail < SESSIONS_CARD_MIN_WIDTH * 3) return;
+
+    const step = event.key === "ArrowLeft" ? -16 : 16;
+    const currentWidths: [number, number, number] = [
+      sessionsRatiosRef.current[0] * totalAvail,
+      sessionsRatiosRef.current[1] * totalAvail,
+      sessionsRatiosRef.current[2] * totalAvail,
+    ];
+
+    if (dividerIndex === 0) {
+      const combined01 = currentWidths[0] + currentWidths[1];
+      const newW0 = Math.max(SESSIONS_CARD_MIN_WIDTH, Math.min(combined01 - SESSIONS_CARD_MIN_WIDTH, currentWidths[0] + step));
+      const newW1 = combined01 - newW0;
+      const nextRatios: SessionsCardRatios = [
+        newW0 / totalAvail,
+        newW1 / totalAvail,
+        currentWidths[2] / totalAvail,
+      ];
+      sessionsRatiosRef.current = nextRatios;
+      setSessionsRatios(nextRatios);
+    } else if (dividerIndex === 1) {
+      const combined12 = currentWidths[1] + currentWidths[2];
+      const newW1 = Math.max(SESSIONS_CARD_MIN_WIDTH, Math.min(combined12 - SESSIONS_CARD_MIN_WIDTH, currentWidths[1] + step));
+      const newW2 = combined12 - newW1;
+      const nextRatios: SessionsCardRatios = [
+        currentWidths[0] / totalAvail,
+        newW1 / totalAvail,
+        newW2 / totalAvail,
+      ];
+      sessionsRatiosRef.current = nextRatios;
+      setSessionsRatios(nextRatios);
+    }
+  };
+
   const closePanel = ({ suppressHover }: { suppressHover: boolean }) => {
+    saveCurrentTabScroll();
     clearHoverOpenTimer();
     clearHoverCloseTimer();
     if (suppressHover) setHoverExpandSuppressed(true);
     nativeFocusRequestRef.current = false;
-    setSelectedSessionId(null);
-    setSetupOpen(false);
+    if (setupOpen) {
+      setSetupOpen(false);
+      setActiveMainTab(setupOriginTabRef.current || "sessions");
+    }
+    if (selectedSessionId) {
+      setSelectedSessionId(null);
+      setActiveMainTab("sessions");
+    }
     setPanelOpen(false);
   };
 
@@ -987,8 +1213,22 @@ const App = () => {
     };
   }, [panelOpen, selectedSessionId, setupOpen]);
 
+  useEffect(() => {
+    if (panelOpen && renderPanel && !setupOpen && !selectedSessionId) {
+      restoreTabScroll(activeMainTab);
+    }
+  }, [activeMainTab, panelOpen, renderPanel, selectedSessionId, setupOpen]);
+
+  const resetBoardScroll = () => {
+    window.requestAnimationFrame(() => {
+      const inner = sheetInnerRef.current?.querySelector<HTMLElement>("[data-scroll-owner='inner']");
+      if (inner) inner.scrollTop = 0;
+    });
+  };
+
   const openSession = (conversationId: string) => {
     rememberFocusOrigin();
+    saveCurrentTabScroll();
     returnSessionIdRef.current = conversationId;
     shouldFocusPanelRef.current = true;
     nativeFocusRequestRef.current = true;
@@ -999,11 +1239,14 @@ const App = () => {
     setSessionAction({ ok: null, message: null });
     setSelectedSessionId(conversationId);
     setPanelOpen(true);
+    resetBoardScroll();
   };
 
   const openSetup = () => {
     rememberFocusOrigin();
+    saveCurrentTabScroll();
     returnSessionIdRef.current = null;
+    setupOriginTabRef.current = activeMainTab;
     shouldFocusPanelRef.current = true;
     nativeFocusRequestRef.current = true;
     clearHoverOpenTimer();
@@ -1011,17 +1254,46 @@ const App = () => {
     setSelectedSessionId(null);
     setSetupOpen(true);
     setPanelOpen(true);
+    resetBoardScroll();
+  };
+
+  const backFromSetup = () => {
+    setSetupOpen(false);
+    const originTab = setupOriginTabRef.current || "sessions";
+    setActiveMainTab(originTab);
+    restoreTabScroll(originTab);
+    restoreFocusOrigin();
+  };
+
+  const backToSessionsList = () => {
+    setSelectedSessionId(null);
+    restoreTabScroll("sessions");
+    restoreFocusOrigin();
+  };
+
+  const backToSessions = () => {
+    if (setupOpen) {
+      backFromSetup();
+      return;
+    }
+    if (selectedSessionId) {
+      backToSessionsList();
+      return;
+    }
+    setSelectedSessionId(null);
+    setSetupOpen(false);
+    setActiveMainTab("sessions");
+    restoreFocusOrigin();
+    restoreTabScroll("sessions");
   };
 
   const activateMainTab = (tab: MainPanelTab) => {
+    saveCurrentTabScroll();
     setSetupOpen(false);
     setSelectedSessionId(null);
     setActiveMainTab(tab);
     setPanelOpen(true);
-    window.requestAnimationFrame(() => {
-      const scrollOwner = document.querySelector<HTMLElement>(".sheet-body");
-      if (scrollOwner) scrollOwner.scrollTop = 0;
-    });
+    restoreTabScroll(tab);
   };
 
   const handleMainTabKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, currentTab: MainPanelTab) => {
@@ -1173,13 +1445,6 @@ const App = () => {
   const updateKeepAwakeEnabled = (enabled: boolean) => {
     setKeepAwakeEnabled(enabled);
     writeKeepAwakeEnabled(enabled);
-  };
-
-  const backToSessions = () => {
-    setSelectedSessionId(null);
-    setSetupOpen(false);
-    setActiveMainTab("sessions");
-    restoreFocusOrigin();
   };
 
   const dismissSession = (conversationId: string) => {
@@ -1453,6 +1718,8 @@ const App = () => {
           ref={surfaceRef}
           className="halo-surface"
           data-state={surfaceState}
+          data-panel-view={panelWidthView}
+          data-panel-width={String(panelWindowWidth)}
           onMouseEnter={expandPanelOnHover}
           onMouseLeave={scheduleHoverClose}
           onPointerLeave={scheduleHoverClose}
@@ -1500,313 +1767,556 @@ const App = () => {
           </div>
 
           {renderPanel ? <div className="sheet-inner" ref={sheetInnerRef}>
-            {setupOpen ? (
+            {selectedSession ? (
               <div className="sheet-header detail-header" data-tauri-drag-region="false">
-                <button className="gear-btn" type="button" onClick={backToSessions} data-panel-focus-target data-tauri-drag-region="false" title="Back to sessions">
-                  <ChevronLeft size={14} strokeWidth={2.3} />
-                </button>
-                <span className="status-slot"><Settings className="setup-icon" size={14} strokeWidth={2.3} /></span>
-                <span className="header-title">{headerLabel}</span>
-                <span className="spacer" />
-                {DEMO_MODE ? <span className="agent-badge">DEMO</span> : null}
+                <div className="header-brand">
+                  <button
+                    className="gear-btn"
+                    type="button"
+                    onClick={backToSessionsList}
+                    data-tauri-drag-region="false"
+                    title="Back to sessions"
+                    aria-label="Back to sessions"
+                  >
+                    <ChevronLeft size={14} strokeWidth={2.3} />
+                  </button>
+                  <StatusGlyph status={selectedSession.status} />
+                  <span className="header-title">{headerLabel}</span>
+                </div>
+                <div className="header-camera-corridor" aria-hidden="true" />
+                <div className="header-right-wing">
+                  <button
+                    className="header-close-btn"
+                    type="button"
+                    aria-label="Close"
+                    title="Close"
+                    onClick={() => closePanel({ suppressHover: true })}
+                    data-tauri-drag-region="false"
+                  >
+                    <X size={14} strokeWidth={2.2} />
+                  </button>
+                </div>
               </div>
-            ) : selectedSession ? (
+            ) : setupOpen ? (
               <div className="sheet-header detail-header" data-tauri-drag-region="false">
-                <StatusGlyph status={selectedSession.status} />
-                <span className="header-title">{headerLabel}</span>
-                <span className="spacer" />
+                <div className="header-brand">
+                  <button
+                    className="gear-btn"
+                    type="button"
+                    onClick={backFromSetup}
+                    data-panel-focus-target
+                    data-tauri-drag-region="false"
+                    title={`Back to ${setupOriginTabRef.current || "sessions"}`}
+                    aria-label={`Back to ${setupOriginTabRef.current || "sessions"}`}
+                  >
+                    <ChevronLeft size={14} strokeWidth={2.3} />
+                  </button>
+                  <span className="status-slot"><Settings className="setup-icon" size={14} strokeWidth={2.3} /></span>
+                  <span className="header-title">Setup</span>
+                </div>
+                <div className="header-camera-corridor" aria-hidden="true" />
+                <div className="header-right-wing">
+                  {DEMO_MODE ? <span className="agent-badge">DEMO</span> : null}
+                  <button
+                    className="header-close-btn"
+                    type="button"
+                    aria-label="Close"
+                    title="Close"
+                    onClick={() => closePanel({ suppressHover: true })}
+                    data-tauri-drag-region="false"
+                  >
+                    <X size={14} strokeWidth={2.2} />
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="sheet-header" data-tauri-drag-region="false">
-                <StatusGlyph status={glyphStatus} />
-                <span className="header-title">{headerLabel}</span>
-                {DEMO_MODE ? <span className="agent-badge">DEMO</span> : null}
-                <span className="spacer" />
-                <span className="bridge-dot" data-connected={isConnected} title={connectionTitle} />
-                <div className="header-tabs">
-                  <div className="header-tablist" role="tablist" aria-label="Agent Halo sections">
-                    <button id="main-tab-sessions" className="header-tab" data-active={activeMainTab === "sessions"} data-panel-focus-target={activeMainTab === "sessions" ? "true" : undefined} type="button" role="tab" aria-label="Sessions" aria-selected={activeMainTab === "sessions"} aria-controls="main-panel-sessions" tabIndex={activeMainTab === "sessions" ? 0 : -1} onKeyDown={(event) => handleMainTabKeyDown(event, "sessions")} onClick={(event) => { event.stopPropagation(); activateMainTab("sessions"); }} data-tauri-drag-region="false" title="Sessions">
-                      <List size={13} strokeWidth={2.3} />
-                    </button>
-                    <button id="main-tab-pomodoro" className="header-tab" data-active={activeMainTab === "pomodoro"} data-panel-focus-target={activeMainTab === "pomodoro" ? "true" : undefined} type="button" role="tab" aria-label="Focus" aria-selected={activeMainTab === "pomodoro"} aria-controls="main-panel-pomodoro" tabIndex={activeMainTab === "pomodoro" ? 0 : -1} onKeyDown={(event) => handleMainTabKeyDown(event, "pomodoro")} onClick={(event) => { event.stopPropagation(); activateMainTab("pomodoro"); }} data-tauri-drag-region="false" title="Focus">
-                      <Timer size={13} strokeWidth={2.3} />
-                    </button>
-                    <button id="main-tab-usage" className="header-tab" data-active={activeMainTab === "usage"} data-panel-focus-target={activeMainTab === "usage" ? "true" : undefined} type="button" role="tab" aria-label="Usage" aria-selected={activeMainTab === "usage"} aria-controls="main-panel-usage" tabIndex={activeMainTab === "usage" ? 0 : -1} onKeyDown={(event) => handleMainTabKeyDown(event, "usage")} onClick={(event) => { event.stopPropagation(); activateMainTab("usage"); }} data-tauri-drag-region="false" title="Usage">
-                      <BarChart3 size={13} strokeWidth={2.3} />
-                    </button>
-                    <button id="main-tab-runtime" className="header-tab" data-active={activeMainTab === "runtime"} data-panel-focus-target={activeMainTab === "runtime" ? "true" : undefined} type="button" role="tab" aria-label="Runtime" aria-selected={activeMainTab === "runtime"} aria-controls="main-panel-runtime" tabIndex={activeMainTab === "runtime" ? 0 : -1} onKeyDown={(event) => handleMainTabKeyDown(event, "runtime")} onClick={(event) => { event.stopPropagation(); activateMainTab("runtime"); }} data-tauri-drag-region="false" title="Runtime">
-                      <Activity size={13} strokeWidth={2.3} />
-                    </button>
-                    <button id="main-tab-services" className="header-tab" data-active={activeMainTab === "services"} data-panel-focus-target={activeMainTab === "services" ? "true" : undefined} type="button" role="tab" aria-label="Services" aria-selected={activeMainTab === "services"} aria-controls="main-panel-services" tabIndex={activeMainTab === "services" ? 0 : -1} onKeyDown={(event) => handleMainTabKeyDown(event, "services")} onClick={(event) => { event.stopPropagation(); activateMainTab("services"); }} data-tauri-drag-region="false" title="Services">
-                      <Server size={13} strokeWidth={2.3} />
-                    </button>
+                <div className="header-brand">
+                  <div className="header-brand-logo">
+                    <Activity size={13} strokeWidth={2.4} />
                   </div>
-                  <button className="header-tab" type="button" aria-label="Setup" onClick={(event) => { event.stopPropagation(); openSetup(); }} data-tauri-drag-region="false" title="Setup">
+                  <span className="header-brand-name">Agent Halo</span>
+                  <span className="bridge-dot" data-connected={isConnected} title={connectionTitle} />
+                  {DEMO_MODE ? <span className="agent-badge">DEMO</span> : null}
+                </div>
+                <div className="header-camera-corridor" aria-hidden="true" />
+                <div className="header-right-wing">
+                  <div className="header-tabs-rail">
+                    <div className="header-tablist" role="tablist" aria-label="Agent Halo sections">
+                      <button
+                        id="main-tab-sessions"
+                        className="header-tab-discrete"
+                        data-active={activeMainTab === "sessions"}
+                        data-panel-focus-target={activeMainTab === "sessions" ? "true" : undefined}
+                        type="button"
+                        role="tab"
+                        aria-label="Sessions"
+                        aria-selected={activeMainTab === "sessions"}
+                        aria-controls="main-panel-sessions"
+                        tabIndex={activeMainTab === "sessions" ? 0 : -1}
+                        onKeyDown={(event) => handleMainTabKeyDown(event, "sessions")}
+                        onClick={(event) => { event.stopPropagation(); activateMainTab("sessions"); }}
+                        data-tauri-drag-region="false"
+                        title="Sessions"
+                      >
+                        <List size={13} strokeWidth={2.3} />
+                        <span className="tab-label">Sessions</span>
+                        <span className="tab-active-indicator" data-tab="sessions" aria-hidden="true" />
+                      </button>
+                      <button
+                        id="main-tab-pomodoro"
+                        className="header-tab-discrete"
+                        data-active={activeMainTab === "pomodoro"}
+                        data-panel-focus-target={activeMainTab === "pomodoro" ? "true" : undefined}
+                        type="button"
+                        role="tab"
+                        aria-label="Focus"
+                        aria-selected={activeMainTab === "pomodoro"}
+                        aria-controls="main-panel-pomodoro"
+                        tabIndex={activeMainTab === "pomodoro" ? 0 : -1}
+                        onKeyDown={(event) => handleMainTabKeyDown(event, "pomodoro")}
+                        onClick={(event) => { event.stopPropagation(); activateMainTab("pomodoro"); }}
+                        data-tauri-drag-region="false"
+                        title="Focus"
+                      >
+                        <Timer size={13} strokeWidth={2.3} />
+                        <span className="tab-label">Focus</span>
+                        <span className="tab-active-indicator" data-tab="pomodoro" aria-hidden="true" />
+                      </button>
+                      <button
+                        id="main-tab-usage"
+                        className="header-tab-discrete"
+                        data-active={activeMainTab === "usage"}
+                        data-panel-focus-target={activeMainTab === "usage" ? "true" : undefined}
+                        type="button"
+                        role="tab"
+                        aria-label="Usage"
+                        aria-selected={activeMainTab === "usage"}
+                        aria-controls="main-panel-usage"
+                        tabIndex={activeMainTab === "usage" ? 0 : -1}
+                        onKeyDown={(event) => handleMainTabKeyDown(event, "usage")}
+                        onClick={(event) => { event.stopPropagation(); activateMainTab("usage"); }}
+                        data-tauri-drag-region="false"
+                        title="Usage"
+                      >
+                        <BarChart3 size={13} strokeWidth={2.3} />
+                        <span className="tab-label">Usage</span>
+                        <span className="tab-active-indicator" data-tab="usage" aria-hidden="true" />
+                      </button>
+                      <button
+                        id="main-tab-runtime"
+                        className="header-tab-discrete"
+                        data-active={activeMainTab === "runtime"}
+                        data-panel-focus-target={activeMainTab === "runtime" ? "true" : undefined}
+                        type="button"
+                        role="tab"
+                        aria-label="Runtime"
+                        aria-selected={activeMainTab === "runtime"}
+                        aria-controls="main-panel-runtime"
+                        tabIndex={activeMainTab === "runtime" ? 0 : -1}
+                        onKeyDown={(event) => handleMainTabKeyDown(event, "runtime")}
+                        onClick={(event) => { event.stopPropagation(); activateMainTab("runtime"); }}
+                        data-tauri-drag-region="false"
+                        title="Runtime"
+                      >
+                        <Activity size={13} strokeWidth={2.3} />
+                        <span className="tab-label">Runtime</span>
+                        <span className="tab-active-indicator" data-tab="runtime" aria-hidden="true" />
+                      </button>
+                      <button
+                        id="main-tab-services"
+                        className="header-tab-discrete"
+                        data-active={activeMainTab === "services"}
+                        data-panel-focus-target={activeMainTab === "services" ? "true" : undefined}
+                        type="button"
+                        role="tab"
+                        aria-label="Services"
+                        aria-selected={activeMainTab === "services"}
+                        aria-controls="main-panel-services"
+                        tabIndex={activeMainTab === "services" ? 0 : -1}
+                        onKeyDown={(event) => handleMainTabKeyDown(event, "services")}
+                        onClick={(event) => { event.stopPropagation(); activateMainTab("services"); }}
+                        data-tauri-drag-region="false"
+                        title="Services"
+                      >
+                        <Server size={13} strokeWidth={2.3} />
+                        <span className="tab-label">Services</span>
+                        <span className="tab-active-indicator" data-tab="services" aria-hidden="true" />
+                      </button>
+                    </div>
+                  </div>
+                  <button
+                    className="gear-btn header-setup-btn"
+                    type="button"
+                    aria-label="Setup"
+                    title="Setup"
+                    onClick={(event) => { event.stopPropagation(); openSetup(); }}
+                    data-tauri-drag-region="false"
+                  >
                     <Settings size={13} strokeWidth={2.3} />
+                  </button>
+                  <button
+                    className="header-close-btn"
+                    type="button"
+                    aria-label="Close"
+                    title="Close"
+                    onClick={() => closePanel({ suppressHover: true })}
+                    data-tauri-drag-region="false"
+                  >
+                    <X size={14} strokeWidth={2.2} />
                   </button>
                 </div>
               </div>
             )}
-            <div className="sheet-divider" />
-
             <div
               className="sheet-body"
-              data-view={activeMainTab === "usage" && !setupOpen && !selectedSession ? "usage" : "default"}
+              data-view={panelWidthView}
               id={!setupOpen && !selectedSession ? `main-panel-${activeMainTab}` : undefined}
               role={!setupOpen && !selectedSession ? "tabpanel" : undefined}
               aria-labelledby={!setupOpen && !selectedSession ? `main-tab-${activeMainTab}` : undefined}
+              onScroll={(event) => {
+                if (event.currentTarget.scrollLeft !== 0) {
+                  event.currentTarget.scrollLeft = 0;
+                }
+              }}
             >
               {setupOpen ? (
-                <SetupPanel
-                  capabilities={capabilities}
-                  canUseNativeControls={canUseNativeControls}
-                  connectionTitle={connectionTitle}
-                  displayError={displayError}
-                  displayLoading={displayLoading}
-                  displayState={displayState}
-                  guidance={setupGuidance}
-                  haloBotLoadout={haloBotLoadout}
-                  isConnected={isConnected}
-                  keepAwakeActive={keepAwakeActive}
-                  keepAwakeEnabled={keepAwakeEnabled}
-                  keepAwakeError={keepAwakeError}
-                  pet={pet}
-                  petMotionMapping={petMotionMapping}
-                  completionPetEnabled={completionPetEnabled}
-                  completionPetSize={completionPetSize}
-                  movementBreakEnabled={movementBreakEnabled}
-                  petPreviewStatus={petPreviewStatus}
-                  petPreviewState={petPreviewState}
-                  modStatus={modStatus}
-                  agyHookStatus={agyHookStatus}
-                  nativeAction={nativeAction}
-                  onCheckBridge={() => void checkBridge()}
-                  onDisplayChange={updateDisplay}
-                  onDisplayRefresh={loadDisplayState}
-                  onInstallMod={() => void installMod()}
-                  onInstallAgyHooks={() => void installAgyHooks()}
-                  onHaloBotLoadoutChange={updateHaloBotLoadout}
-                  onKeepAwakeChange={updateKeepAwakeEnabled}
-                  onPetChange={updatePet}
-                  onPetMotionChange={updatePetMotion}
-                  onPetMotionReset={resetPetMotionMapping}
-                  onCompletionPetEnabledChange={updateCompletionPetEnabled}
-                  onCompletionPetSizeChange={updateCompletionPetSize}
-                  onMovementBreakEnabledChange={updateMovementBreakEnabled}
-                  onShowPetPreview={showPetPreview}
-                />
+                <div className="settings-board halo-tab-surface halo-surface-parchment" data-testid="settings-board">
+                  <div className="halo-inner-scroll" data-scroll-owner="inner">
+                    <Suspense fallback={null}>
+                      <SetupPanel
+                        capabilities={capabilities}
+                        canUseNativeControls={canUseNativeControls}
+                        connectionTitle={connectionTitle}
+                        displayError={displayError}
+                        displayLoading={displayLoading}
+                        displayState={displayState}
+                        guidance={setupGuidance}
+                        haloBotLoadout={haloBotLoadout}
+                        isConnected={isConnected}
+                        keepAwakeActive={keepAwakeActive}
+                        keepAwakeEnabled={keepAwakeEnabled}
+                        keepAwakeError={keepAwakeError}
+                        pet={pet}
+                        petMotionMapping={petMotionMapping}
+                        completionPetEnabled={completionPetEnabled}
+                        completionPetSize={completionPetSize}
+                        movementBreakEnabled={movementBreakEnabled}
+                        petPreviewStatus={petPreviewStatus}
+                        petPreviewState={petPreviewState}
+                        modStatus={modStatus}
+                        agyHookStatus={agyHookStatus}
+                        nativeAction={nativeAction}
+                        onCheckBridge={() => void checkBridge()}
+                        onDisplayChange={updateDisplay}
+                        onDisplayRefresh={loadDisplayState}
+                        onInstallMod={() => void installMod()}
+                        onInstallAgyHooks={() => void installAgyHooks()}
+                        onHaloBotLoadoutChange={updateHaloBotLoadout}
+                        onKeepAwakeChange={updateKeepAwakeEnabled}
+                        onPetChange={updatePet}
+                        onPetMotionChange={updatePetMotion}
+                        onPetMotionReset={resetPetMotionMapping}
+                        onCompletionPetEnabledChange={updateCompletionPetEnabled}
+                        onCompletionPetSizeChange={updateCompletionPetSize}
+                        onMovementBreakEnabledChange={updateMovementBreakEnabled}
+                        onShowPetPreview={showPetPreview}
+                      />
+                    </Suspense>
+                  </div>
+                </div>
               ) : selectedSession ? (
-                <div className="detail-body session-context-view" data-status={selectedSession.status}>
-                  <SessionContextSummary loadout={haloBotLoadout} motionMapping={petMotionMapping} pet={pet} session={selectedSession} />
-                  <div className="detail-path" title={selectedSession.cwd}>{shortenPath(selectedSession.cwd)}</div>
-                  {canUseNativeControls ? (
-                    <div className="capability-note">Focus matches Ghostty terminal cwd/title and selects its tab</div>
-                  ) : (
-                    <div className="capability-note">Focus needs the desktop runtime</div>
-                  )}
-                  {sessionAction.message ? (
-                    <div className="notice-row compact" data-online={sessionAction.ok === true} role="status" aria-live="polite">{sessionAction.message}</div>
-                  ) : null}
-                  <div className="detail-section-label">Recent activity</div>
-                  {selectedSessionActivityEvents.length === 0 ? (
-                    <div className="empty-text small">No events captured yet</div>
-                  ) : (
-                    <div className="action-list">
-                      {selectedSessionActivityEvents.map((event) => {
-                        const activity = getEventActivity(event);
+                <div className="session-detail-board halo-tab-surface halo-surface-mint" data-testid="session-detail-board">
+                  <div className="halo-inner-scroll" data-scroll-owner="inner">
+                    <div className="detail-body session-context-view" data-status={selectedSession.status}>
+                      <SessionContextSummary loadout={haloBotLoadout} motionMapping={petMotionMapping} pet={pet} session={selectedSession} />
+                      <div className="detail-path" title={selectedSession.cwd}>{shortenPath(selectedSession.cwd)}</div>
+                      {canUseNativeControls ? (
+                        <div className="capability-note">Focus matches Ghostty terminal cwd/title and selects its tab</div>
+                      ) : (
+                        <div className="capability-note">Focus needs the desktop runtime</div>
+                      )}
+                      {sessionAction.message ? (
+                        <div className="notice-row compact" data-online={sessionAction.ok === true} role="status" aria-live="polite">{sessionAction.message}</div>
+                      ) : null}
+                      <div className="detail-section-label">Recent activity</div>
+                      {selectedSessionActivityEvents.length === 0 ? (
+                        <div className="empty-text small">No events captured yet</div>
+                      ) : (
+                        <div className="action-list">
+                          {selectedSessionActivityEvents.map((event) => {
+                            const activity = getEventActivity(event);
 
-                        return (
-                          <div className="action-row" data-kind={activity.kind} key={event.id}>
-                            <span className="action-mark" aria-hidden="true" />
-                            <span className="action-tool">{activity.label}</span>
-                            <span className="action-detail">{activity.detail}</span>
-                            <span className="session-time">{formatTime(event.timestamp)}</span>
-                          </div>
-                        );
-                      })}
+                            return (
+                              <div className="action-row" data-kind={activity.kind} key={event.id}>
+                                <span className="action-mark" aria-hidden="true" />
+                                <span className="action-tool">{activity.label}</span>
+                                <span className="action-detail">{activity.detail}</span>
+                                <span className="session-time">{formatTime(event.timestamp)}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
-                  )}
+                    <div className="session-detail-actions-integrated">
+                      <div className="session-context-actions">
+                        <button className="pill-btn accent" type="button" onClick={() => void focusSelectedSession(selectedSession)} data-tauri-drag-region="false">
+                          <Focus size={12} strokeWidth={2.3} />
+                          Focus
+                        </button>
+                        {selectedSession.status === "done" ? (
+                          <button className="pill-btn" type="button" onClick={() => dismissSession(selectedSession.conversationId)} data-tauri-drag-region="false" title="Hide until fresh activity arrives">
+                            <X size={12} strokeWidth={2.4} />
+                            Clear
+                          </button>
+                        ) : null}
+                        <button
+                          className={`pill-btn danger session-history-action ${pendingRemoveHistoryId === selectedSession.conversationId ? "is-armed" : ""}`}
+                          type="button"
+                          onClick={() => requestRemoveSessionHistory(selectedSession.conversationId)}
+                          data-tauri-drag-region="false"
+                          title="Remove this session's locally stored activity"
+                          aria-label={pendingRemoveHistoryId === selectedSession.conversationId ? "Confirm remove" : "Remove history"}
+                        >
+                          <Trash2 size={12} strokeWidth={2.3} />
+                          {pendingRemoveHistoryId === selectedSession.conversationId ? "Confirm remove" : null}
+                        </button>
+                      </div>
+                      <button
+                        className="session-context-return"
+                        type="button"
+                        onClick={backToSessions}
+                        data-tauri-drag-region="false"
+                        aria-label={`Back to all ${sessions.length} ${sessions.length === 1 ? "session" : "sessions"}`}
+                      >
+                        <ChevronLeft size={12} strokeWidth={2.3} />
+                        <span>Back to sessions</span>
+                        <span className="session-context-return-count">{sessions.length}</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               ) : activeMainTab === "pomodoro" ? (
                 <FocusToolsPanel
                   nativeAvailable={canUseNativeControls}
-                  pomodoro={pomodoro}
-                  stopwatch={stopwatch}
                   onResetAllPomodoro={resetAllPomodoroCycle}
                   onShowCompanion={() => showManualCompanion()}
                   onStartMovement={(exerciseId) => showManualCompanion(exerciseId)}
+                  pomodoro={pomodoro}
+                  stopwatch={stopwatch}
                 />
               ) : activeMainTab === "usage" ? (
-                <AgentUsageList usages={agentUsages} onRefresh={refreshAgentUsage} settings={usageSettings} onSettingsChange={updateUsageSettings} />
+                <div className="usage-board halo-tab-surface halo-surface-sand" data-testid="usage-board">
+                  <div className="halo-inner-scroll" data-scroll-owner="inner">
+                    <AgentUsageList usages={agentUsages} onRefresh={refreshAgentUsage} settings={usageSettings} onSettingsChange={updateUsageSettings} />
+                  </div>
+                </div>
               ) : activeMainTab === "runtime" ? (
-                <Suspense fallback={<div className="empty-text small">Loading Runtime…</div>}>
-                  <RuntimeProcessesPanel monitor={runtimeMonitor} />
-                </Suspense>
+                <div className="runtime-board halo-tab-surface halo-surface-navy" data-testid="runtime-board">
+                  <div className="halo-inner-scroll" data-scroll-owner="inner">
+                    <Suspense fallback={<div className="empty-text small">Loading Runtime…</div>}>
+                      <RuntimeProcessesPanel monitor={runtimeMonitor} />
+                    </Suspense>
+                  </div>
+                </div>
               ) : activeMainTab === "services" ? (
-                <Suspense fallback={<div className="empty-text small">Loading Services…</div>}>
-                  <LocalServicesPanel monitor={runtimeMonitor} />
-                </Suspense>
-              ) : sessions.length === 0 ? (
-                <div className="empty-state">
-                  <div className="empty-glyph">◌</div>
-                  <div className="empty-text">Waiting for Letta Code</div>
-                  <button className="btn accent" type="button" onClick={(event) => { event.stopPropagation(); openSetup(); }} data-tauri-drag-region="false">
-                    <Settings size={13} strokeWidth={2.3} />
-                    Open setup
-                  </button>
+                <div className="services-board halo-tab-surface halo-surface-teal" data-testid="services-board">
+                  <div className="halo-inner-scroll" data-scroll-owner="inner">
+                    <Suspense fallback={<div className="empty-text small">Loading Services…</div>}>
+                      <LocalServicesPanel monitor={runtimeMonitor} />
+                    </Suspense>
+                  </div>
                 </div>
               ) : (
-                <>
-                  {sessionAction.message ? (
-                    <div className="notice-row compact session-focus-notice" data-online={sessionAction.ok === true} role="status" aria-live="polite">{sessionAction.message}</div>
-                  ) : null}
-                  <div className="session-sections">
-                    {activeSessionGroups.length > 0 ? (
-                      <section className="session-section" aria-labelledby="active-session-heading">
-                        <div className="session-section-head">
-                          <span id="active-session-heading">Active</span>
+                sessions.length === 0 ? (
+                  <div className="sessions-card halo-tab-surface halo-surface-mint" data-testid="sessions-board">
+                    <div className="halo-inner-scroll" data-scroll-owner="inner">
+                      <div className="empty-state">
+                        <div className="empty-glyph">◌</div>
+                        <div className="empty-text">Waiting for Letta Code</div>
+                        <button className="btn accent" type="button" onClick={(event) => { event.stopPropagation(); openSetup(); }} data-tauri-drag-region="false">
+                          <Settings size={13} strokeWidth={2.3} />
+                          Open setup
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="sessions-tray" data-testid="sessions-tray" ref={sessionsTrayRef}>
+                    <section
+                      className="sessions-card sessions-card-active session-section active-section halo-tab-surface halo-surface-mint"
+                      data-testid="sessions-board"
+                      data-card="active"
+                      style={{ flex: `${sessionsRatios[0]} 0 0px`, minWidth: `${SESSIONS_CARD_MIN_WIDTH}px` }}
+                      aria-labelledby="active-session-heading"
+                    >
+                      <div className="halo-inner-scroll" data-scroll-owner="inner" data-scroll-card="active">
+                        <div className="sessions-card-head">
+                          <span id="active-session-heading" className="sessions-card-title">Active</span>
                           <span className="session-section-count">{activeSessionGroups.reduce((count, group) => count + group.sessions.length, 0)}</span>
                         </div>
-                        <ul className="session-list">
-                          {activeSessionGroups.map((group) => {
-                            const groupKey = `active:${group.key}`;
-                            return (
-                              <WorkspaceSessionGroupItem
-                                expanded={expandedSessionGroupKeys.has(groupKey)}
-                                group={group}
-                                groupKey={groupKey}
-                                loadout={haloBotLoadout}
-                                motionMapping={petMotionMapping}
-                                pet={pet}
-                                removeGroupArmed={pendingGroupHistoryRemoval === getGroupRemovalId(groupKey, group)}
-                                onClear={dismissSession}
-                                onFocus={(session) => void focusSelectedSession(session)}
-                                onGroupAction={handleSessionGroupAction}
-                                onOpen={openSession}
-                                onToggle={toggleSessionGroup}
-                                key={groupKey}
-                              />
-                            );
-                          })}
-                        </ul>
-                      </section>
-                    ) : null}
-                    {completedSessionGroups.length > 0 ? (
-                      <section className="session-section completed-section" aria-labelledby="completed-session-heading">
-                        <div className="session-section-head">
-                          <span id="completed-session-heading">Completed</span>
+                        {sessionAction.message ? (
+                          <div className="notice-row compact session-focus-notice" data-online={sessionAction.ok === true} role="status" aria-live="polite">{sessionAction.message}</div>
+                        ) : null}
+                        {activeSessionGroups.length > 0 ? (
+                          <ul className="session-list">
+                            {activeSessionGroups.map((group) => {
+                              const groupKey = `active:${group.key}`;
+                              return (
+                                <WorkspaceSessionGroupItem
+                                  expanded={expandedSessionGroupKeys.has(groupKey)}
+                                  group={group}
+                                  groupKey={groupKey}
+                                  loadout={haloBotLoadout}
+                                  motionMapping={petMotionMapping}
+                                  pet={pet}
+                                  removeGroupArmed={pendingGroupHistoryRemoval === getGroupRemovalId(groupKey, group)}
+                                  onClear={dismissSession}
+                                  onFocus={(session) => void focusSelectedSession(session)}
+                                  onGroupAction={handleSessionGroupAction}
+                                  onOpen={openSession}
+                                  onToggle={toggleSessionGroup}
+                                  key={groupKey}
+                                />
+                              );
+                            })}
+                          </ul>
+                        ) : (
+                          <div className="empty-text small">No active sessions</div>
+                        )}
+                      </div>
+                    </section>
+
+                    <div
+                      className="sessions-divider"
+                      role="separator"
+                      tabIndex={0}
+                      aria-orientation="vertical"
+                      aria-label="Resize Active and Completed sections"
+                      aria-valuemin={Math.round(SESSIONS_CARD_MIN_WIDTH)}
+                      aria-valuemax={Math.round(Math.max(SESSIONS_CARD_MIN_WIDTH, (sessionsRatios[0] + sessionsRatios[1]) * Math.max(0, (sessionsTrayRef.current?.getBoundingClientRect().width ?? 960) - 24) - SESSIONS_CARD_MIN_WIDTH))}
+                      aria-valuenow={Math.round(sessionsRatios[0] * Math.max(0, (sessionsTrayRef.current?.getBoundingClientRect().width ?? 960) - 24))}
+                      onPointerDown={(e) => handleDividerPointerDown(0, e)}
+                      onPointerMove={handleDividerPointerMove}
+                      onPointerUp={handleDividerPointerUp}
+                      onPointerCancel={handleDividerPointerUp}
+                      onKeyDown={(e) => handleDividerKeyDown(0, e)}
+                    >
+                      <div className="sessions-grip" aria-hidden="true" />
+                    </div>
+
+                    <section
+                      className={`sessions-card sessions-card-completed session-section ${completedSessionGroups.length > 0 ? "completed-section" : ""} halo-tab-surface halo-surface-lavender`}
+                      data-testid="sessions-card-completed"
+                      data-card="completed"
+                      style={{ flex: `${sessionsRatios[1]} 0 0px`, minWidth: `${SESSIONS_CARD_MIN_WIDTH}px` }}
+                      aria-labelledby="completed-session-heading"
+                    >
+                      <div className="halo-inner-scroll" data-scroll-owner="inner" data-scroll-card="completed">
+                        <div className="sessions-card-head">
+                          <span id="completed-session-heading" className="sessions-card-title">Completed</span>
                           <span className="session-section-count">{completedSessions.length}</span>
                           <span className="spacer" />
-                          <button
-                            className="session-section-action"
-                            data-armed={clearCompletedArmed}
-                            type="button"
-                            onClick={clearCompletedSessions}
-                            data-tauri-drag-region="false"
-                          >
-                            {clearCompletedArmed ? `Confirm clear ${completedSessions.length}` : "Clear completed"}
-                          </button>
+                          {completedSessions.length > 0 ? (
+                            <button
+                              className="session-section-action"
+                              data-armed={clearCompletedArmed}
+                              type="button"
+                              onClick={clearCompletedSessions}
+                              data-tauri-drag-region="false"
+                            >
+                              {clearCompletedArmed ? `Confirm clear ${completedSessions.length}` : "Clear completed"}
+                            </button>
+                          ) : null}
                         </div>
-                        <ul className="session-list">
-                          {completedSessionGroups.map((group) => {
-                            const groupKey = `completed:${group.key}`;
-                            return (
-                              <WorkspaceSessionGroupItem
-                                expanded={expandedSessionGroupKeys.has(groupKey)}
-                                group={group}
-                                groupKey={groupKey}
-                                loadout={haloBotLoadout}
-                                motionMapping={petMotionMapping}
-                                pet={pet}
-                                removeGroupArmed={pendingGroupHistoryRemoval === getGroupRemovalId(groupKey, group)}
-                                onClear={dismissSession}
-                                onFocus={(session) => void focusSelectedSession(session)}
-                                onGroupAction={handleSessionGroupAction}
-                                onOpen={openSession}
-                                onToggle={toggleSessionGroup}
-                                key={groupKey}
-                              />
-                            );
-                          })}
-                        </ul>
-                      </section>
-                    ) : null}
-                  </div>
-
-                  <div className="sheet-divider soft" />
-
-                  <div className="event-list" aria-label="Recent Agent Halo events">
-                    {recentEvents.slice(0, 4).map((event) => (
-                      <div className="event-row" key={event.id}>
-                        <span className="event-time">{formatTime(event.timestamp)}</span>
-                        <span className="event-type">{event.type}</span>
-                        <span className="event-detail">{getEventDetail(event)}</span>
+                        {completedSessionGroups.length > 0 ? (
+                          <ul className="session-list">
+                            {completedSessionGroups.map((group) => {
+                              const groupKey = `completed:${group.key}`;
+                              return (
+                                <WorkspaceSessionGroupItem
+                                  expanded={expandedSessionGroupKeys.has(groupKey)}
+                                  group={group}
+                                  groupKey={groupKey}
+                                  loadout={haloBotLoadout}
+                                  motionMapping={petMotionMapping}
+                                  pet={pet}
+                                  removeGroupArmed={pendingGroupHistoryRemoval === getGroupRemovalId(groupKey, group)}
+                                  onClear={dismissSession}
+                                  onFocus={(session) => void focusSelectedSession(session)}
+                                  onGroupAction={handleSessionGroupAction}
+                                  onOpen={openSession}
+                                  onToggle={toggleSessionGroup}
+                                  key={groupKey}
+                                />
+                              );
+                            })}
+                          </ul>
+                        ) : (
+                          <div className="empty-text small">No completed sessions</div>
+                        )}
                       </div>
-                    ))}
+                    </section>
+
+                    <div
+                      className="sessions-divider"
+                      role="separator"
+                      tabIndex={0}
+                      aria-orientation="vertical"
+                      aria-label="Resize Completed and Recent activity sections"
+                      aria-valuemin={Math.round(SESSIONS_CARD_MIN_WIDTH)}
+                      aria-valuemax={Math.round(Math.max(SESSIONS_CARD_MIN_WIDTH, (sessionsRatios[1] + sessionsRatios[2]) * Math.max(0, (sessionsTrayRef.current?.getBoundingClientRect().width ?? 960) - 24) - SESSIONS_CARD_MIN_WIDTH))}
+                      aria-valuenow={Math.round(sessionsRatios[1] * Math.max(0, (sessionsTrayRef.current?.getBoundingClientRect().width ?? 960) - 24))}
+                      onPointerDown={(e) => handleDividerPointerDown(1, e)}
+                      onPointerMove={handleDividerPointerMove}
+                      onPointerUp={handleDividerPointerUp}
+                      onPointerCancel={handleDividerPointerUp}
+                      onKeyDown={(e) => handleDividerKeyDown(1, e)}
+                    >
+                      <div className="sessions-grip" aria-hidden="true" />
+                    </div>
+
+                    <section
+                      className="sessions-card sessions-card-recent session-section recent-section halo-tab-surface halo-surface-sand"
+                      data-testid="sessions-card-recent"
+                      data-card="recent"
+                      style={{ flex: `${sessionsRatios[2]} 0 0px`, minWidth: `${SESSIONS_CARD_MIN_WIDTH}px` }}
+                      aria-labelledby="recent-activity-heading"
+                    >
+                      <div className="halo-inner-scroll" data-scroll-owner="inner" data-scroll-card="recent">
+                        <div className="sessions-card-head">
+                          <span id="recent-activity-heading" className="sessions-card-title">Recent activity</span>
+                          <span className="session-section-count">{recentEvents.slice(0, 4).length}</span>
+                        </div>
+                        {recentEvents.length > 0 ? (
+                          <div className="event-list" aria-label="Recent Agent Halo events">
+                            {recentEvents.slice(0, 4).map((event) => (
+                              <div className="event-row" key={event.id}>
+                                <span className="event-time">{formatTime(event.timestamp)}</span>
+                                <span className="event-type">{event.type}</span>
+                                <span className="event-detail">{getEventDetail(event)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="empty-text small">No recent activity</div>
+                        )}
+                      </div>
+                    </section>
                   </div>
-                </>
+                )
               )}
             </div>
 
-            {(setupOpen || selectedSession || (activeMainTab === "sessions" && activitySession?.status === "done")) ? (
-              <div className={`sheet-footer ${selectedSession ? "session-context-footer" : ""}`}>
-                {selectedSession ? (
-                  <>
-                    <div className="session-context-actions">
-                    <button className="pill-btn accent" type="button" onClick={() => void focusSelectedSession(selectedSession)} data-tauri-drag-region="false">
-                      <Focus size={12} strokeWidth={2.3} />
-                      Focus
-                    </button>
-                    {selectedSession.status === "done" ? (
-                      <button className="pill-btn" type="button" onClick={() => dismissSession(selectedSession.conversationId)} data-tauri-drag-region="false" title="Hide until fresh activity arrives">
-                        <X size={12} strokeWidth={2.4} />
-                        Clear
-                      </button>
-                    ) : null}
-                    <button
-                      className={`pill-btn danger session-history-action ${pendingRemoveHistoryId === selectedSession.conversationId ? "is-armed" : ""}`}
-                      type="button"
-                      onClick={() => requestRemoveSessionHistory(selectedSession.conversationId)}
-                      data-tauri-drag-region="false"
-                      title="Remove this session's locally stored activity"
-                      aria-label={pendingRemoveHistoryId === selectedSession.conversationId ? "Confirm remove" : "Remove history"}
-                    >
-                      <Trash2 size={12} strokeWidth={2.3} />
-                      {pendingRemoveHistoryId === selectedSession.conversationId ? "Confirm remove" : null}
-                    </button>
-                    </div>
-                    <button
-                      className="session-context-return"
-                      type="button"
-                      onClick={backToSessions}
-                      data-tauri-drag-region="false"
-                      aria-label={`Back to all ${sessions.length} ${sessions.length === 1 ? "session" : "sessions"}`}
-                    >
-                      <ChevronLeft size={12} strokeWidth={2.3} />
-                      <span>Back to sessions</span>
-                      <span className="session-context-return-count">{sessions.length}</span>
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <span className="footer-meta">{workspace} · {model}</span>
-                    <span className="spacer" />
-                    {setupOpen ? (
-                      <div className="footer-actions">
-                        <button className="pill-btn" type="button" onClick={backToSessions} data-tauri-drag-region="false">
-                          <List size={12} strokeWidth={2.3} />
-                          Sessions
-                        </button>
-                      </div>
-                    ) : null}
-                    {!setupOpen && activitySession?.status === "done" ? (
-                      <button className="pill-btn accent" type="button" onClick={(event) => { event.stopPropagation(); acknowledgeDone(); }} data-tauri-drag-region="false">
-                        <Check size={12} strokeWidth={2.4} />
-                        Close
-                      </button>
-                    ) : null}
-                  </>
-                )}
+            {(!setupOpen && !selectedSession && activeMainTab === "sessions" && activitySession?.status === "done") ? (
+              <div className="sheet-footer">
+                <span className="footer-meta">{workspace} · {model}</span>
+                <span className="spacer" />
+                <button className="pill-btn accent" type="button" onClick={(event) => { event.stopPropagation(); acknowledgeDone(); }} data-tauri-drag-region="false">
+                  <Check size={12} strokeWidth={2.4} />
+                  Close
+                </button>
               </div>
             ) : null}
           </div> : null}

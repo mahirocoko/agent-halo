@@ -18,22 +18,29 @@
 
 Agent Halo is a native desktop companion for AI coding agents, currently supporting [Letta Code](https://docs.letta.com/letta-code/index.md) and [AGY (Antigravity)](https://antigravity.google). It runs around the macOS camera notch, listens to trusted agent events, and turns agent activity into a compact live presence surface.
 
-It is designed for people who keep multiple AI coding sessions, subagents, and project terminals open at once. Instead of scraping terminal text or asking you to hunt through panes, Agent Halo keeps recent workspaces visible, shows what each conversation is doing, and adds local focus tools without trying to become a hosted dashboard or process manager.
-
-The current app now spans session presence, a floating Pet with Focus-completion, manual-companion, and setup-preview purposes, Focus tools, an optional camera-based Movement Break, local provider usage, read-only process pressure, local service inspection and guarded current-user service controls, native display placement, and setup/install controls.
+The desktop companion uses a view-owned panel width (Sessions 560, Focus 540, Usage 700, Runtime 660, Services 620, Setup 640, session detail 520; max height 440px; min/screen-capped) with Agent Halo-owned discrete tabs and one material board per view:
+- **Collapsed Hardware Notch**: Preserves Notchcode / boring.notch hardware-notch integration at rest (SVG path, collapsed pill, activity status glyphs, and Pomodoro countdown).
+- **Top-Level Navigation**: Transparent rail with discrete tab buttons and small pastel signal underline, plus separate circular Setup and Close buttons. Responsive icon collapsing at narrow widths.
+- **Top-Level Tabs**:
+  - **Sessions**: Real agent conversations grouped into Active and Completed sections, showing compact project/status/model/age context with reachable focus/detail/clear actions (mint `#7fba8f` surface).
+  - **Focus**: Pomodoro countdown, phase progress, and quick action controls, with independent Pomodoro, Stopwatch, and Move challenge tools (lavender `#b59ae0` surface).
+  - **Usage**: Local quota/token views for known AI providers, including truthful unavailable/offline diagnostics (ochre `#e0b86a` surface).
+  - **Runtime**: Read-only Letta host/subprocess CPU and memory pressure, with no process controls (navy `#1a3350` surface).
+  - **Services**: Local TCP/HTTP listeners grouped into Detected web frontends, Letta services, and Other listeners, with expandable process detail, browser-open actions, and guarded Stop → Force kill controls for eligible current-user listener processes (teal `#154038` surface).
+- **Setup Surface**: Separate circular gear button opening a parchment `#f0d49a` surface for bridge diagnostics, Pet customization, display placement, and preferences.
 
 ## Product surfaces
 
 | Surface | Current role |
 | --- | --- |
 | **Sessions** | Workspace-grouped Letta conversations, truthful activity state, sticky completion history, detail, clear/dismiss, exact Herdr-pane focus when available, and Ghostty fallback |
-| **Pet** | A separate passively shown, non-focus-stealing Pet window: Focus completion retains Start break/Later/Close and notification handoff; a manual companion persists until Hide and offers deliberate Focus navigation and movement; setup preview is dismiss-only |
 | **Focus** | Independent Pomodoro, Stopwatch, and Move tools; Pomodoro keeps custom phases and silent alerts, while Stopwatch adds reload-safe elapsed tracking and clearable local history |
-| **Movement Break** | Explicit Squat or Overhead Reach challenge from Focus exact-exercise buttons or the Pet chooser, using one local camera stream, exercise-specific tracking, live progress, and bundled offline pose inference |
 | **Usage** | Local quota/token views for known AI providers, including truthful unavailable/offline diagnostics |
 | **Runtime** | Read-only Letta host/subprocess CPU and memory pressure, with no process controls |
 | **Services** | Local TCP/HTTP listeners grouped into Detected web frontends, Letta services, and Other listeners, with expandable process detail, browser-open actions, and guarded Stop → Force kill controls for eligible current-user listener processes |
-| **Setup** | Connection/mod install, global Pet choice and size, Completion Pet and **Offer movement after Focus** settings, keep-awake, and target-display selection |
+| **Setup** | Separate circular gear action and surface for connection/mod install, global Pet choice and size, Completion Pet and **Offer movement after Focus** settings, keep-awake, and target-display selection |
+| **Pet** | A separate passively shown, non-focus-stealing Pet window: Focus completion retains Start break/Later/Close and notification handoff; a manual companion persists until Hide and offers deliberate Focus navigation and movement; setup preview is dismiss-only |
+| **Movement Break** | Explicit Squat or Overhead Reach challenge from Focus exact-exercise buttons or the Pet chooser, using one local camera stream, exercise-specific tracking, live progress, and bundled offline pose inference |
 
 ## What Agent Halo does
 
@@ -276,7 +283,7 @@ scripts/install-desktop.mjs     Desktop build/install helper
 
 ## Design direction
 
-Agent Halo should feel like a quiet companion, not a generic AI dashboard. The interface follows a dark hardware-notch direction with compact workspace rows, hairline dividers, restrained orange/green state accents, and small Pet activity. Setup exposes only Halo Bot and Haloform as one global persisted Pet choice. Halo Bot is the fresh default and exposes all 10,752 combinations from the pinned 43-part Pixabots catalog through four layered selectors; Haloform uses an approved provider-derived native96 CRT master with explicit semantic masks. Retired stored Pet IDs normalize to Halo Bot, and neither identity nor color is randomized per project. A separate persisted Letta-state motion map may redirect body presentation (for example, Working → Idle motion) without changing truthful status, Signal V4, or Keep display awake semantics.
+Agent Halo should feel like a quiet companion, not a generic AI dashboard. The collapsed hardware notch stays dark; open views use Halo-owned pastel boards (mint Sessions, lavender Focus, ochre Usage, navy Runtime, teal Services, parchment Setup) with ink and status tokens remapped on each board instead of the old orange-on-black recipe. Compact workspace rows, hairline dividers, and small Pet activity remain. Setup exposes only Halo Bot and Haloform as one global persisted Pet choice. Halo Bot is the fresh default and exposes all 10,752 combinations from the pinned 43-part Pixabots catalog through four layered selectors; Haloform uses an approved provider-derived native96 CRT master with explicit semantic masks. Retired stored Pet IDs normalize to Halo Bot, and neither identity nor color is randomized per project. A separate persisted Letta-state motion map may redirect body presentation (for example, Working → Idle motion) without changing truthful status, Signal V4, or Keep display awake semantics.
 
 Natural Focus completion can summon a separate floating Pet without opening or focusing the full notch panel. The Pet owns projection only; the main renderer remains the sole Pomodoro and notification owner. That Focus-completion purpose retains Start break/Later/Close and its notification handoff, with an optional **Offer movement after Focus** chooser. Independently, Focus Move can show a manual companion or launch a specific Squat/Reach exercise; it mirrors main-projected state and Signal V4, returns after manual movement, and never mutates Pomodoro. Every camera path starts only after the exact exercise click, using the shared compact black/green camera surface with exercise-specific white/green tracking guides. Setup preview is dismiss-only. See [`docs/pet.md`](docs/pet.md) and [`docs/movement-break.md`](docs/movement-break.md).
 

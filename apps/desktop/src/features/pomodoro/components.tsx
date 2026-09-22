@@ -34,6 +34,8 @@ export const PomodoroPanel = ({ onResetAll, pomodoro }: IPomodoroPanelProps) => 
   const running = state.status === "running";
   const paused = state.status === "paused";
   const statusLabel = running ? "Running" : paused ? "Paused" : pomodoro.completionVisible ? `${getPomodoroPhaseLabel(state.lastCompletion?.completedPhase ?? state.phase)} complete` : "Ready";
+  const semanticStatus = running ? "running" : paused ? "paused" : pomodoro.completionVisible ? "done" : "ready";
+  const notificationFailed = pomodoro.notificationError !== null;
   const notificationAvailable = pomodoro.notificationPermission !== "unsupported" && pomodoro.notificationPermission !== "denied";
   const showNotificationNote = pomodoro.notificationError !== null || ["notDetermined", "denied", "unsupported"].includes(pomodoro.notificationPermission);
   const resetDisabled = state.status === "idle" && pomodoro.remainingMs === pomodoro.durationMs && state.lastCompletion === null;
@@ -73,11 +75,12 @@ export const PomodoroPanel = ({ onResetAll, pomodoro }: IPomodoroPanelProps) => 
 
   return (
     <div className="pomodoro-panel" data-phase={state.phase} data-status={state.status}>
+      <div className="pomodoro-primary-zone">
       <div className="pomodoro-phase-line">
         <span className="pomodoro-phase-icon" aria-hidden="true"><Timer size={13} strokeWidth={2.3} /></span>
         <span className="pomodoro-phase-label">Pomodoro</span>
         <span className="pomodoro-phase-context">{pomodoro.phaseLabel}</span>
-        <span className="pomodoro-status" data-status={state.status}>{statusLabel}</span>
+        <span className="pomodoro-status" data-status={semanticStatus}>{statusLabel}</span>
       </div>
 
       <div className="pomodoro-clock" role="timer" aria-label={`${pomodoro.phaseLabel}, ${pomodoro.countdownLabel} remaining`}>
@@ -87,16 +90,6 @@ export const PomodoroPanel = ({ onResetAll, pomodoro }: IPomodoroPanelProps) => 
 
       <div className="pomodoro-progress" role="progressbar" aria-label={`${pomodoro.phaseLabel} progress`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pomodoro.progress * 100)} style={progressStyle}>
         <span className="pomodoro-progress-fill" />
-      </div>
-
-      <div className="pomodoro-cycle-row">
-        <span className="pomodoro-cycle-label">Focus cycle</span>
-        <span className="pomodoro-cycle-dots" aria-label={`${pomodoro.cyclePosition} of ${pomodoro.settings.longBreakEvery} focus sessions before long break`}>
-          {Array.from({ length: pomodoro.settings.longBreakEvery }, (_, index) => (
-            <span className="pomodoro-cycle-dot" data-complete={index < pomodoro.cyclePosition} key={index} aria-hidden="true" />
-          ))}
-        </span>
-        <span className="pomodoro-cycle-total">{pomodoro.cyclePosition} / {pomodoro.settings.longBreakEvery}</span>
       </div>
 
       <div className="pomodoro-controls">
@@ -118,6 +111,18 @@ export const PomodoroPanel = ({ onResetAll, pomodoro }: IPomodoroPanelProps) => 
         <button className={`pomodoro-control ${resetAllArmed ? "danger" : ""}`} type="button" disabled={resetAllDisabled} onClick={() => { if (!resetAllArmed) { setResetAllArmed(true); return; } (onResetAll ?? pomodoro.resetAll)(); setResetAllArmed(false); }} data-tauri-drag-region="false" aria-label={resetAllArmed ? "Confirm reset all Pomodoro progress" : "Reset all Pomodoro progress"}>
           <RotateCcw size={13} strokeWidth={2.3} />{resetAllArmed ? "Confirm reset" : "Reset progress"}
         </button>
+      </div>
+      </div>
+
+      <div className="pomodoro-support-zone">
+      <div className="pomodoro-cycle-row">
+        <span className="pomodoro-cycle-label">Focus cycle</span>
+        <span className="pomodoro-cycle-dots" aria-label={`${pomodoro.cyclePosition} of ${pomodoro.settings.longBreakEvery} focus sessions before long break`}>
+          {Array.from({ length: pomodoro.settings.longBreakEvery }, (_, index) => (
+            <span className="pomodoro-cycle-dot" data-complete={index < pomodoro.cyclePosition} key={index} aria-hidden="true" />
+          ))}
+        </span>
+        <span className="pomodoro-cycle-total">{pomodoro.cyclePosition} / {pomodoro.settings.longBreakEvery}</span>
       </div>
 
       <button
@@ -167,11 +172,12 @@ export const PomodoroPanel = ({ onResetAll, pomodoro }: IPomodoroPanelProps) => 
       ) : null}
 
       {showNotificationNote ? (
-        <div className="pomodoro-notification" data-available={notificationAvailable} role="status" aria-live="polite">
+        <div className="pomodoro-notification" data-available={notificationAvailable} data-error={notificationFailed} role="status" aria-live="polite">
           {notificationAvailable ? <Bell size={12} strokeWidth={2.2} /> : <BellOff size={12} strokeWidth={2.2} />}
-          <span>{pomodoro.notificationError ?? (pomodoro.notificationPermission === "notDetermined" ? "macOS will ask for notification access when you start" : "Completion stays visible in Agent Halo")}</span>
+          <span>{pomodoro.notificationError ?? (pomodoro.notificationPermission === "notDetermined" ? "macOS asks for notifications on Start" : "Completion stays in Agent Halo")}</span>
         </div>
       ) : null}
+      </div>
     </div>
   );
 };

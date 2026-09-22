@@ -1,4 +1,9 @@
 import { expect, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
+
+const openFocusTools = async (page: Page) => {
+  await page.getByRole("tab", { name: "Focus" }).click();
+};
 
 const stopwatchStorageKey = "agent-halo.stopwatch";
 const stopwatchHistoryStorageKey = "agent-halo.stopwatch-history";
@@ -60,53 +65,27 @@ test("Stopwatch history normalization rejects malformed entries, deduplicates, a
   expect(result).toEqual({ length: 500, first: "entry-0", last: "entry-499", unique: 500 });
 });
 
-test("Focus tool tabs rove across Pomodoro, Stopwatch, and Move with wrap, Home, and End", async ({ page }) => {
+test("Focus renders Pomodoro, Stopwatch, and Move concurrently without a nested tablist", async ({ page }) => {
   await page.goto("/?demo=1&demoScenario=idle");
-  await page.getByRole("tab", { name: "Focus" }).click();
-  const pomodoroTab = page.getByRole("tab", { name: /^Pomodoro/ });
-  const stopwatchTab = page.getByRole("tab", { name: /^Stopwatch/ });
-  const moveTab = page.getByRole("tab", { name: "Move", exact: true });
+  await openFocusTools(page);
 
-  await pomodoroTab.focus();
-  await page.keyboard.press("ArrowLeft");
-  await expect(moveTab).toBeFocused();
-  await expect(moveTab).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByRole("tabpanel", { name: "Move" })).toBeVisible();
-
-  await page.keyboard.press("ArrowLeft");
-  await expect(stopwatchTab).toBeFocused();
-  await expect(stopwatchTab).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByRole("tabpanel", { name: "Stopwatch" })).toBeVisible();
-
-  await page.keyboard.press("ArrowLeft");
-  await expect(pomodoroTab).toBeFocused();
-  await expect(pomodoroTab).toHaveAttribute("aria-selected", "true");
-
-  await page.keyboard.press("ArrowRight");
-  await expect(stopwatchTab).toBeFocused();
-  await page.keyboard.press("ArrowRight");
-  await expect(moveTab).toBeFocused();
-  await page.keyboard.press("ArrowRight");
-  await expect(pomodoroTab).toBeFocused();
-
-  await page.keyboard.press("End");
-  await expect(moveTab).toBeFocused();
-  await expect(moveTab).toHaveAttribute("aria-selected", "true");
-  await page.keyboard.press("Home");
-  await expect(pomodoroTab).toBeFocused();
-  await expect(pomodoroTab).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator(".focus-tool-card")).toHaveCount(3);
+  await expect(page.locator(".pomodoro-panel")).toBeVisible();
+  await expect(page.locator(".stopwatch-panel")).toBeVisible();
+  await expect(page.locator(".focus-movement-launcher")).toBeVisible();
+  await expect(page.getByRole("tablist", { name: "Focus tools" })).toHaveCount(0);
 });
 
-test("Focus Move launcher shows browser-runtime unavailability without hiding manual actions", async ({ page }) => {
+test("Focus Move launcher stays concise while disabling unavailable manual actions", async ({ page }) => {
   await page.addInitScript(() => {
     window.localStorage.setItem("agent-halo.completion-pet-enabled", "false");
     window.localStorage.setItem("agent-halo.movement-break-enabled", "false");
   });
   await page.goto("/?demo=1&demoScenario=idle");
-  await page.getByRole("tab", { name: "Focus" }).click();
-  await page.getByRole("tab", { name: "Move", exact: true }).click();
+  await openFocusTools(page);
 
-  await expect(page.getByText("Movement breaks need the desktop runtime. Floating Pet and Camera actions are unavailable in the browser.")).toBeVisible();
+  await expect(page.locator(".focus-movement-launcher").getByRole("heading", { name: "Move" })).toBeVisible();
+  await expect(page.getByText("Movement breaks need the desktop runtime.")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Start 10 Squats movement break" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Start 10 Overhead Reaches movement break" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Show Pet" })).toBeDisabled();
@@ -145,9 +124,8 @@ test("Focus Move launcher manually summons schema-v2 companions without notifica
   }, pomodoroStorageKey);
 
   await page.goto("/?demo=1&demoScenario=idle");
-  await page.getByRole("tab", { name: "Focus" }).click();
-  await page.getByRole("tab", { name: "Move", exact: true }).click();
-  await expect(page.getByText("Start opens Camera locally after the Pet appears. Show Pet keeps Camera off until you choose a move.")).toBeVisible();
+  await openFocusTools(page);
+  await expect(page.locator(".focus-movement-launcher").getByRole("heading", { name: "Move" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Start 10 Squats movement break" })).toBeEnabled();
   await expect(page.getByRole("button", { name: "Start 10 Overhead Reaches movement break" })).toBeEnabled();
   await expect(page.getByRole("button", { name: "Show Pet" })).toBeEnabled();
@@ -206,34 +184,77 @@ test("Pet Open Focus action activates and focuses the main Focus tab", async ({ 
   await expect.poll(() => page.evaluate(() => (window as typeof window & { __openFocusCalls: Array<{ command: string; args?: Record<string, unknown> }> }).__openFocusCalls.some((call) => call.command === "set_panel_open" && call.args?.open === true && call.args?.focus === true))).toBe(true);
 });
 
-test("three Focus tools stay inside the supported 280px panel width", async ({ page }) => {
-  await page.setViewportSize({ width: 280, height: 440 });
+test("Focus cards stack in DOM order without horizontal overflow at 320px", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 440 });
   await page.goto("/?demo=1&demoScenario=idle");
-  await page.getByRole("tab", { name: "Focus" }).click();
-  const strip = page.locator(".focus-tool-tabs");
-  const geometry = await strip.evaluate((element) => {
-    const bounds = element.getBoundingClientRect();
-    const buttons = [...element.querySelectorAll("button")].map((button) => {
-      const box = button.getBoundingClientRect();
-      return { left: box.left, right: box.right };
-    });
-    return { left: bounds.left, right: bounds.right, clientWidth: element.clientWidth, scrollWidth: element.scrollWidth, buttons };
+  await openFocusTools(page);
+  await expect.poll(() => page.locator(".halo-surface").evaluate((surface) => Number.parseFloat(getComputedStyle(surface).height))).toBe(440);
+  const geometry = await page.getByTestId("focus-tools-tray").evaluate((tray) => {
+    const cards = [...tray.querySelectorAll<HTMLElement>(".focus-tool-card")];
+    return {
+      order: cards.map((card) => card.querySelector<HTMLElement>("[data-focus-card]")?.dataset.focusCard),
+      tops: cards.map((card) => card.getBoundingClientRect().top),
+      overflowY: getComputedStyle(tray).overflowY,
+      horizontalOverflow: tray.scrollWidth > tray.clientWidth + 1,
+      nestedScrollers: cards.filter((card) => {
+        const scroller = card.querySelector<HTMLElement>("[data-scroll-owner='inner']")!;
+        return ["auto", "scroll"].includes(getComputedStyle(scroller).overflowY);
+      }).length,
+    };
   });
-  expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.clientWidth);
-  for (const button of geometry.buttons) {
-    expect(button.left).toBeGreaterThanOrEqual(geometry.left);
-    expect(button.right).toBeLessThanOrEqual(geometry.right + 0.5);
-  }
+  expect(geometry.order).toEqual(["pomodoro", "stopwatch", "move"]);
+  expect(geometry.tops[0]).toBeLessThan(geometry.tops[1]);
+  expect(geometry.tops[1]).toBeLessThan(geometry.tops[2]);
+  expect(geometry.overflowY).toBe("auto");
+  expect(geometry.horizontalOverflow).toBe(false);
+  expect(geometry.nestedScrollers).toBe(0);
+});
+
+test("wide Stopwatch keeps its timer fixed while long history owns scrolling", async ({ page }) => {
+  await page.addInitScript((key) => {
+    const now = Date.now();
+    window.localStorage.setItem(key, JSON.stringify({
+      schemaVersion: 1,
+      entries: Array.from({ length: 40 }, (_, index) => ({
+        id: `scroll-entry-${index}`,
+        startedAt: now - index * 120_000 - 60_000,
+        endedAt: now - index * 120_000,
+        durationMs: 60_000,
+      })),
+    }));
+  }, stopwatchHistoryStorageKey);
+  await page.setViewportSize({ width: 1200, height: 800 });
+  await page.goto("/?demo=1&demoScenario=idle");
+  await openFocusTools(page);
+
+  const geometry = await page.locator(".focus-tool-card-stopwatch").evaluate((card) => {
+    const owner = card.querySelector<HTMLElement>("[data-scroll-owner='inner']")!;
+    const timer = card.querySelector<HTMLElement>("[role='timer']")!;
+    const history = card.querySelector<HTMLElement>(".stopwatch-history-list")!;
+    const timerTop = timer.getBoundingClientRect().top;
+    history.scrollTop = 120;
+    return {
+      ownerOverflow: getComputedStyle(owner).overflowY,
+      historyOverflow: getComputedStyle(history).overflowY,
+      historyCanScroll: history.scrollHeight > history.clientHeight,
+      historyScrollTop: history.scrollTop,
+      timerStayedFixed: timer.getBoundingClientRect().top === timerTop,
+    };
+  });
+
+  expect(geometry.ownerOverflow).toBe("hidden");
+  expect(geometry.historyOverflow).toBe("auto");
+  expect(geometry.historyCanScroll).toBe(true);
+  expect(geometry.historyScrollTop).toBeGreaterThan(0);
+  expect(geometry.timerStayedFixed).toBe(true);
 });
 
 test("Stopwatch and Pomodoro run together, persist, and share the collapsed Focus surface", async ({ page }) => {
   await page.goto("/?demo=1&demoScenario=idle");
-  await page.getByRole("tab", { name: "Focus" }).click();
-  await page.getByRole("tab", { name: /^Stopwatch/ }).click();
+  await openFocusTools(page);
   const stopwatchPanel = page.locator(".stopwatch-panel");
 
   await stopwatchPanel.getByRole("button", { name: "Start" }).click();
-  await page.getByRole("tab", { name: /^Pomodoro/ }).click();
   const pomodoroPanel = page.locator(".pomodoro-panel");
   await pomodoroPanel.getByRole("button", { name: "Start" }).click();
   await expect.poll(() => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? "null")?.status, stopwatchStorageKey)).toBe("running");
@@ -247,9 +268,8 @@ test("Stopwatch and Pomodoro run together, persist, and share the collapsed Focu
   await expect(page.getByRole("button", { name: /Pomodoro|Focus.*Stopwatch/ })).toHaveAttribute("aria-label", /Stopwatch running/);
 
   await page.reload();
-  await page.getByRole("tab", { name: "Focus" }).click();
+  await openFocusTools(page);
   await expect(page.locator(".pomodoro-panel").getByText("Running")).toBeVisible();
-  await page.getByRole("tab", { name: /^Stopwatch/ }).click();
   await expect(page.locator(".stopwatch-panel").getByText("Running")).toBeVisible();
 });
 
@@ -277,8 +297,7 @@ test("Stopwatch actions never schedule notifications, summon Pet, or change Keep
     return calls.includes("cancel_pomodoro_notification") && calls.includes("set_keep_awake");
   })).toBe(true);
   await page.evaluate(() => { (window as typeof window & { __stopwatchNativeCalls: string[] }).__stopwatchNativeCalls.length = 0; });
-  await page.getByRole("tab", { name: "Focus" }).click();
-  await page.getByRole("tab", { name: /^Stopwatch/ }).click();
+  await openFocusTools(page);
   const stopwatchPanel = page.locator(".stopwatch-panel");
   await stopwatchPanel.getByRole("button", { name: "Start" }).click();
   await stopwatchPanel.getByRole("button", { name: "Pause" }).click();
@@ -333,8 +352,7 @@ test("Finishing saves local history and clearing it leaves the current Stopwatch
   }, [stopwatchStorageKey, now] as const);
 
   await page.goto("/?demo=1&demoScenario=idle");
-  await page.getByRole("tab", { name: "Focus" }).click();
-  await page.getByRole("tab", { name: /^Stopwatch/ }).click();
+  await openFocusTools(page);
   const stopwatchPanel = page.locator(".stopwatch-panel");
   await expect(stopwatchPanel.getByRole("timer")).toHaveText("00:01:30");
   await stopwatchPanel.getByRole("button", { name: "Finish" }).click();
@@ -344,8 +362,7 @@ test("Finishing saves local history and clearing it leaves the current Stopwatch
   await expect.poll(() => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? "null")?.entries?.length, stopwatchHistoryStorageKey)).toBe(1);
 
   await page.reload();
-  await page.getByRole("tab", { name: "Focus" }).click();
-  await page.getByRole("tab", { name: /^Stopwatch/ }).click();
+  await openFocusTools(page);
   const restoredPanel = page.locator(".stopwatch-panel");
   await expect(restoredPanel.getByText("Today")).toBeVisible();
   await restoredPanel.getByRole("button", { name: "Start" }).click();
@@ -359,8 +376,7 @@ test("Finishing saves local history and clearing it leaves the current Stopwatch
 
 test("Discard requires confirmation and never creates history", async ({ page }) => {
   await page.goto("/?demo=1&demoScenario=idle");
-  await page.getByRole("tab", { name: "Focus" }).click();
-  await page.getByRole("tab", { name: /^Stopwatch/ }).click();
+  await openFocusTools(page);
   const stopwatchPanel = page.locator(".stopwatch-panel");
   await stopwatchPanel.getByRole("button", { name: "Start" }).click();
   await stopwatchPanel.getByRole("button", { name: "Discard current Stopwatch session" }).click();

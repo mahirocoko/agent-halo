@@ -6,7 +6,7 @@ test.beforeEach(async ({ page }) => {
 
 test("collapsed notch opens from the keyboard and moves focus into the panel", async ({ page }) => {
   await page.goto("/?demo=1&demoScenario=done");
-  await page.getByRole("button", { name: "Close" }).click();
+  await page.locator(".header-close-btn").click();
 
   const surface = page.getByRole("button", { name: "Open Agent Halo" });
   await expect(surface).toBeVisible();
@@ -51,13 +51,20 @@ test("main section tabs provide roving keyboard navigation and panel relationshi
 
   const headerClearance = await page.locator(".header-tablist").evaluate((tablist) => {
     const surface = tablist.closest<HTMLElement>(".halo-surface")!;
-    const notch = tablist.closest<HTMLElement>(".notch-wrap")!;
+    const corridor = surface.querySelector<HTMLElement>(".header-camera-corridor");
     return {
-      closedHeight: Number.parseFloat(getComputedStyle(notch).getPropertyValue("--closed-height")),
-      tabTop: tablist.getBoundingClientRect().top - surface.getBoundingClientRect().top,
+      inRightWing: Boolean(tablist.closest(".header-right-wing")),
+      corridorClearance: corridor ? corridor.offsetWidth >= 184 : false,
     };
   });
-  expect(headerClearance.tabTop).toBeGreaterThanOrEqual(headerClearance.closedHeight);
+  expect(headerClearance.inRightWing).toBe(true);
+  expect(headerClearance.corridorClearance).toBe(true);
+
+  // Assert Notepad and Events tabs/cards are absent (NotchOwl / Agent Halo truthfulness invariant)
+  await expect(page.getByRole("tab", { name: "Notepad" })).toHaveCount(0);
+  await expect(page.getByRole("tab", { name: "Events" })).toHaveCount(0);
+  await expect(page.locator(".notchowl-card-notepad")).toHaveCount(0);
+  await expect(page.locator(".notchowl-card-events")).toHaveCount(0);
 
   const sessionsTab = page.getByRole("tab", { name: "Sessions" });
   await sessionsTab.focus();
@@ -89,6 +96,11 @@ test("main section tabs provide roving keyboard navigation and panel relationshi
   await expect(servicesTab).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("tabpanel", { name: "Services" })).toBeVisible();
 
+  // Wrap around back to Sessions
+  await page.keyboard.press("ArrowRight");
+  await expect(sessionsTab).toBeFocused();
+  await expect(sessionsTab).toHaveAttribute("aria-selected", "true");
+
   await usageTab.click();
 
   const codexTab = page.getByRole("tab", { name: "Codex" });
@@ -96,7 +108,11 @@ test("main section tabs provide roving keyboard navigation and panel relationshi
   await page.keyboard.press("ArrowDown");
   await expect(page.getByRole("tab", { name: "Antigravity" })).toBeFocused();
 
-  await page.getByRole("tab", { name: "Settings" }).click();
+  // Setup button outside tablist
+  await page.getByRole("button", { name: "Setup" }).click();
+  const petTab = page.getByRole("tab", { name: "Pet" });
+  await petTab.click();
+  await page.getByRole("button", { name: /Choose/ }).click();
   const selectedRadio = page.getByRole("radio", { checked: true }).first();
   await expect(selectedRadio).toBeVisible();
   await selectedRadio.focus();

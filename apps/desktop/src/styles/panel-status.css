@@ -88,18 +88,19 @@
 
 /* Panel content lives inside the same black halo-surface background. */
 .sheet-inner {
-  --sheet-inline-padding: clamp(40px, 4.4vw, 50px);
+  --sheet-inline-padding: 32px;
   position: relative;
   z-index: 1;
   flex: 1;
-  min-width: 0;
-  min-height: 0;
+  min-inline-size: 0;
+  min-block-size: 0;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
   max-height: 440px;
+  height: 100%;
   overflow: hidden;
-  padding-inline: var(--sheet-inline-padding);
+  padding: 12px var(--sheet-inline-padding) 14px;
   opacity: 1;
   transform: translateY(0);
   transition: opacity 0.12s ease, transform 0.16s ease;
@@ -110,19 +111,11 @@
   transform: translateY(-4px);
 }
 
-.sheet-header,
 .sheet-footer {
   display: flex;
   align-items: center;
   gap: 8px;
   flex: none;
-}
-
-.sheet-header {
-  width: 100%;
-  box-sizing: border-box;
-  padding: var(--closed-height, 36px) 0 12px;
-  color: inherit;
 }
 
 .sheet-footer {
@@ -190,7 +183,7 @@
 .pill-btn:focus-visible,
 .gear-btn:focus-visible,
 .row-btn:focus-visible {
-  outline: 1px solid rgba(255, 157, 61, 0.78);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -220,9 +213,7 @@
 }
 
 .sheet-divider {
-  height: 1px;
-  background: var(--hair);
-  flex: none;
+  display: none;
 }
 
 .sheet-divider.soft {

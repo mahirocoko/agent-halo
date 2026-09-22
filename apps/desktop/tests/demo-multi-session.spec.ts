@@ -51,24 +51,29 @@ test("grouped completed workspace exposes every child session and guarded clear"
   await expect(completedSection.getByRole("button", { name: "Focus agent-halo session in Ghostty" })).toHaveCount(2);
   await expect(completedSection.getByRole("button", { name: "Clear completed agent-halo session" })).toHaveCount(2);
   const geometry = await page.evaluate(() => {
-    const sheet = document.querySelector(".sheet-inner")?.getBoundingClientRect();
-    const body = document.querySelector(".sheet-body") as HTMLElement | null;
-    const row = document.querySelector(".session-row")?.getBoundingClientRect();
-    const bodyRect = body?.getBoundingClientRect();
+    const scroller = document.querySelector<HTMLElement>("[data-scroll-card='completed']");
+    const row = scroller?.querySelector<HTMLElement>(".session-row");
+    if (!scroller || !row) throw new Error("missing Completed card scroller or row");
+    scroller.style.maxHeight = "100px";
+    scroller.scrollTop = 48;
+    const scrollerRect = scroller.getBoundingClientRect();
+    const rowRect = row.getBoundingClientRect();
     return {
-      contentInset: bodyRect && row ? bodyRect.right - row.right : -1,
-      leftInset: sheet && row ? row.left - sheet.left : -1,
-      scrollbarInset: sheet && bodyRect ? sheet.right - bodyRect.right : -1,
-      scrollable: body ? body.scrollHeight > body.clientHeight : false,
+      leftInset: rowRect.left - scrollerRect.left,
+      rightInset: scrollerRect.right - rowRect.right,
+      overflowY: getComputedStyle(scroller).overflowY,
+      scrollTop: scroller.scrollTop,
+      scrollable: scroller.scrollHeight > scroller.clientHeight,
+      scrollbarWidth: scroller.offsetWidth - scroller.clientWidth,
     };
   });
-  expect(Math.abs(geometry.leftInset - geometry.scrollbarInset)).toBeLessThanOrEqual(1);
-  expect(geometry.leftInset).toBeGreaterThanOrEqual(40);
-  expect(geometry.leftInset).toBeLessThanOrEqual(50);
-  // Overlay scrollbars reserve no layout gutter; native/classic scrollbars reserve up to 16px.
-  expect(geometry.contentInset).toBeGreaterThanOrEqual(0);
-  expect(geometry.contentInset).toBeLessThanOrEqual(16);
+  expect(geometry.leftInset).toBeGreaterThanOrEqual(12);
+  expect(geometry.leftInset).toBeLessThanOrEqual(18);
+  expect(geometry.rightInset).toBeGreaterThanOrEqual(12 + geometry.scrollbarWidth);
+  expect(geometry.rightInset).toBeLessThanOrEqual(20 + geometry.scrollbarWidth);
+  expect(geometry.overflowY).toBe("auto");
   expect(geometry.scrollable).toBe(true);
+  expect(geometry.scrollTop).toBeGreaterThan(0);
 
   await completedSection.getByRole("button", { name: "Clear completed agent-halo session" }).first().click();
   await expect(completedSection.getByRole("button", { name: "Clear completed agent-halo session" })).toHaveCount(1);
@@ -77,6 +82,46 @@ test("grouped completed workspace exposes every child session and guarded clear"
   await expect(page.getByRole("button", { name: "Confirm clear 2" })).toBeVisible();
   await page.getByRole("button", { name: "Confirm clear 2" }).click();
   await expect(page.locator(".completed-section")).toHaveCount(0);
+});
+
+test("narrow grouped row preserves its project name and wrapped pills", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 440 });
+  await page.goto("/?demo=1&demoScenario=multi");
+  await page.waitForTimeout(350);
+
+  const geometry = await page.locator(".session-group-main").evaluate((group) => {
+    const row = group.closest<HTMLElement>(".session-row")!;
+    const title = group.querySelector<HTMLElement>(".session-title-line")!;
+    const project = group.querySelector<HTMLElement>(".session-project")!;
+    const count = group.querySelector<HTMLElement>(".session-group-count")!;
+    const status = group.querySelector<HTMLElement>(".session-inline-status")!;
+    const signal = group.querySelector<HTMLElement>(".halo-pet-signal")!.getBoundingClientRect();
+    const activity = group.querySelector<HTMLElement>(".session-activity")!.getBoundingClientRect();
+    const titleRect = title.getBoundingClientRect();
+    const countRect = count.getBoundingClientRect();
+    const statusRect = status.getBoundingClientRect();
+
+    return {
+      projectClientWidth: project.clientWidth,
+      projectScrollWidth: project.scrollWidth,
+      projectText: project.textContent,
+      rowClientWidth: row.clientWidth,
+      rowScrollWidth: row.scrollWidth,
+      signalActivityGap: activity.left - signal.right,
+      pillsContained:
+        countRect.right <= titleRect.right &&
+        countRect.bottom <= titleRect.bottom &&
+        statusRect.right <= titleRect.right &&
+        statusRect.bottom <= titleRect.bottom,
+    };
+  });
+
+  expect(geometry.projectText).toBe("agent-halo");
+  expect(geometry.projectClientWidth).toBeGreaterThanOrEqual(50);
+  expect(geometry.projectScrollWidth).toBeLessThanOrEqual(geometry.projectClientWidth);
+  expect(geometry.pillsContained).toBe(true);
+  expect(geometry.signalActivityGap).toBeGreaterThanOrEqual(4);
+  expect(geometry.rowScrollWidth).toBeLessThanOrEqual(geometry.rowClientWidth);
 });
 
 test("completed workspace group can clear all of its done children", async ({ page }) => {

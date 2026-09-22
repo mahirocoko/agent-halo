@@ -52,6 +52,7 @@ export const StopwatchPanel = ({ stopwatch }: IStopwatchPanelProps) => {
   const running = stopwatch.state.status === "running";
   const paused = stopwatch.state.status === "paused";
   const historyGroups = useMemo(() => groupHistory(stopwatch.history), [stopwatch.history]);
+  const semanticStatus = running ? "running" : paused ? "paused" : "ready";
 
   useEffect(() => {
     setDiscardArmed(false);
@@ -63,10 +64,11 @@ export const StopwatchPanel = ({ stopwatch }: IStopwatchPanelProps) => {
 
   return (
     <section className="stopwatch-panel" data-status={stopwatch.state.status} aria-labelledby="stopwatch-heading">
+      <div className="stopwatch-primary-zone">
       <div className="stopwatch-heading-row">
         <span className="stopwatch-icon" aria-hidden="true"><Clock3 size={13} strokeWidth={2.3} /></span>
         <h2 id="stopwatch-heading">Stopwatch</h2>
-        <span className="stopwatch-status" data-status={stopwatch.state.status}>{running ? "Running" : paused ? "Paused" : "Ready"}</span>
+        <span className="stopwatch-status" data-status={semanticStatus}>{running ? "Running" : paused ? "Paused" : "Ready"}</span>
       </div>
 
       <div className="stopwatch-clock" role="timer" aria-label={`Stopwatch, ${stopwatch.elapsedLabel} elapsed`}>
@@ -95,7 +97,9 @@ export const StopwatchPanel = ({ stopwatch }: IStopwatchPanelProps) => {
           <Trash2 size={12} strokeWidth={2.3} />{discardArmed ? "Confirm discard" : "Discard"}
         </button>
       </div>
+      </div>
 
+      <div className="stopwatch-support-zone">
       <div className="stopwatch-history-heading">
         <span><History size={12} strokeWidth={2.2} />History</span>
         <button
@@ -133,6 +137,7 @@ export const StopwatchPanel = ({ stopwatch }: IStopwatchPanelProps) => {
           ))}
         </div>
       )}
+      </div>
     </section>
   );
 };

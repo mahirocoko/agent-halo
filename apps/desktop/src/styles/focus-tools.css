@@ -1,120 +1,59 @@
-.focus-tool-tabs {
-  min-height: 36px;
-  display: flex;
-  align-items: stretch;
-  gap: 20px;
-  border-bottom: 1px solid var(--hair);
-}
-
-.focus-tool-tabs button {
-  position: relative;
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0;
-  border: 0;
-  color: var(--text-3);
-  background: transparent;
-  font: inherit;
-  font-size: 10px;
-  cursor: pointer;
-}
-
-.focus-tool-tabs button::after {
-  content: "";
-  position: absolute;
-  right: 0;
-  bottom: -1px;
-  left: 0;
-  height: 1px;
-  background: transparent;
-}
-
-.focus-tool-tabs button[aria-selected="true"] {
-  color: var(--text);
-  font-weight: 700;
-}
-
-.focus-tool-tabs button[aria-selected="true"]::after {
-  background: var(--accent);
-}
-
-.focus-tool-tabs small {
-  color: var(--text-3);
-  font-size: 9px;
-  font-variant-numeric: tabular-nums;
-  font-weight: 500;
-}
-
-.focus-tool-tabs button:focus-visible {
-  outline: 1px solid rgba(255, 157, 61, 0.86);
-  outline-offset: 2px;
-}
-
 .focus-movement-launcher {
+  min-width: 0;
+  min-height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px 0 2px;
+  gap: 18px;
+  padding: 6px 2px 4px;
 }
 
-.focus-movement-launcher-heading {
+.focus-movement-actions-zone,
+.focus-movement-launcher-exercise {
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-}
-
-.focus-movement-launcher-kicker {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--accent);
-  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .focus-movement-launcher h2 {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   margin: 0;
   color: var(--text);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.focus-movement-launcher-note {
-  margin: 0;
-  color: var(--text-3);
-  font-size: 10px;
-  line-height: 1.45;
+  font-size: 12px;
+  font-weight: 750;
 }
 
 .focus-movement-launcher-status {
   margin: 0;
   color: var(--text-2);
-  font-size: 9px;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.focus-movement-actions-zone {
+  gap: 12px;
 }
 
 .focus-movement-launcher-actions {
-  border-top: 1px solid var(--hair);
+  border-block: 1px solid var(--hair);
 }
 
 .focus-movement-launcher-row {
+  min-height: 58px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  min-height: 38px;
-  border-bottom: 1px solid var(--hair);
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.focus-movement-launcher-row + .focus-movement-launcher-row {
+  border-top: 1px solid var(--hair);
 }
 
 .focus-movement-launcher-exercise {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
+  gap: 3px;
 }
 
 .focus-movement-launcher-exercise strong {
@@ -125,42 +64,27 @@
 .focus-movement-launcher-exercise small {
   color: var(--text-3);
   font-size: 9px;
+  line-height: 1.25;
 }
 
 .focus-movement-launch-action,
 .focus-movement-show-pet {
+  min-height: 34px;
   justify-content: center;
-  min-height: 26px;
-  padding: 4px 8px;
+  padding: 6px 10px;
   font-size: 10px;
 }
 
 .focus-movement-show-pet {
-  justify-self: start;
+  align-self: flex-start;
 }
 
 .focus-movement-launcher .btn:disabled {
+  opacity: 0.5;
   cursor: not-allowed;
-  opacity: 0.48;
 }
 
 .focus-movement-launcher .btn:focus-visible {
-  outline: 1px solid rgba(255, 157, 61, 0.86);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
-}
-
-@media (max-width: 359px) {
-  .focus-tool-tabs {
-    gap: 8px;
-  }
-
-  .focus-tool-tabs button {
-    gap: 4px;
-    font-size: 9px;
-    white-space: nowrap;
-  }
-
-  .focus-tool-tabs small {
-    display: none;
-  }
 }

@@ -26,7 +26,7 @@
   gap: 8px;
   padding-top: 8px;
   border-bottom: 1px solid var(--hair);
-  background: #000;
+  background: var(--surface-base, var(--surface));
 }
 
 .runtime-subtitle,
@@ -51,9 +51,14 @@
   gap: 8px;
 }
 
+.runtime-service-groups .session-section-head {
+  position: relative;
+  top: 0;
+}
+
 .runtime-group-count {
   color: var(--text-2);
-  font-size: 9px;
+  font-size: 10px;
   line-height: 1;
   text-align: center;
 }
@@ -173,7 +178,7 @@
 
 .runtime-service-kind {
   color: var(--text-2);
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .runtime-service-row[data-web-frontend="true"] .runtime-service-mark {
@@ -286,27 +291,27 @@
 }
 
 .runtime-row[data-pressure="normal"] .runtime-pressure-label {
-  border-color: rgba(74, 222, 128, 0.24);
+  border-color: color-mix(in srgb, var(--done) 28%, transparent);
   color: var(--done);
-  background: rgba(74, 222, 128, 0.08);
+  background: color-mix(in srgb, var(--done) 12%, transparent);
 }
 
 .runtime-row[data-pressure="elevated"] .runtime-pressure-label {
-  border-color: rgba(255, 178, 61, 0.24);
+  border-color: color-mix(in srgb, var(--waiting) 28%, transparent);
   color: var(--text-2);
   background: transparent;
 }
 
 .runtime-row[data-pressure="high"] .runtime-pressure-label {
-  border-color: rgba(255, 178, 61, 0.24);
+  border-color: color-mix(in srgb, var(--waiting) 28%, transparent);
   color: var(--waiting);
-  background: rgba(255, 178, 61, 0.09);
+  background: color-mix(in srgb, var(--waiting) 12%, transparent);
 }
 
 .runtime-row[data-pressure="critical"] .runtime-pressure-label {
-  border-color: rgba(255, 107, 102, 0.24);
+  border-color: color-mix(in srgb, var(--danger) 28%, transparent);
   color: var(--danger);
-  background: rgba(255, 107, 102, 0.09);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
 }
 
 .runtime-row[data-pressure="unavailable"] .runtime-pressure-label {
