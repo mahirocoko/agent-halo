@@ -143,14 +143,17 @@
 }
 
 .session-detail-tray {
-  display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
-  gap: 12px;
+  display: flex;
+  gap: 0;
   flex: 1 1 auto;
   inline-size: 100%;
   min-inline-size: 0;
   min-block-size: 0;
   overflow: hidden;
+}
+
+.session-detail-tray > .card-resize-divider {
+  flex: 0 0 12px;
 }
 
 .session-detail-tray .session-detail-card {
@@ -527,15 +530,22 @@
 
 @container halo-panel (max-width: 640px) {
   .session-detail-tray {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto;
+    flex-direction: column;
+    gap: 12px;
     overflow-x: hidden;
     overflow-y: auto;
+  }
+
+  .session-detail-tray > .card-resize-divider {
+    display: none;
   }
 
   .session-detail-tray .session-detail-card {
     block-size: auto;
     height: auto;
+    inline-size: 100% !important;
+    min-inline-size: 0 !important;
+    flex: none !important;
   }
 
   .session-detail-tray .session-detail-overview-card {

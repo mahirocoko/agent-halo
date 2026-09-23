@@ -4,9 +4,8 @@
 }
 
 .setup-tray {
-  display: grid;
-  grid-template-columns: 170px minmax(0, 1fr);
-  gap: 12px;
+  display: flex;
+  gap: 0;
   min-inline-size: 0;
   min-block-size: 0;
   flex: 1 1 auto;
@@ -20,7 +19,11 @@
 }
 
 .setup-navigation-card {
-  inline-size: 170px;
+  inline-size: auto;
+}
+
+.setup-tray > .card-resize-divider {
+  flex: 0 0 12px;
 }
 
 .setup-navigation-card .halo-inner-scroll {
@@ -550,8 +553,8 @@
 
 @container halo-panel (max-width: 640px) {
   .setup-tray {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: 90px auto;
+    flex-direction: column;
+    gap: 12px;
     align-content: start;
     overflow-x: hidden;
     overflow-y: auto;
@@ -559,13 +562,18 @@
 
   .setup-card,
   .setup-navigation-card {
-    inline-size: 100%;
-    min-inline-size: 0;
-    flex: none;
+    inline-size: 100% !important;
+    min-inline-size: 0 !important;
+    flex: none !important;
   }
 
   .setup-navigation-card {
-    min-block-size: 90px;
+    block-size: 90px !important;
+    min-block-size: 90px !important;
+  }
+
+  .setup-tray > .card-resize-divider {
+    display: none;
   }
 
   .setup-tray > .setup-detail-card {

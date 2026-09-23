@@ -2,12 +2,18 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEve
 import { Activity, ChevronRight, ExternalLink, RefreshCw, Server, X } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { BoardScroll, BoardSurface } from "../../components/board-surface";
+import { ResizableCardDivider, useResizableCardLayout, type IResizableCardSpec } from "../../components/resizable-card-tray";
 import { SurfaceControl } from "../../components/surface-control";
 import { SurfaceStatus, type ISurfaceStatusProps } from "../../components/surface-status";
 import { formatLocalServiceEndpoint, formatLocalServiceUptime, formatRuntimeBytes, formatRuntimeCpu, localServiceListenerKey } from "./model";
 import type { ILocalService, ILocalServiceControlResult, IRuntimeMonitorView, IRuntimeSessionView, LocalServiceControlMode } from "./types";
 
 const runtimeRowKey = (row: IRuntimeSessionView): string => `${row.processId}:${row.conversationId}`;
+
+const MONITOR_CARD_SPECS: IResizableCardSpec[] = [
+  { id: "overview", defaultRatio: 0.3 },
+  { id: "detail", defaultRatio: 0.7 },
+];
 
 const useMonitorDetailScroll = (contentCount: number, scrollTop: number) => {
   const detailScrollRef = useRef<HTMLDivElement>(null);
@@ -288,6 +294,7 @@ const OverviewHeader = ({ children, icon, title, titleId }: { children: ReactNod
 );
 
 export const RuntimeProcessesPanel = ({ detailScrollTop, monitor }: { detailScrollTop: number; monitor: IRuntimeMonitorView }) => {
+  const layout = useResizableCardLayout({ storageKey: "agent-halo.runtime-layout.v1", specs: MONITOR_CARD_SPECS });
   const [hiddenRows, setHiddenRows] = useState<Set<string>>(() => new Set());
   const rows = useMemo(() => monitor.rows.filter((row) => !hiddenRows.has(runtimeRowKey(row))), [hiddenRows, monitor.rows]);
   const detailScrollRef = useMonitorDetailScroll(rows.length, detailScrollTop);
@@ -305,8 +312,8 @@ export const RuntimeProcessesPanel = ({ detailScrollTop, monitor }: { detailScro
   const hide = (row: IRuntimeSessionView) => setHiddenRows((current) => new Set(current).add(runtimeRowKey(row)));
 
   return (
-    <div className="monitor-tray runtime-board" data-testid="runtime-board" aria-label="Runtime process monitor">
-      <BoardSurface className="monitor-card monitor-overview-card" tone="slate" aria-labelledby="runtime-overview-title">
+    <div className="monitor-tray runtime-board" data-testid="runtime-board" aria-label="Runtime process monitor" ref={layout.trayRef}>
+      <BoardSurface className="monitor-card monitor-overview-card" tone="slate" aria-labelledby="runtime-overview-title" style={layout.cardStyle(0)}>
         <BoardScroll data-monitor-card="overview">
           <OverviewHeader icon={<Activity size={18} strokeWidth={2.1} />} title="Runtime" titleId="runtime-overview-title">
             <SurfaceControl surfaceControlShape="circle" surfaceControlSize="icon" surfaceControlVariant="subtle" type="button" onClick={refresh} disabled={monitor.loading} aria-busy={monitor.loading} aria-label={monitor.loading ? "Refreshing Runtime" : "Refresh Runtime"} title="Refresh process pressure">
@@ -323,7 +330,8 @@ export const RuntimeProcessesPanel = ({ detailScrollTop, monitor }: { detailScro
           <p className="runtime-footnote">Read-only · 100% CPU equals one logical core · no process controls</p>
         </BoardScroll>
       </BoardSurface>
-      <BoardSurface className="monitor-card monitor-detail-card" tone="navy" aria-labelledby="runtime-detail-title">
+      <ResizableCardDivider layout={layout} index={0} label="Resize Runtime overview and process pressure" />
+      <BoardSurface className="monitor-card monitor-detail-card" tone="navy" aria-labelledby="runtime-detail-title" style={layout.cardStyle(1)}>
         <div className="runtime-detail-heading">
           <div><span className="runtime-overview-kicker">Live monitor</span><h2 id="runtime-detail-title">Process pressure</h2></div>
         </div>
@@ -346,6 +354,7 @@ export const RuntimeProcessesPanel = ({ detailScrollTop, monitor }: { detailScro
 };
 
 export const LocalServicesPanel = ({ detailScrollTop, monitor }: { detailScrollTop: number; monitor: IRuntimeMonitorView }) => {
+  const layout = useResizableCardLayout({ storageKey: "agent-halo.services-layout.v1", specs: MONITOR_CARD_SPECS });
   const [serviceOpenError, setServiceOpenError] = useState<string | null>(null);
   const [expandedServiceKey, setExpandedServiceKey] = useState<string | null>(null);
   const [controlAnnouncement, setControlAnnouncement] = useState("");
@@ -382,8 +391,8 @@ export const LocalServicesPanel = ({ detailScrollTop, monitor }: { detailScrollT
   };
 
   return (
-    <div className="monitor-tray services-board" data-testid="services-board" aria-label="Local services">
-      <BoardSurface className="monitor-card monitor-overview-card" tone="slate" aria-labelledby="services-overview-title">
+    <div className="monitor-tray services-board" data-testid="services-board" aria-label="Local services" ref={layout.trayRef}>
+      <BoardSurface className="monitor-card monitor-overview-card" tone="slate" aria-labelledby="services-overview-title" style={layout.cardStyle(0)}>
         <BoardScroll data-monitor-card="overview">
           <OverviewHeader icon={<Server size={18} strokeWidth={2.1} />} title="Services" titleId="services-overview-title">
             <SurfaceControl surfaceControlShape="circle" surfaceControlSize="icon" surfaceControlVariant="subtle" type="button" onClick={monitor.refreshServices} disabled={monitor.servicesLoading} aria-busy={monitor.servicesLoading} aria-label={monitor.servicesLoading ? "Refreshing Services" : "Refresh Services"} title="Refresh local services">
@@ -400,7 +409,8 @@ export const LocalServicesPanel = ({ detailScrollTop, monitor }: { detailScrollT
           <p className="runtime-footnote">Web evidence first · exact Letta ancestry · Stop requires confirmation</p>
         </BoardScroll>
       </BoardSurface>
-      <BoardSurface className="monitor-card monitor-detail-card" tone="teal" aria-labelledby="services-detail-title">
+      <ResizableCardDivider layout={layout} index={0} label="Resize Services overview and listening services" />
+      <BoardSurface className="monitor-card monitor-detail-card" tone="teal" aria-labelledby="services-detail-title" style={layout.cardStyle(1)}>
         <div className="runtime-detail-heading"><div><span className="runtime-overview-kicker">Local machine</span><h2 id="services-detail-title">Listening services</h2></div></div>
         <BoardScroll ref={detailScrollRef} data-monitor-card="detail">
           {monitor.servicesError ? <div className="notice-row compact" data-online="false" role="status">{monitor.servicesError}</div> : null}

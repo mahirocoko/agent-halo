@@ -8,7 +8,7 @@
 .monitor-tray {
   display: flex;
   align-items: stretch;
-  gap: 12px;
+  gap: 0;
   min-inline-size: 0;
   min-block-size: 0;
   flex: 1 1 auto;
@@ -46,6 +46,10 @@
   min-block-size: 0;
   padding: 6px 12px 12px;
   scrollbar-gutter: auto;
+}
+
+.monitor-tray > .card-resize-divider {
+  flex: 0 0 12px;
 }
 
 .runtime-overview-head,
@@ -475,22 +479,27 @@
   }
 
   .monitor-tray > .monitor-card {
-    inline-size: 100%;
-    min-inline-size: 0;
+    inline-size: 100% !important;
+    min-inline-size: 0 !important;
     block-size: auto;
+    flex: none !important;
   }
 
   .monitor-tray > .monitor-card.monitor-overview-card {
-    inline-size: 100%;
+    inline-size: 100% !important;
     min-block-size: 210px;
     flex: none;
   }
 
   .monitor-tray > .monitor-card.monitor-detail-card {
-    inline-size: 100%;
+    inline-size: 100% !important;
     min-block-size: 420px;
     grid-template-rows: auto auto;
-    flex: none;
+    flex: none !important;
+  }
+
+  .monitor-tray > .card-resize-divider {
+    display: none;
   }
 
   .monitor-card .halo-inner-scroll {

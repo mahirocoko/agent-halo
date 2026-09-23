@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as 
 import { ArrowRight, Bot, Check, Coffee, Download, Dumbbell, Focus, Monitor as MonitorIcon, Play, PlugZap, RefreshCw } from "lucide-react";
 import type { IAgentHaloBridgeCapabilities } from "@agent-halo/protocol";
 import { BoardScroll, BoardSurface } from "../../components/board-surface";
+import { ResizableCardDivider, useResizableCardLayout, type IResizableCardSpec } from "../../components/resizable-card-tray";
 import { HaloBotBody, HALO_PET_ROSTER, type HaloPetName } from "../session/HaloPet";
 import { getHaloBotLoadoutLabel, getHaloBotParts, HALO_BOT_COMBINATION_COUNT, HALO_BOT_PART_CATALOG, HALO_BOT_PART_CATEGORIES, setHaloBotPart, type HaloBotLoadout, type HaloBotPartCategory } from "../session/haloBot";
 import { DEFAULT_HALO_PET_MOTION_MAPPING, HALO_PET_MOTIONS, type HaloPetMotion, type HaloPetMotionMapping, type HaloPetSemanticState } from "../session/petMotion";
@@ -17,6 +18,10 @@ const SETUP_CATEGORY_COPY: Record<SetupCategory, { title: string; detail: string
   display: { title: "Display", detail: "Screen placement and power behavior" },
 };
 const COMPLETION_PET_SIZES: CompletionPetSize[] = ["small", "medium", "large"];
+const SETUP_CARD_SPECS: IResizableCardSpec[] = [
+  { id: "navigation", defaultRatio: 0.27 },
+  { id: "detail", defaultRatio: 0.73 },
+];
 
 const completionPetSizeLabel = (size: CompletionPetSize): string => size === "small" ? "1×" : size === "medium" ? "1.5×" : "2×";
 
@@ -100,6 +105,7 @@ export interface ISetupPanelProps {
 }
 
 export const SetupPanel = ({ capabilities, canUseNativeControls, completionPetEnabled, completionPetSize, connectionTitle, displayError, displayLoading, displayState, guidance, haloBotLoadout, isConnected, keepAwakeActive, keepAwakeEnabled, keepAwakeError, movementBreakEnabled, pet, petMotionMapping, petPreviewState, petPreviewStatus, modStatus, agyHookStatus, nativeAction, onCheckBridge, onCompletionPetEnabledChange, onCompletionPetSizeChange, onDisplayChange, onDisplayRefresh, onHaloBotLoadoutChange, onInstallMod, onInstallAgyHooks, onKeepAwakeChange, onMovementBreakEnabledChange, onPetChange, onPetMotionChange, onPetMotionReset, onShowPetPreview }: ISetupPanelProps) => {
+  const layout = useResizableCardLayout({ storageKey: "agent-halo.setup-layout.v1", specs: SETUP_CARD_SPECS });
   const [activeCategory, setActiveCategory] = useState<SetupCategory>("connection");
   const [compactNavigation, setCompactNavigation] = useState(() => window.matchMedia("(max-width: 640px)").matches);
   const [petPickerOpen, setPetPickerOpen] = useState(false);
@@ -256,8 +262,8 @@ export const SetupPanel = ({ capabilities, canUseNativeControls, completionPetEn
   const activeCategoryCopy = SETUP_CATEGORY_COPY[activeCategory];
 
   return (
-    <div className="setup-tray" data-testid="settings-board" onKeyDown={handleSetupKeyDown}>
-      <BoardSurface className="setup-card setup-navigation-card" tone="slate" aria-label="Setup navigation">
+    <div className="setup-tray" data-testid="settings-board" onKeyDown={handleSetupKeyDown} ref={layout.trayRef}>
+      <BoardSurface className="setup-card setup-navigation-card" tone="slate" aria-label="Setup navigation" style={layout.cardStyle(0)}>
         <BoardScroll data-setup-card="navigation">
           <div className="setup-navigation-heading"><strong>Setup</strong><small>Agent Halo preferences</small></div>
           <div className="setup-sidebar" role="tablist" aria-label="Setup sections" aria-orientation={compactNavigation ? "horizontal" : "vertical"}>
@@ -268,7 +274,8 @@ export const SetupPanel = ({ capabilities, canUseNativeControls, completionPetEn
         </BoardScroll>
       </BoardSurface>
 
-      <BoardSurface className="setup-card setup-detail-card" tone="parchment" aria-label={`${activeCategoryCopy.title} settings`}>
+      <ResizableCardDivider layout={layout} index={0} label="Resize Setup navigation and settings" />
+      <BoardSurface className="setup-card setup-detail-card" tone="parchment" aria-label={`${activeCategoryCopy.title} settings`} style={layout.cardStyle(1)}>
         <div className="setup-detail-heading"><span>{activeCategoryCopy.title}</span><small>{activeCategoryCopy.detail}</small></div>
         <BoardScroll className="setup-detail-body" data-setup-card="detail">
           <div className="setup-category-panel" id={`setup-panel-${activeCategory}`} role="tabpanel" aria-labelledby={`setup-tab-${activeCategory}`}>

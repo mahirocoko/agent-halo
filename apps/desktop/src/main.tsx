@@ -4,6 +4,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type
 import { createRoot } from "react-dom/client";
 import type { AgentHaloPresenceStatus } from "@agent-halo/protocol";
 import { BoardScroll, BoardSurface } from "./components/board-surface";
+import { ResizableCardDivider, useResizableCardLayout, type IResizableCardSpec } from "./components/resizable-card-tray";
 import { SurfaceControl } from "./components/surface-control";
 import { ActivityPet, type HaloPetName } from "./features/session/HaloPet";
 import { SessionContextSummary, StatusGlyph, WorkspaceSessionGroupItem } from "./features/session/components";
@@ -55,6 +56,10 @@ import type { MovementExerciseId } from "./features/movement/types";
 import "./styles.css";
 
 const KEEP_AWAKE_STORAGE_KEY = "agent-halo.keep-awake-while-working";
+const SESSION_DETAIL_CARD_SPECS: IResizableCardSpec[] = [
+  { id: "overview", defaultRatio: 0.55 },
+  { id: "activity", defaultRatio: 0.45 },
+];
 const SEARCH_PARAMS = new URLSearchParams(window.location.search);
 const DEMO_MODE = SEARCH_PARAMS.has("demo");
 const DEMO_SCENARIO = SEARCH_PARAMS.get("demoScenario");
@@ -223,6 +228,7 @@ const App = () => {
     completed: 0,
     recent: 0,
   });
+  const sessionDetailLayout = useResizableCardLayout({ storageKey: "agent-halo.session-detail-layout.v1", specs: SESSION_DETAIL_CARD_SPECS });
   const activeDragDividerRef = useRef<DragDividerState | null>(null);
   const [usageSettings, setUsageSettings] = useState<IUsageSettings>(readUsageSettings);
   const [pet, setPet] = useState<HaloPetName>(readHaloPetPreference);
@@ -2023,8 +2029,8 @@ const App = () => {
                   />
                 </Suspense>
               ) : selectedSession ? (
-                <div className="session-detail-tray" data-testid="session-detail-board">
-                  <BoardSurface className="session-detail-card session-detail-overview-card" tone="mint">
+                <div className="session-detail-tray" data-testid="session-detail-board" ref={sessionDetailLayout.trayRef}>
+                  <BoardSurface className="session-detail-card session-detail-overview-card" tone="mint" style={sessionDetailLayout.cardStyle(0)}>
                     <BoardScroll className="session-detail-overview-scroll session-context-view" data-session-detail-card="overview" data-status={selectedSession.status}>
                       <div className="session-detail-overview-content">
                         <SessionContextSummary loadout={haloBotLoadout} motionMapping={petMotionMapping} pet={pet} session={selectedSession} />
@@ -2078,7 +2084,8 @@ const App = () => {
                       </div>
                     </BoardScroll>
                   </BoardSurface>
-                  <BoardSurface className="session-detail-card session-detail-activity-card" tone="parchment">
+                  <ResizableCardDivider layout={sessionDetailLayout} index={0} label="Resize session overview and activity log" />
+                  <BoardSurface className="session-detail-card session-detail-activity-card" tone="parchment" style={sessionDetailLayout.cardStyle(1)}>
                     <div className="session-detail-activity-heading">
                       <span className="session-detail-activity-kicker">Session log</span>
                       <h2>Recent activity</h2>

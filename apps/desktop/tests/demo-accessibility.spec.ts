@@ -103,20 +103,14 @@ test("main section tabs provide roving keyboard navigation and panel relationshi
 
   await usageTab.click();
 
-  const usageTablist = page.getByRole("tablist", { name: "Usage providers" });
-  await expect(usageTablist).toHaveAttribute("aria-orientation", "vertical");
-  const codexTab = usageTablist.getByRole("tab", { name: "Codex" });
-  await codexTab.focus();
-  await page.keyboard.press("ArrowDown");
-  await expect(usageTablist.getByRole("tab", { name: "Antigravity" })).toBeFocused();
-  await page.keyboard.press("End");
-  const usageSettingsTab = usageTablist.getByRole("tab", { name: "Settings" });
-  await expect(usageSettingsTab).toBeFocused();
-  await expect(usageSettingsTab).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByRole("tabpanel", { name: "Settings" })).toBeVisible();
-  await page.keyboard.press("Home");
-  await expect(codexTab).toBeFocused();
-  await expect(codexTab).toHaveAttribute("aria-selected", "true");
+  const usageDividers = page.locator(".usage-divider");
+  await expect(usageDividers).toHaveCount(3);
+  await usageDividers.first().focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(usageDividers.first()).toHaveAttribute("aria-valuenow", /.+/);
+  await page.getByRole("button", { name: "Usage settings" }).click();
+  await expect(page.getByRole("region", { name: "Usage settings" })).toBeVisible();
+  await expect(page.getByRole("radio", { name: "Used" })).toBeVisible();
 
   // Setup button outside tablist
   await page.getByRole("button", { name: "Setup" }).click();

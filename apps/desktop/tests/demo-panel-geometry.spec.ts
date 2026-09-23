@@ -461,7 +461,38 @@ test("wide Focus uses three independent cards, 12px gutters, and a fully visible
   }
 });
 
-test("Usage renders parchment navigation and sand detail cards with independent wide scrollers", async ({ page }) => {
+test("every multi-card surface exposes the Sessions-style keyboard resize grip", async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 800 });
+  await page.goto("/?demo=1&demoScenario=multi");
+
+  const assertResizable = async (selector: string, count: number) => {
+    const dividers = page.locator(selector);
+    await expect(dividers).toHaveCount(count);
+    const divider = dividers.first();
+    const before = await divider.getAttribute("aria-valuenow");
+    await divider.focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(divider).not.toHaveAttribute("aria-valuenow", before ?? "");
+  };
+
+  await page.getByRole("tab", { name: "Focus" }).click();
+  await assertResizable(".focus-tools-tray .card-resize-divider", 2);
+  await page.getByRole("tab", { name: "Usage" }).click();
+  await assertResizable(".usage-tray .usage-divider", 3);
+  await page.getByRole("tab", { name: "Runtime" }).click();
+  await assertResizable(".runtime-board .card-resize-divider", 1);
+  await page.getByRole("tab", { name: "Services" }).click();
+  await assertResizable(".services-board .card-resize-divider", 1);
+  await page.getByRole("button", { name: "Setup" }).click();
+  await assertResizable(".setup-tray .card-resize-divider", 1);
+  await page.getByRole("button", { name: /Back/ }).click();
+  await page.getByRole("tab", { name: "Sessions" }).click();
+  await assertResizable(".sessions-tray .sessions-divider", 2);
+  await page.locator(".session-row-main").first().click();
+  await assertResizable(".session-detail-tray .card-resize-divider", 1);
+});
+
+test("Usage renders one resizable card per provider with independent wide scrollers", async ({ page }) => {
   await page.setViewportSize({ width: 1200, height: 800 });
   await page.goto("/?demo=1&demoScenario=multi");
   await page.getByRole("tab", { name: "Usage" }).click();
@@ -470,12 +501,14 @@ test("Usage renders parchment navigation and sand detail cards with independent 
     const cards = [...tray.querySelectorAll<HTMLElement>(".usage-card")];
     const rects = cards.map((card) => card.getBoundingClientRect());
     const scrollers = cards.map((card) => card.querySelector<HTMLElement>("[data-scroll-owner='inner']")!);
+    const dividers = [...tray.querySelectorAll<HTMLElement>(".usage-divider")];
     return {
       cardCount: cards.length,
       paints: cards.map((card) => getComputedStyle(card).backgroundColor),
-      gap: rects[1].left - rects[0].right,
-      navigationWidth: rects[0].width,
+      gaps: rects.slice(1).map((rect, index) => rect.left - rects[index].right),
+      widths: rects.map((rect) => rect.width),
       order: scrollers.map((scroller) => scroller.dataset.usageCard),
+      dividerCount: dividers.length,
       horizontalOverflow: tray.scrollWidth > tray.clientWidth + 1,
       scrollers: scrollers.map((scroller) => {
         const style = getComputedStyle(scroller);
@@ -489,11 +522,17 @@ test("Usage renders parchment navigation and sand detail cards with independent 
     };
   });
 
-  expect(geometry.cardCount).toBe(2);
-  expect(geometry.paints).toEqual(["rgb(155, 150, 131)", "rgb(163, 158, 106)"]);
-  expect(geometry.gap).toBeCloseTo(12, 0);
-  expect(geometry.navigationWidth).toBeCloseTo(190, 0);
-  expect(geometry.order).toEqual(["navigation", "detail"]);
+  expect(geometry.cardCount).toBe(4);
+  expect(geometry.paints).toEqual([
+    "rgb(142, 165, 148)",
+    "rgb(140, 135, 161)",
+    "rgb(163, 158, 106)",
+    "rgb(155, 150, 131)",
+  ]);
+  expect(geometry.gaps).toEqual([12, 12, 12]);
+  expect(geometry.widths.every((width) => width >= 190)).toBe(true);
+  expect(geometry.dividerCount).toBe(3);
+  expect(geometry.order).toEqual(["codex", "agy", "claude", "cursor"]);
   expect(geometry.horizontalOverflow).toBe(false);
   for (const scroller of geometry.scrollers) {
     expect(scroller.position).toBe("absolute");
@@ -503,7 +542,7 @@ test("Usage renders parchment navigation and sand detail cards with independent 
   }
 });
 
-test("compact Usage stacks navigation before detail and gives scrolling to the tray", async ({ page }) => {
+test("compact Usage stacks provider cards and gives scrolling to the tray", async ({ page }) => {
   await page.setViewportSize({ width: 620, height: 440 });
   await page.goto("/?demo=1&demoScenario=multi");
   await page.getByRole("tab", { name: "Usage" }).click();
@@ -526,9 +565,9 @@ test("compact Usage stacks navigation before detail and gives scrolling to the t
     };
   });
 
-  expect(geometry.order).toEqual(["navigation", "detail"]);
+  expect(geometry.order).toEqual(["codex", "agy", "claude", "cursor"]);
   expect(geometry.tops[0]).toBeLessThan(geometry.tops[1]);
-  expect(geometry.minHeights).toEqual(["240px", "360px"]);
+  expect(geometry.minHeights.every((height) => height === "0px")).toBe(true);
   expect(geometry.trayOverflowY).toBe("auto");
   expect(geometry.horizontalOverflow).toBe(false);
   for (const scroller of geometry.scrollers) {
@@ -574,7 +613,7 @@ test("wide Setup uses two material cards with a fixed detail heading and flat Pe
   expect(wide.cardCount).toBe(2);
   expect(wide.paints).toEqual(["rgb(113, 127, 142)", "rgb(155, 150, 131)"]);
   expect(wide.gap).toBeCloseTo(12, 0);
-  expect(wide.navigationWidth).toBeCloseTo(170, 0);
+  expect(wide.navigationWidth).toBeGreaterThan(190);
   expect(wide.detailFlexible).toBe(true);
   expect(wide.detailRows).toContain("minmax(0px, 1fr)");
   expect(wide.headingBodyGap).toBeGreaterThanOrEqual(0);
@@ -753,8 +792,8 @@ test("wide Runtime and Services keep fixed headings above their detail scrollers
     });
 
     expect(geometry.cardCount).toBe(2);
-    expect(geometry.overviewWidth).toBeCloseTo(240, 0);
-    expect(geometry.detailWidth).toBeGreaterThan(240);
+    expect(geometry.overviewWidth).toBeGreaterThan(190);
+    expect(geometry.detailWidth).toBeGreaterThan(190);
     expect(geometry.gap).toBeCloseTo(12, 0);
     expect(geometry.horizontalOverflow).toBe(false);
     expect(geometry.overview).toEqual({
@@ -923,9 +962,9 @@ for (const view of ["Runtime", "Services"] as const) {
 
 test("navigating from usage to setup and back restores active tab and prior scroll position", async ({ page }) => {
   await page.goto("/?demo=1&demoScenario=multi");
-  await page.addStyleTag({ content: "[data-usage-card='detail'] { max-height: 120px !important; }" });
+  await page.addStyleTag({ content: "[data-usage-card='codex'] { max-height: 120px !important; }" });
   await page.getByRole("tab", { name: "Usage" }).click();
-  const usageScroller = page.locator("[data-usage-card='detail']");
+  const usageScroller = page.locator("[data-usage-card='codex']");
   await expect(usageScroller).toBeVisible();
   await usageScroller.evaluate((element) => {
     element.scrollTop = 56;
@@ -959,8 +998,8 @@ test("surface personalities stay distinct and drop the legacy orange recipe", as
   expect(start).toBe("rgb(17, 17, 17)");
 
   await page.getByRole("tab", { name: "Usage" }).click();
-  expect((await paint(page, ".usage-card-navigation")).backgroundColor).toBe("rgb(155, 150, 131)");
-  expect((await paint(page, ".usage-card-detail")).backgroundColor).toBe("rgb(163, 158, 106)");
+  expect((await paint(page, ".usage-card-slot:nth-child(1) .usage-provider-surface")).backgroundColor).toBe("rgb(142, 165, 148)");
+  expect((await paint(page, ".usage-card-slot:nth-child(3) .usage-provider-surface")).backgroundColor).toBe("rgb(140, 135, 161)");
 
   await page.getByRole("tab", { name: "Runtime" }).click();
   const runtime = await paint(page, "[data-testid='runtime-board'] .monitor-detail-card");
@@ -986,7 +1025,7 @@ test("surface personalities stay distinct and drop the legacy orange recipe", as
   expect(orangeHits).toBe("rgb(126, 184, 212)");
 });
 
-test("wide Session Detail uses a 300px mint overview and fixed-heading parchment activity card", async ({ page }) => {
+test("wide Session Detail uses resizable mint overview and fixed-heading parchment activity card", async ({ page }) => {
   await page.setViewportSize({ width: 1200, height: 800 });
   await page.goto("/?demo=1&demoScenario=multi");
   await page.locator(".session-row-main").first().click();
@@ -1034,7 +1073,7 @@ test("wide Session Detail uses a 300px mint overview and fixed-heading parchment
     finalRowReachable: true,
     horizontalOverflow: false,
   });
-  expect(geometry.overviewWidth).toBeCloseTo(300, 0);
+  expect(geometry.overviewWidth).toBeGreaterThan(190);
   expect(geometry.gap).toBeCloseTo(12, 0);
 });
 
@@ -1096,15 +1135,12 @@ test("canonical dot status tokens introduce dusty green/red exclusively to appro
   await page.getByRole("button", { name: "Back to sessions" }).click();
   await page.getByRole("tab", { name: "Usage" }).click();
   const navDots = await page.evaluate(() => {
-    const selected = document.querySelector<HTMLElement>(".usage-side-tab[data-active='true'] .usage-side-dot");
-    const unselected = document.querySelector<HTMLElement>(".usage-side-tab:not([data-active='true']) .usage-side-dot");
+    const selected = document.querySelector<HTMLElement>(".usage-card-status-dot");
     return {
       selected: selected ? getComputedStyle(selected).backgroundColor : null,
-      unselected: unselected ? getComputedStyle(unselected).backgroundColor : null,
     };
   });
   expect(navDots.selected).toBe("rgb(94, 168, 118)");
-  expect(navDots.unselected).toBe("rgb(94, 168, 118)");
 });
 
 for (const width of [620, 320]) {
@@ -1206,13 +1242,9 @@ test("visual polish regression: bridge dots, notice spacing, runtime clipping, u
   expect(ssBox!.y).toBeGreaterThanOrEqual(shBox!.y + shBox!.height - 1);
   expect(await servicesScroll.evaluate((el) => getComputedStyle(el).paddingTop)).toBe("6px");
 
-  // 4. Usage active icon computes to white
+  // 4. Usage provider icons remain visible in the multi-card board
   await page.getByRole("tab", { name: "Usage" }).click();
-  const activeUsageTab = page.locator(".usage-side-tab[data-active='true']");
-  await expect(activeUsageTab).toBeVisible();
-  const activeIcon = activeUsageTab.locator(".usage-provider-icon");
-  await expect(activeIcon).toBeVisible();
-  expect(await activeIcon.evaluate((el) => getComputedStyle(el).color)).toBe("rgb(255, 255, 255)");
+  await expect(page.locator(".usage-provider-surface .usage-provider-icon")).toHaveCount(4);
 
   // 5. Done and Inactive badges remain achromatic with <= 1px calm borders and pill radius
   await page.goto("/?demo=1&demoScenario=done");

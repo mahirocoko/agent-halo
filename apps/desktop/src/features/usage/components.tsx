@@ -1,19 +1,28 @@
 import { invoke } from "@tauri-apps/api/core";
-import { ExternalLink, RefreshCw, Settings, TriangleAlert } from "lucide-react";
+import { ArrowLeft, ExternalLink, RefreshCw, Settings, TriangleAlert } from "lucide-react";
 import {
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
 import { BoardScroll, BoardSurface } from "../../components/board-surface";
 import { SurfaceControl } from "../../components/surface-control";
 import { SurfaceStatus } from "../../components/surface-status";
 import { createAgentUsageState } from "./adapters";
+import {
+  DEFAULT_USAGE_CARD_REGISTRY,
+  normalizeUsageRatios,
+  readUsageLayoutRatios,
+  readUsageVisibleProviders,
+  resetUsageLayoutRatios,
+  writeUsageLayoutRatios,
+  writeUsageVisibleProviders,
+} from "./model";
 import { USAGE_METRIC_GROUPS, USAGE_PROVIDERS } from "./providers";
 import { formatAbsoluteTime, formatResetLabel } from "./settings";
 import type {
@@ -24,7 +33,6 @@ import type {
   IUsageSettings,
   UsageProviderId,
   UsageResetMode,
-  UsageSidebarSelection,
 } from "./types";
 
 interface IProviderIconProps {
@@ -299,6 +307,9 @@ const ProviderDetail = ({ provider, settings, usage }: IProviderDetailProps) => 
           <ProviderIcon provider={provider} />
           {provider.label}
         </span>
+        {usage.status === "online" ? (
+          <span className="usage-side-dot usage-card-status-dot" aria-hidden="true" />
+        ) : null}
         {usage.plan ? <span className="usage-plan">{usage.plan}</span> : null}
         {freshness ? (
           <span className="usage-freshness" data-stale={usage.stale}>
@@ -547,8 +558,6 @@ const SettingsPanel = ({ settings, onChange }: ISettingsPanelProps) => {
   );
 };
 
-let usageDetailScrollTop = 0;
-
 export interface IAgentUsageListProps {
   onRefresh: () => void;
   onSettingsChange: (settings: IUsageSettings) => void;
@@ -556,160 +565,318 @@ export interface IAgentUsageListProps {
   usages: Record<UsageProviderId, IAgentUsageState>;
 }
 
+type UsageDragState = {
+  divider: number;
+  startX: number;
+  startWidths: number[];
+  totalAvail: number;
+};
+
+const USAGE_CARD_GAP = 12;
+const usageCardScrollTops: Partial<Record<UsageProviderId, number>> = {};
+
 export const AgentUsageList = ({
   onRefresh,
   onSettingsChange,
   settings,
   usages,
 }: IAgentUsageListProps) => {
-  const [selectedId, setSelectedId] =
-    useState<UsageSidebarSelection | null>(null);
-  const providers = useMemo(() => USAGE_PROVIDERS, []);
-  const selected =
-    selectedId === "settings"
-      ? null
-      : providers.find((provider) => provider.id === selectedId) ??
-        providers[0] ??
-        null;
-  const active: UsageSidebarSelection =
-    selectedId === "settings" ? "settings" : (selected?.id ?? "settings");
-  const detailScrollRef = useRef<HTMLDivElement>(null);
+  const [visibleProviderIds, setVisibleProviderIds] = useState<UsageProviderId[]>(readUsageVisibleProviders);
+  const cards = useMemo(
+    () => DEFAULT_USAGE_CARD_REGISTRY.filter((card) =>
+      visibleProviderIds.includes(card.id) && USAGE_PROVIDERS.some((provider) => provider.id === card.id),
+    ),
+    [visibleProviderIds],
+  );
+  const [ratios, setRatios] = useState<number[]>(() =>
+    readUsageLayoutRatios(cards.length, cards.map((card) => card.defaultRatio)),
+  );
+  const ratiosRef = useRef(ratios);
+  const trayRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<UsageDragState | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
-  useLayoutEffect(() => {
-    const scroller = detailScrollRef.current;
-    if (!scroller) return;
-    scroller.scrollTop = usageDetailScrollTop;
-    return () => {
-      usageDetailScrollTop = scroller.scrollTop;
-    };
+  const toggleProviderVisibility = (providerId: UsageProviderId) => {
+    if (visibleProviderIds.includes(providerId)) {
+      if (visibleProviderIds.length === 1) return;
+      const next = visibleProviderIds.filter((id) => id !== providerId);
+      setVisibleProviderIds(next);
+      writeUsageVisibleProviders(next);
+      return;
+    }
+    const next = [...visibleProviderIds, providerId];
+    setVisibleProviderIds(next);
+    writeUsageVisibleProviders(next);
+  };
+
+  useEffect(() => {
+    writeUsageVisibleProviders(visibleProviderIds);
+  }, [visibleProviderIds]);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      trayRef.current?.querySelectorAll<HTMLElement>("[data-usage-card]").forEach((scroller) => {
+        const providerId = scroller.dataset.usageCard as UsageProviderId | undefined;
+        if (providerId && typeof usageCardScrollTops[providerId] === "number") {
+          scroller.scrollTop = usageCardScrollTops[providerId] ?? 0;
+        }
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, []);
 
   useEffect(() => {
-    if (!providers.length) {
-      setSelectedId("settings");
-    } else if (
-      selectedId !== "settings" &&
-      (!selectedId || !providers.some((provider) => provider.id === selectedId))
-    ) {
-      setSelectedId(providers[0].id);
+    const next = normalizeUsageRatios(
+      ratios,
+      cards.length,
+      cards.map((card) => card.defaultRatio),
+    );
+    if (next.some((value, index) => value !== ratios[index])) {
+      ratiosRef.current = next;
+      setRatios(next);
+      return;
     }
-  }, [selectedId, providers]);
+    ratiosRef.current = next;
+    writeUsageLayoutRatios(next);
+  }, [cards, ratios]);
 
-  const selectAndFocus = (selection: UsageSidebarSelection) => {
-    setSelectedId(selection);
-    window.requestAnimationFrame(() => document.getElementById(`usage-tab-${selection}`)?.focus());
+  const resetLayout = () => {
+    const next = cards.map((card) => card.defaultRatio);
+    resetUsageLayoutRatios();
+    ratiosRef.current = next;
+    setRatios(next);
   };
 
-  const handleTabKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, current: UsageSidebarSelection) => {
-    if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+  const getLayoutWidth = () => {
+    const width = trayRef.current?.getBoundingClientRect().width ?? 960;
+    return Math.max(0, width - USAGE_CARD_GAP * Math.max(0, cards.length - 1));
+  };
+
+  const setWidths = (widths: number[], totalAvail: number) => {
+    if (totalAvail <= 0) return;
+    const next = normalizeUsageRatios(
+      widths.map((width) => width / totalAvail),
+      cards.length,
+      cards.map((card) => card.defaultRatio),
+    );
+    ratiosRef.current = next;
+    setRatios(next);
+  };
+
+  const handleDividerPointerDown = (
+    divider: number,
+    event: ReactPointerEvent<HTMLDivElement>,
+  ) => {
+    if (event.button !== 0) return;
+    const totalAvail = getLayoutWidth();
+    if (totalAvail < cards.length * 190) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current = {
+      divider,
+      startX: event.clientX,
+      startWidths: ratiosRef.current.map((ratio) => ratio * totalAvail),
+      totalAvail,
+    };
+  };
+
+  const handleDividerPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const delta = event.clientX - drag.startX;
+    const left = drag.divider;
+    const right = left + 1;
+    const combined = drag.startWidths[left] + drag.startWidths[right];
+    const nextLeft = Math.max(
+      190,
+      Math.min(combined - 190, drag.startWidths[left] + delta),
+    );
+    const widths = [...drag.startWidths];
+    widths[left] = nextLeft;
+    widths[right] = combined - nextLeft;
+    setWidths(widths, drag.totalAvail);
+  };
+
+  const handleDividerPointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!dragRef.current) return;
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch {
+      // Ignore a pointer that was cancelled by the browser or native shell.
+    }
+    dragRef.current = null;
+  };
+
+  const handleDividerKeyDown = (
+    divider: number,
+    event: ReactKeyboardEvent<HTMLDivElement>,
+  ) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
     event.preventDefault();
-    const selections: UsageSidebarSelection[] = [...providers.map((provider) => provider.id), "settings"];
-    const currentIndex = selections.indexOf(current);
-    const next = event.key === "Home"
-      ? selections[0]
-      : event.key === "End"
-        ? selections.at(-1) ?? selections[0]
-        : selections[(currentIndex + (event.key === "ArrowDown" ? 1 : -1) + selections.length) % selections.length];
-    selectAndFocus(next);
+    const totalAvail = getLayoutWidth();
+    const widths = ratiosRef.current.map((ratio) => ratio * totalAvail);
+    const combined = widths[divider] + widths[divider + 1];
+    const nextLeft = Math.max(
+      190,
+      Math.min(
+        combined - 190,
+        widths[divider] + (event.key === "ArrowRight" ? 16 : -16),
+      ),
+    );
+    widths[divider] = nextLeft;
+    widths[divider + 1] = combined - nextLeft;
+    setWidths(widths, totalAvail);
   };
 
   return (
-    <div className="usage-tray" data-testid="usage-tray" aria-label="Usage providers">
-      <BoardSurface className="usage-card usage-card-navigation" tone="parchment" aria-label="Usage navigation">
-        <BoardScroll data-usage-card="navigation">
-          <div className="usage-list-topline">
-            <span>Usage</span>
+    <div className="usage-dashboard" data-testid="usage-dashboard">
+      <div className="usage-dashboard-toolbar">
+        <div className="usage-dashboard-heading">
+          <strong>{settingsOpen ? "Usage settings" : "Usage"}</strong>
+          <span>{settingsOpen ? "Refresh, quota display, and visible provider cards" : `${cards.length} providers · resize cards to fit your view`}</span>
+        </div>
+        <div className="usage-dashboard-actions">
+          {settingsOpen ? (
             <SurfaceControl
-              className="usage-refresh"
-              surfaceControlShape="circle"
-              surfaceControlSize="icon"
+              className="usage-toolbar-button"
+              surfaceControlShape="rounded"
+              surfaceControlSize="compact"
               surfaceControlVariant="subtle"
               type="button"
               onClick={(event) => {
                 event.stopPropagation();
-                onRefresh();
+                setSettingsOpen(false);
               }}
               data-tauri-drag-region="false"
-              title="Refresh usage"
-              aria-label="Refresh usage"
+              aria-label="Back to Usage"
             >
-              <RefreshCw size={12} strokeWidth={2.2} />
+              <ArrowLeft size={12} strokeWidth={2.2} />
+              Back to Usage
             </SurfaceControl>
-          </div>
-          <div
-            className="usage-sidebar"
-            role="tablist"
-            aria-label="Usage providers"
-            aria-orientation="vertical"
-          >
-            {providers.map((provider) => (
-              <button
-                id={`usage-tab-${provider.id}`}
-                className="usage-side-tab"
-                data-active={active === provider.id}
+          ) : (
+            <>
+              <SurfaceControl
+                className="usage-toolbar-button"
+                surfaceControlShape="rounded"
+                surfaceControlSize="compact"
+                surfaceControlVariant="subtle"
                 type="button"
-                role="tab"
-                aria-selected={active === provider.id}
-                aria-controls="usage-provider-panel"
-                tabIndex={active === provider.id ? 0 : -1}
-                onKeyDown={(event) => handleTabKeyDown(event, provider.id)}
                 onClick={(event) => {
                   event.stopPropagation();
-                  setSelectedId(provider.id);
+                  resetLayout();
                 }}
                 data-tauri-drag-region="false"
-                key={provider.id}
-                title={provider.label}
+                title="Reset Usage card layout"
+                aria-label="Reset Usage card layout"
               >
-                <ProviderIcon provider={provider} size={13} />
-                <span>{provider.label}</span>
-                {usages[provider.id]?.status === "online" ? (
-                  <><span className="usage-side-dot" aria-hidden="true" /><span className="sr-only">Online</span></>
-                ) : usages[provider.id]?.stale ? (
-                  <span className="sr-only">Outdated</span>
-                ) : null}
-              </button>
-            ))}
-            <button
-              id="usage-tab-settings"
-              className="usage-side-tab usage-side-settings"
-              data-active={active === "settings"}
-              type="button"
-              role="tab"
-              aria-selected={active === "settings"}
-              aria-controls="usage-provider-panel"
-              tabIndex={active === "settings" ? 0 : -1}
-              onKeyDown={(event) => handleTabKeyDown(event, "settings")}
-              onClick={(event) => {
-                event.stopPropagation();
-                setSelectedId("settings");
-              }}
-              data-tauri-drag-region="false"
-              title="Usage settings"
-            >
-              <Settings size={13} strokeWidth={2.2} />
-              <span>Settings</span>
-            </button>
+                Reset layout
+              </SurfaceControl>
+              <SurfaceControl
+                className="usage-toolbar-button"
+                surfaceControlShape="circle"
+                surfaceControlSize="icon"
+                surfaceControlVariant="subtle"
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setSettingsOpen(true);
+                }}
+                data-tauri-drag-region="false"
+                title="Usage settings"
+                aria-label="Usage settings"
+                aria-expanded={settingsOpen}
+              >
+                <Settings size={12} strokeWidth={2.2} />
+              </SurfaceControl>
+              <SurfaceControl
+                className="usage-toolbar-button"
+                surfaceControlShape="circle"
+                surfaceControlSize="icon"
+                surfaceControlVariant="subtle"
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onRefresh();
+                }}
+                data-tauri-drag-region="false"
+                title="Refresh usage"
+                aria-label="Refresh usage"
+              >
+                <RefreshCw size={12} strokeWidth={2.2} />
+              </SurfaceControl>
+            </>
+          )}
+        </div>
+      </div>
+      {settingsOpen ? (
+        <BoardSurface className="usage-settings-page" tone="parchment" aria-label="Usage settings">
+          <BoardScroll>
+            <SettingsPanel settings={settings} onChange={onSettingsChange} />
+            <fieldset className="usage-provider-visibility">
+              <legend>Visible providers</legend>
+              <span className="usage-provider-visibility-help">Choose which cards stay on the Usage board.</span>
+              <div className="usage-provider-visibility-options">
+                {USAGE_PROVIDERS.map((provider) => {
+                  const checked = visibleProviderIds.includes(provider.id);
+                  return (
+                    <label className="usage-provider-visibility-option" key={provider.id}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={checked && visibleProviderIds.length === 1}
+                        onChange={() => toggleProviderVisibility(provider.id)}
+                      />
+                      <ProviderIcon provider={provider} size={12} />
+                      <span>{provider.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
+          </BoardScroll>
+        </BoardSurface>
+      ) : <div className="usage-tray" data-testid="usage-tray" aria-label="Usage providers" ref={trayRef}>
+        {cards.map((card, index) => {
+          const provider = card.provider;
+          return (
+            <div className="usage-card-slot" key={card.id} style={{ flex: `${ratios[index] ?? card.defaultRatio} 0 0px`, minInlineSize: `${card.minWidth}px` }}>
+              <BoardSurface className="usage-card usage-provider-surface" tone={card.tone} aria-label={`${provider.label} usage`}>
+                <BoardScroll
+                  data-usage-card={provider.id}
+                  onScroll={(event) => {
+                    usageCardScrollTops[provider.id] = event.currentTarget.scrollTop;
+                  }}
+                >
+                  <ProviderDetail
+                    provider={provider}
+                    settings={settings}
+                    usage={usages[provider.id] ?? createAgentUsageState(provider.id)}
+                  />
+                </BoardScroll>
+              </BoardSurface>
+            </div>
+          );
+        }).flatMap((card, index, all) => index < all.length - 1 ? [card, (
+          <div
+            className="usage-divider card-resize-divider"
+            role="separator"
+            tabIndex={0}
+            aria-orientation="vertical"
+            aria-label={`Resize ${cards[index].provider.label} and ${cards[index + 1].provider.label} cards`}
+            aria-valuemin={190}
+            aria-valuemax={Math.round(Math.max(190, ((ratios[index] ?? cards[index].defaultRatio) + (ratios[index + 1] ?? cards[index + 1].defaultRatio)) * getLayoutWidth() - 190))}
+            aria-valuenow={Math.round((ratios[index] ?? cards[index].defaultRatio) * getLayoutWidth())}
+            onPointerDown={(event) => handleDividerPointerDown(index, event)}
+            onPointerMove={handleDividerPointerMove}
+            onPointerUp={handleDividerPointerUp}
+            onPointerCancel={handleDividerPointerUp}
+            onKeyDown={(event) => handleDividerKeyDown(index, event)}
+            onDoubleClick={resetLayout}
+            key={`divider-${cards[index].id}`}
+          >
+            <div className="usage-grip card-resize-grip" aria-hidden="true" />
           </div>
-        </BoardScroll>
-      </BoardSurface>
-      <BoardSurface className="usage-card usage-card-detail" tone="sand" aria-label="Usage detail">
-        <BoardScroll ref={detailScrollRef} data-usage-card="detail">
-          <div id="usage-provider-panel" className="usage-detail-panel" role="tabpanel" aria-labelledby={`usage-tab-${active}`}>
-            {active === "settings" ? (
-              <SettingsPanel settings={settings} onChange={onSettingsChange} />
-            ) : selected ? (
-              <ProviderDetail
-                provider={selected}
-                settings={settings}
-                usage={usages[selected.id] ?? createAgentUsageState(selected.id)}
-              />
-            ) : (
-              <div className="usage-empty">No local usage providers found</div>
-            )}
-          </div>
-        </BoardScroll>
-      </BoardSurface>
+        )] : [card])}
+      </div>}
     </div>
   );
 };

@@ -757,7 +757,7 @@
   min-block-size: 0;
   display: flex;
   flex: 1 1 auto;
-  gap: 12px;
+  gap: 0;
   overflow: hidden;
 }
 
@@ -785,6 +785,40 @@
   scrollbar-gutter: auto;
 }
 
+.card-resize-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 12px;
+  min-block-size: 48px;
+  border-radius: 6px;
+  cursor: col-resize;
+  outline: none;
+  touch-action: none;
+  user-select: none;
+  z-index: 3;
+}
+
+.card-resize-divider:hover,
+.card-resize-divider:focus-visible {
+  background: var(--surface-fill-2);
+}
+
+.card-resize-grip {
+  inline-size: 4px;
+  block-size: 28px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  pointer-events: none;
+  transition: background 120ms ease, transform 120ms ease;
+}
+
+.card-resize-divider:hover .card-resize-grip,
+.card-resize-divider:focus-visible .card-resize-grip {
+  background: rgba(255, 255, 255, 0.52);
+  transform: scaleY(1.15);
+}
+
 .focus-tool-card-stopwatch .halo-inner-scroll {
   overflow-y: hidden;
 }
@@ -807,13 +841,18 @@
 @container focus-tools (max-width: 640px) {
   .focus-tools-tray {
     flex-direction: column;
+    gap: 12px;
     overflow-x: hidden;
     overflow-y: auto;
   }
 
+  .focus-tools-tray .card-resize-divider {
+    display: none;
+  }
+
   .focus-tool-card {
-    inline-size: 100%;
-    flex: none;
+    inline-size: 100% !important;
+    flex: none !important;
   }
 
   .focus-tool-card-pomodoro {

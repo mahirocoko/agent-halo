@@ -5,6 +5,72 @@ const openUsage = async (page: Page) => {
   await page.getByRole("tab", { name: "Usage" }).click();
 };
 
+test("Usage keeps provider cards on one board and persists accessible resizing", async ({ page }) => {
+  await page.goto("/?demo=1&demoScenario=multi");
+  await openUsage(page);
+
+  const cards = page.locator(".usage-provider-surface");
+  const dividers = page.locator(".usage-divider");
+  await expect(cards).toHaveCount(4);
+  await expect(dividers).toHaveCount(3);
+
+  const before = await cards.nth(0).evaluate((element) => element.getBoundingClientRect().width);
+  await dividers.nth(0).focus();
+  await page.keyboard.press("ArrowRight");
+  const after = await cards.nth(0).evaluate((element) => element.getBoundingClientRect().width);
+  expect(after).toBeGreaterThan(before);
+  await expect(dividers.nth(0)).toHaveAttribute("aria-valuenow", /.+/);
+
+  await page.goto("/?demo=1&demoScenario=multi");
+  const openButton = page.getByRole("button", { name: "Open Agent Halo" });
+  if (await openButton.count()) await openButton.click();
+  await openUsage(page);
+  const persisted = await page.locator(".usage-provider-surface").nth(0).evaluate((element) => element.getBoundingClientRect().width);
+  expect(persisted).toBeGreaterThan(before);
+
+  await page.getByRole("button", { name: "Reset Usage card layout" }).click();
+  expect(await page.evaluate(() => JSON.parse(window.localStorage.getItem("agent-halo.usage-layout.v1") ?? "null"))).toEqual([0.25, 0.25, 0.25, 0.25]);
+});
+
+test("Usage settings can hide and restore provider cards", async ({ page }) => {
+  await page.goto("/?demo=1&demoScenario=multi");
+  await openUsage(page);
+  await page.getByRole("button", { name: "Usage settings" }).click();
+
+  const cursor = page.getByRole("checkbox", { name: "Cursor" });
+  await expect(cursor).toBeChecked();
+  await cursor.uncheck();
+  await page.getByRole("button", { name: "Back to Usage" }).click();
+  await expect(page.locator(".usage-provider-surface")).toHaveCount(3);
+  await expect(page.getByRole("region", { name: "Cursor usage" })).toHaveCount(0);
+  await expect(page.locator(".usage-divider")).toHaveCount(2);
+  const compactUsageGeometry = await page.getByTestId("usage-tray").evaluate((tray) => {
+    const cards = [...tray.querySelectorAll<HTMLElement>(".usage-provider-surface")];
+    const lastCard = cards.at(-1);
+    const trayRect = tray.getBoundingClientRect();
+    return {
+      ratios: cards.map((card) => card.getBoundingClientRect().width / trayRect.width),
+      rightEdgeFits: lastCard ? lastCard.getBoundingClientRect().right <= trayRect.right + 1 : false,
+      horizontalOverflow: tray.scrollWidth > tray.clientWidth + 1,
+    };
+  });
+  expect(compactUsageGeometry.ratios.reduce((sum, ratio) => sum + ratio, 0)).toBeCloseTo(1, 1);
+  expect(compactUsageGeometry.rightEdgeFits).toBe(true);
+  expect(compactUsageGeometry.horizontalOverflow).toBe(false);
+
+  await page.getByRole("button", { name: "Close" }).click();
+  await expect(page.getByRole("button", { name: "Open Agent Halo" })).toBeVisible();
+  await page.getByRole("button", { name: "Open Agent Halo" }).click();
+  await expect(page.locator(".usage-provider-surface")).toHaveCount(3);
+
+  await page.getByRole("button", { name: "Usage settings" }).click();
+  await page.getByRole("checkbox", { name: "Cursor" }).check();
+  await page.getByRole("button", { name: "Back to Usage" }).click();
+  await expect(page.locator(".usage-provider-surface")).toHaveCount(4);
+  await expect(page.getByRole("region", { name: "Cursor usage" })).toBeVisible();
+  expect(await page.evaluate(() => JSON.parse(window.localStorage.getItem("agent-halo.usage-visibility.v1") ?? "null"))).toEqual(["codex", "agy", "claude", "cursor"]);
+});
+
 test("Usage keeps Codex values visible and labels them outdated after a refresh failure", async ({ page }) => {
   await page.addInitScript(() => {
     let codexCalls = 0;
@@ -65,7 +131,7 @@ test("Usage keeps Codex values visible and labels them outdated after a refresh 
   expect(refreshGeometry).toEqual({ width: 28, height: 28, radius: "50%", shape: "circle" });
   const monochromePaint = await page.evaluate(() => ({
     providerIcon: getComputedStyle(document.querySelector<HTMLElement>(".usage-provider-title .usage-provider-icon")!).backgroundColor,
-    onlineDot: getComputedStyle(document.querySelector<HTMLElement>(".usage-side-dot")!).backgroundColor,
+    onlineDot: getComputedStyle(document.querySelector<HTMLElement>(".usage-card-status-dot")!).backgroundColor,
     trendBars: [...document.querySelectorAll<HTMLElement>(".usage-trend-bar")].map((bar) => getComputedStyle(bar).backgroundColor),
   }));
   expect(monochromePaint.providerIcon).toBe("rgb(17, 17, 17)");
@@ -170,10 +236,9 @@ test("Usage meters communicate remaining quota with monochrome structure and cop
   expect(dotPaint[2]).toBe("rgb(199, 90, 90)");
   expect(dotPaint[3]).toBe("rgb(199, 90, 90)");
 
-  const usageTabs = page.getByRole("tablist", { name: "Usage providers" });
-  await usageTabs.getByRole("tab", { name: "Settings" }).click();
+  await page.getByRole("button", { name: "Usage settings" }).click();
   await page.getByRole("radio", { name: "Used" }).click();
-  await usageTabs.getByRole("tab", { name: "Codex" }).click();
+  await page.getByRole("button", { name: "Back to Usage" }).click();
 
   await expect(meters.nth(0)).toHaveAttribute("data-level", "ok");
   await expect(meters.nth(0)).toContainText("Available");
@@ -221,7 +286,6 @@ test("Usage marks a native cached Status response as outdated instead of online"
   await page.goto("/");
   await page.getByRole("button", { name: "Open Agent Halo" }).click();
   await openUsage(page);
-  await page.getByRole("tab", { name: "Claude Code Online" }).click();
   await expect(page.getByText("75% left")).toBeVisible();
 
   await page.getByRole("button", { name: "Refresh usage" }).click();
@@ -229,8 +293,7 @@ test("Usage marks a native cached Status response as outdated instead of online"
   await expect(page.locator(".usage-freshness[data-stale='true']")).toContainText("Outdated");
   await expect(page.getByText("75% left")).toBeVisible();
   await expect(page.getByText("Live usage rate limited; showing last good values.")).toBeVisible();
-  await expect(page.getByRole("tab", { name: "Claude Code Outdated" })).toBeVisible();
-  await expect(page.getByRole("tab", { name: "Claude Code Online" })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Claude Code usage" })).toBeVisible();
 });
 
 test("Usage does not label a status-only provider response as outdated", async ({ page }) => {
@@ -256,8 +319,6 @@ test("Usage does not label a status-only provider response as outdated", async (
   await page.goto("/");
   await page.getByRole("button", { name: "Open Agent Halo" }).click();
   await openUsage(page);
-  await page.getByRole("tab", { name: "Claude Code" }).click();
-
   await expect(page.getByText("Claude Code usage unavailable.")).toBeVisible();
   await expect(page.locator(".usage-freshness")).toHaveCount(0);
 });
@@ -286,8 +347,6 @@ test("Usage keeps a valid empty Antigravity summary online as no quota data", as
   await page.goto("/");
   await page.getByRole("button", { name: "Open Agent Halo" }).click();
   await openUsage(page);
-  await page.getByRole("tab", { name: "Antigravity Online" }).click();
-
   await expect(page.getByText("No quota data from current source")).toBeVisible();
   await expect(page.locator(".usage-freshness")).toContainText("Updated");
 });

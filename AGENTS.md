@@ -6,6 +6,7 @@
 - Use `pnpm` only (`packageManager: pnpm@10.33.0`). Do not add npm/yarn lockfiles.
 - Preserve local/generated state. `.agent-state/`, `.letta/`, `.cocoindex_code/`, `node_modules/`, build output, and test reports are ignored local state.
 - After changing `mods/agent-halo.js`, install/reload the Letta mod before judging live behavior. After native desktop changes, run an appropriate desktop check/build/install path.
+- For persisted UI settings or layouts, browser coverage that keeps the component mounted is not sufficient. Test the real `A → B → panel unmount/remount → B` lifecycle, then verify the installed native Tauri build before claiming persistence; this applies to Usage visibility/layout and Setup preferences, but not static paint-only changes.
 - Do not commit or push unless explicitly asked.
 
 ## Codebase Search
