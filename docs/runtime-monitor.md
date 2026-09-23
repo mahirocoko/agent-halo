@@ -91,6 +91,28 @@ orphaned sleep process was removed after interruption. This is native/human
 evidence for abrupt-process disappearance; PID-reuse behavior remains covered
 by exact-identity source logic rather than a live PID-reuse experiment.
 
+### v0.1.11 release evidence
+
+Release-preparation evidence captured on 2026-09-23:
+
+- root, desktop, Cargo, lockfile, Tauri bundle, and packaged `Info.plist`
+  versions align at `0.1.11`
+- `pnpm install --frozen-lockfile`, `pnpm check`, and `pnpm test:hooks`
+  pass; hook integration remains 7/7
+- the serialized one-worker browser sweep passes 171 tests with zero failures
+- performance gates pass with 559,397 core dist bytes, 16,423 CSS gzip
+  bytes, and 103,314 JavaScript gzip bytes; session and bridge benchmarks
+  remain within their established budgets
+- native macOS Rust tests pass 89/89 with one ignored test; `cargo check` and
+  `cargo fmt --check` pass
+- the v0.1.11 bundle installs and restarts successfully; the standalone bridge
+  reports protocol version 2 with one desktop client connected
+- the built and installed native binaries are byte-identical with SHA-256
+  `a5cd4fd3a30b3bf7032edf3020a62a75559b60d88445d1728082d02a9c2a0db9`
+- focused identity coverage proves that a present native Herdr `agent_session`
+  must exactly match the current Letta conversation before `agent.focus`, while
+  legacy payloads remain protected by the existing PID/start/scope proof
+
 ### v0.1.10 release evidence
 
 Release-preparation evidence captured on 2026-09-22:

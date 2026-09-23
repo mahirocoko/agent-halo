@@ -4612,6 +4612,18 @@ fn verify_herdr_agent_identity(
     {
         return Err("Herdr pane no longer contains the expected Letta agent".to_string());
     }
+    if let Some(agent_session) = agent.get("agent_session") {
+        if !agent_session.is_null()
+            && (agent_session.get("source").and_then(Value::as_str) != Some("herdr:letta")
+                || agent_session.get("agent").and_then(Value::as_str) != Some("letta")
+                || agent_session.get("kind").and_then(Value::as_str) != Some("id")
+                || agent_session.get("value").and_then(Value::as_str) != Some(conversation_id))
+        {
+            return Err(
+                "Herdr native agent session does not match this Letta conversation".to_string(),
+            );
+        }
+    }
     let tokens = agent
         .get("tokens")
         .and_then(Value::as_object)
@@ -5651,6 +5663,17 @@ mod display_selection_tests {
             1_784_870_000_500,
         )
         .is_ok());
+
+        let mut null_native_session = payload.clone();
+        null_native_session["result"]["agent"]["agent_session"] = Value::Null;
+        assert!(verify_herdr_agent_identity(
+            &null_native_session,
+            "w1:p1",
+            conversation_id,
+            88_759,
+            1_784_870_000_500,
+        )
+        .is_ok());
         assert!(verify_herdr_agent_identity(
             &payload,
             "w1:p1",
@@ -5663,6 +5686,74 @@ mod display_selection_tests {
             &payload,
             "w1:p1",
             "local-conv-other",
+            88_759,
+            1_784_870_000_500,
+        )
+        .is_err());
+
+        let native_session_payload = serde_json::json!({
+            "result": {
+                "agent": {
+                    "agent": "letta",
+                    "pane_id": "w1:p1",
+                    "agent_session": {
+                        "source": "herdr:letta",
+                        "agent": "letta",
+                        "kind": "id",
+                        "value": conversation_id,
+                    },
+                    "tokens": {
+                        "letta_pid": "88759",
+                        "letta_started_at": "1784870000000",
+                        "letta_scope": herdr_scope_fingerprint(conversation_id),
+                    }
+                }
+            }
+        });
+        assert!(verify_herdr_agent_identity(
+            &native_session_payload,
+            "w1:p1",
+            conversation_id,
+            88_759,
+            1_784_870_000_500,
+        )
+        .is_ok());
+
+        let mut matching_native_with_wrong_scope = native_session_payload.clone();
+        matching_native_with_wrong_scope["result"]["agent"]["tokens"]["letta_scope"] =
+            Value::String("sha256:wrong-scope".to_string());
+        assert!(verify_herdr_agent_identity(
+            &matching_native_with_wrong_scope,
+            "w1:p1",
+            conversation_id,
+            88_759,
+            1_784_870_000_500,
+        )
+        .is_err());
+
+        let wrong_native_session = serde_json::json!({
+            "result": {
+                "agent": {
+                    "agent": "letta",
+                    "pane_id": "w1:p1",
+                    "agent_session": {
+                        "source": "herdr:letta",
+                        "agent": "letta",
+                        "kind": "id",
+                        "value": "local-conv-other",
+                    },
+                    "tokens": {
+                        "letta_pid": "88759",
+                        "letta_started_at": "1784870000000",
+                        "letta_scope": herdr_scope_fingerprint(conversation_id),
+                    }
+                }
+            }
+        });
+        assert!(verify_herdr_agent_identity(
+            &wrong_native_session,
+            "w1:p1",
+            conversation_id,
             88_759,
             1_784_870_000_500,
         )
