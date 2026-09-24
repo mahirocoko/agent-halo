@@ -91,6 +91,23 @@ orphaned sleep process was removed after interruption. This is native/human
 evidence for abrupt-process disappearance; PID-reuse behavior remains covered
 by exact-identity source logic rather than a live PID-reuse experiment.
 
+### v0.1.13 release evidence
+
+Release-preparation evidence captured on 2026-09-24:
+
+- root, desktop, Cargo, lockfile, Tauri bundle, and packaged `Info.plist`
+  versions align at `0.1.13`
+- `pnpm quality`, `pnpm test:hooks`, `cargo fmt --check`, and `cargo check`
+  pass; hook integration remains 9/9
+- the Tauri release bundle builds, includes the Cursor/Codex adapters plus
+  shared hook utility, installs, and restarts successfully
+- real Herdr direct-cli smoke lanes for Cursor and Codex emit session, turn,
+  tool, and completion events into the local bridge; both execute `pwd`
+  without changing repository files
+- provider session detection is verified; native provider host-PID liveness
+  remains a separate follow-up because these smoke events reported
+  `runtime: null`
+
 ### v0.1.11 release evidence
 
 Release-preparation evidence captured on 2026-09-23:
