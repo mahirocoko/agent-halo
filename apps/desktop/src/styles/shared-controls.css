@@ -1,3 +1,64 @@
+.scroll-area {
+  --scrollbar-thumb: rgba(17, 17, 17, 0.28);
+  --scrollbar-thumb-hover: rgba(17, 17, 17, 0.42);
+  position: relative;
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  min-block-size: 0;
+}
+
+.scroll-area-viewport {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.scroll-area-viewport::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.scroll-area-scrollbar {
+  position: absolute;
+  inset: 4px 3px 4px auto;
+  width: 6px;
+  border-radius: 999px;
+  opacity: 0;
+  outline: none;
+  transition: opacity 140ms ease;
+}
+
+.scroll-area[data-scrollable="true"] .scroll-area-scrollbar,
+.scroll-area-scrollbar:focus-visible {
+  opacity: 1;
+}
+
+.scroll-area-thumb {
+  position: absolute;
+  inset-inline: 0;
+  min-height: 28px;
+  border-radius: 999px;
+  background: var(--scrollbar-thumb, rgba(17, 17, 17, 0.34));
+  cursor: grab;
+}
+
+.scroll-area-thumb:hover,
+.scroll-area-scrollbar:focus-visible .scroll-area-thumb {
+  background: var(--scrollbar-thumb-hover, rgba(17, 17, 17, 0.48));
+}
+
+.scroll-area-thumb:active {
+  cursor: grabbing;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scroll-area-scrollbar {
+    transition: none;
+  }
+}
+
 .header-tabs {
   display: inline-flex;
   align-items: center;

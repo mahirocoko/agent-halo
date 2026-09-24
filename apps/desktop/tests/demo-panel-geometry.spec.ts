@@ -613,6 +613,10 @@ test('compact Usage stacks provider cards and gives scrolling to the tray', asyn
       order: scrollers.map((scroller) => scroller.dataset.usageCard),
       tops: rects.map((rect) => rect.top),
       minHeights: cards.map((card) => getComputedStyle(card).minHeight),
+      dashboardOverflowY: (() => {
+        const dashboard = node.closest<HTMLElement>('.usage-dashboard')
+        return dashboard ? getComputedStyle(dashboard).overflowY : null
+      })(),
       trayOverflowY: getComputedStyle(node).overflowY,
       horizontalOverflow: node.scrollWidth > node.clientWidth + 1,
       scrollers: scrollers.map((scroller) => ({
@@ -625,6 +629,7 @@ test('compact Usage stacks provider cards and gives scrolling to the tray', asyn
   expect(geometry.order).toEqual(['codex', 'agy', 'claude', 'cursor'])
   expect(geometry.tops[0]).toBeLessThan(geometry.tops[1])
   expect(geometry.minHeights.every((height) => height === '0px')).toBe(true)
+  expect(geometry.dashboardOverflowY).toBe('hidden')
   expect(geometry.trayOverflowY).toBe('auto')
   expect(geometry.horizontalOverflow).toBe(false)
   for (const scroller of geometry.scrollers) {

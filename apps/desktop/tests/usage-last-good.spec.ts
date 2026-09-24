@@ -44,27 +44,66 @@ test('Usage keeps the stacked tray scrollbar styled when it owns narrow overflow
 
   const scrollbar = await page.getByTestId('usage-tray').evaluate((tray) => {
     const style = getComputedStyle(tray)
-    const webkit = getComputedStyle(tray, '::-webkit-scrollbar')
-    const thumb = getComputedStyle(tray, '::-webkit-scrollbar-thumb')
+    const root = tray.parentElement
+    const customScrollbar = root?.querySelector<HTMLElement>('[role="scrollbar"]')
+    const thumb = root?.querySelector<HTMLElement>('.scroll-area-thumb')
     return {
       overflowY: style.overflowY,
       scrollHeight: tray.scrollHeight,
       clientHeight: tray.clientHeight,
       scrollbarWidth: style.scrollbarWidth,
-      scrollbarColor: style.scrollbarColor,
-      scrollbarGutter: style.scrollbarGutter,
-      webkitWidth: webkit.width,
-      webkitThumb: thumb.backgroundColor,
+      customScrollbarHidden: customScrollbar?.getAttribute('aria-hidden'),
+      customScrollbarRole: customScrollbar?.getAttribute('role'),
+      customThumbHeight: thumb?.style.height,
+      customThumbColor: thumb ? getComputedStyle(thumb).backgroundColor : null,
     }
   })
 
   expect(scrollbar.overflowY).toBe('auto')
   expect(scrollbar.scrollHeight).toBeGreaterThan(scrollbar.clientHeight)
-  expect(scrollbar.scrollbarWidth).toBe('thin')
-  expect(scrollbar.scrollbarColor).toContain('rgba(17, 17, 17, 0.28)')
-  expect(scrollbar.scrollbarGutter).toBe('stable')
-  expect(scrollbar.webkitWidth).toBe('6px')
-  expect(scrollbar.webkitThumb).toBe('rgba(17, 17, 17, 0.28)')
+  expect(scrollbar.scrollbarWidth).toBe('none')
+  expect(scrollbar.customScrollbarHidden).toBe('false')
+  expect(scrollbar.customScrollbarRole).toBe('scrollbar')
+  expect(scrollbar.customThumbHeight).toMatch(/px$/)
+  expect(scrollbar.customThumbColor).toBe('rgba(17, 17, 17, 0.28)')
+})
+
+test('Usage ScrollArea supports keyboard paging', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 700 })
+  await page.goto('/?demo=1&demoScenario=multi')
+  await openUsage(page)
+
+  const tray = page.getByTestId('usage-tray')
+  const scrollbar = page.locator('[role="scrollbar"]')
+  await scrollbar.focus()
+  const before = await tray.evaluate((node) => node.scrollTop)
+  await page.keyboard.press('PageDown')
+  await expect.poll(() => tray.evaluate((node) => node.scrollTop)).toBeGreaterThan(before)
+  await expect(scrollbar).toHaveAttribute('aria-valuenow', /[1-9]/)
+})
+
+test('Usage ScrollArea thumb drags the content without a second native scrollbar', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 700 })
+  await page.goto('/?demo=1&demoScenario=multi')
+  await openUsage(page)
+
+  const tray = page.getByTestId('usage-tray')
+  const thumb = page.locator('.scroll-area-thumb')
+  const thumbBox = await thumb.boundingBox()
+  if (!thumbBox) throw new Error('missing Usage ScrollArea thumb')
+
+  await page.mouse.move(thumbBox.x + thumbBox.width / 2, thumbBox.y + thumbBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(thumbBox.x + thumbBox.width / 2, thumbBox.y + thumbBox.height + 90, { steps: 8 })
+  await page.mouse.up()
+
+  await expect.poll(() => tray.evaluate((node) => node.scrollTop)).toBeGreaterThan(0)
+  const layout = await tray.evaluate((node) => ({
+    nativeGutter: node.offsetWidth - node.clientWidth,
+    scrollbarWidth: getComputedStyle(node).scrollbarWidth,
+  }))
+  expect(layout.nativeGutter).toBe(0)
+  expect(layout.scrollbarWidth).toBe('none')
 })
 
 test('Usage settings can hide and restore provider cards', async ({ page }) => {

@@ -91,6 +91,21 @@ orphaned sleep process was removed after interruption. This is native/human
 evidence for abrupt-process disappearance; PID-reuse behavior remains covered
 by exact-identity source logic rather than a live PID-reuse experiment.
 
+### v0.1.14 release evidence
+
+Release-preparation evidence captured on 2026-09-24:
+
+- root, desktop, Cargo, lockfile, Tauri bundle, and installed app versions
+  align at `0.1.14`
+- `pnpm format:check`, `pnpm check`, focused Usage regressions, and the full
+  Usage last-good suite pass
+- the local ScrollArea owns the narrow Usage viewport, hides the native
+  scrollbar, and passes wheel, keyboard paging, pointer drag, ARIA state, and
+  zero-native-gutter checks
+- the v0.1.14 Tauri bundle builds, installs, and restarts successfully
+- visual/product acceptance remains Mahiro-owned for the final thumb weight
+  and optical feel in the native app
+
 ### v0.1.13 release evidence
 
 Release-preparation evidence captured on 2026-09-24:

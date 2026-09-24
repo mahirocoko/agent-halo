@@ -7,6 +7,7 @@ import {
   ResizableCardDivider,
   useResizableCardLayout,
 } from '../../components/resizable-card-tray'
+import { ScrollArea } from '../../components/scroll-area'
 import { SurfaceControl } from '../../components/surface-control'
 import { SurfaceStatus } from '../../components/surface-status'
 import { createAgentUsageState } from './adapters'
@@ -688,7 +689,12 @@ export const AgentUsageList = ({ onRefresh, onSettingsChange, settings, usages }
           </BoardScroll>
         </BoardSurface>
       ) : (
-        <section className="usage-tray" data-testid="usage-tray" aria-label="Usage providers" ref={layout.trayRef}>
+        <ScrollArea
+          aria-label="Usage providers"
+          className="usage-tray"
+          data-testid="usage-tray"
+          viewportRef={layout.trayRef}
+        >
           {cards
             .map((card, index) => {
               const provider = card.provider
@@ -729,7 +735,7 @@ export const AgentUsageList = ({ onRefresh, onSettingsChange, settings, usages }
                   ]
                 : [card],
             )}
-        </section>
+        </ScrollArea>
       )}
     </div>
   )
