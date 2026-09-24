@@ -130,7 +130,8 @@
   left: 19px;
 }
 
-.completion-pet-root[data-pet-size="medium"] .completion-pet-visual.halo-pet:is([data-pet="halo-bot"], [data-pet="haloform"]) {
+.completion-pet-root[data-pet-size="medium"]
+  .completion-pet-visual.halo-pet:is([data-pet="halo-bot"], [data-pet="haloform"]) {
   --halo-pet-frame-width: 59px;
   --halo-pet-frame-height: 59px;
   --halo-pet-three-frame-width: 177px;
@@ -140,12 +141,15 @@
   --halo-pet-frame-3-x: -177px;
 }
 
-.completion-pet-root[data-pet-size="medium"] .completion-pet-visual.halo-pet:is([data-pet="halo-bot"], [data-pet="haloform"]) .halo-pet-body {
+.completion-pet-root[data-pet-size="medium"]
+  .completion-pet-visual.halo-pet:is([data-pet="halo-bot"], [data-pet="haloform"])
+  .halo-pet-body {
   top: 15px;
   left: 29px;
 }
 
-.completion-pet-root[data-pet-size="small"] .completion-pet-visual.halo-pet:is([data-pet="halo-bot"], [data-pet="haloform"]) {
+.completion-pet-root[data-pet-size="small"]
+  .completion-pet-visual.halo-pet:is([data-pet="halo-bot"], [data-pet="haloform"]) {
   --halo-pet-frame-width: 39px;
   --halo-pet-frame-height: 39px;
   --halo-pet-three-frame-width: 117px;
@@ -155,7 +159,9 @@
   --halo-pet-frame-3-x: -117px;
 }
 
-.completion-pet-root[data-pet-size="small"] .completion-pet-visual.halo-pet:is([data-pet="halo-bot"], [data-pet="haloform"]) .halo-pet-body {
+.completion-pet-root[data-pet-size="small"]
+  .completion-pet-visual.halo-pet:is([data-pet="halo-bot"], [data-pet="haloform"])
+  .halo-pet-body {
   top: 25px;
   left: 39px;
 }
@@ -383,8 +389,13 @@
 }
 
 @keyframes completion-pet-float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-2px); }
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
 }
 
 @keyframes completion-pet-liquid-in {
@@ -418,18 +429,32 @@
 }
 
 @keyframes completion-pet-orbit-in {
-  from { opacity: 0; transform: scale(0.62) rotate(-18deg); }
-  to { opacity: 1; transform: scale(1) rotate(0); }
+  from {
+    opacity: 0;
+    transform: scale(0.62) rotate(-18deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(0);
+  }
 }
 
 @keyframes completion-pet-rebase {
-  from { transform: translate(var(--pet-rebase-x), var(--pet-rebase-y)); }
-  to { transform: translate(0, 0); }
+  from {
+    transform: translate(var(--pet-rebase-x), var(--pet-rebase-y));
+  }
+  to {
+    transform: translate(0, 0);
+  }
 }
 
 @keyframes completion-pet-context-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

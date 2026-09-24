@@ -69,7 +69,9 @@
   cursor: pointer;
   flex: none;
   margin-left: 4px;
-  transition: background 120ms ease, color 120ms ease;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
 }
 
 .header-setup-btn:hover {
@@ -95,7 +97,9 @@
   cursor: pointer;
   flex: none;
   margin-left: 6px;
-  transition: background 120ms ease, color 120ms ease;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
 }
 
 .header-close-btn:hover {
@@ -548,7 +552,9 @@
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.22);
   pointer-events: none;
-  transition: background 120ms ease, transform 120ms ease;
+  transition:
+    background 120ms ease,
+    transform 120ms ease;
 }
 
 .sessions-divider:hover .sessions-grip,
@@ -810,7 +816,9 @@
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.22);
   pointer-events: none;
-  transition: background 120ms ease, transform 120ms ease;
+  transition:
+    background 120ms ease,
+    transform 120ms ease;
 }
 
 .card-resize-divider:hover .card-resize-grip,

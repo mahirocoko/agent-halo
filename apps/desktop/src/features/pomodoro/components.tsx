@@ -1,184 +1,371 @@
-import { Bell, BellOff, ChevronDown, Pause, Play, RotateCcw, SkipForward, SlidersHorizontal, Timer } from "lucide-react";
-import { useEffect, useState, type CSSProperties } from "react";
-import { SurfaceControl } from "../../components/surface-control";
-import { DEFAULT_POMODORO_SETTINGS, getPomodoroPhaseLabel } from "./model";
-import type { IPomodoroSettings } from "./types";
-import type { IUsePomodoroResult } from "./usePomodoro";
+import { Bell, BellOff, ChevronDown, Pause, Play, RotateCcw, SkipForward, SlidersHorizontal, Timer } from 'lucide-react'
+import { type CSSProperties, useEffect, useState } from 'react'
+import { SurfaceControl } from '../../components/surface-control'
+import { DEFAULT_POMODORO_SETTINGS, getPomodoroPhaseLabel } from './model'
+import type { IPomodoroSettings } from './types'
+import type { IUsePomodoroResult } from './use-pomodoro'
 
 export interface IPomodoroPanelProps {
-  pomodoro: IUsePomodoroResult;
-  onResetAll?: () => void;
+  pomodoro: IUsePomodoroResult
+  onResetAll?: () => void
 }
 
-type PomodoroSettingKey = keyof Omit<IPomodoroSettings, "schemaVersion">;
-type PomodoroSettingsDraft = Record<PomodoroSettingKey, string>;
+type PomodoroSettingKey = keyof Omit<IPomodoroSettings, 'schemaVersion'>
+type PomodoroSettingsDraft = Record<PomodoroSettingKey, string>
 
 const toSettingsDraft = (settings: IPomodoroSettings): PomodoroSettingsDraft => ({
   focusMinutes: `${settings.focusMinutes}`,
   shortBreakMinutes: `${settings.shortBreakMinutes}`,
   longBreakMinutes: `${settings.longBreakMinutes}`,
   longBreakEvery: `${settings.longBreakEvery}`,
-});
+})
 
 const validateSetting = (value: string, minimum: number, maximum: number): string | null => {
-  const parsed = Number(value);
-  if (!value.trim() || !Number.isInteger(parsed)) return "Whole number required";
-  if (parsed < minimum || parsed > maximum) return `${minimum}–${maximum}`;
-  return null;
-};
+  const parsed = Number(value)
+  if (!value.trim() || !Number.isInteger(parsed)) return 'Whole number required'
+  if (parsed < minimum || parsed > maximum) return `${minimum}–${maximum}`
+  return null
+}
 
 export const PomodoroPanel = ({ onResetAll, pomodoro }: IPomodoroPanelProps) => {
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [resetAllArmed, setResetAllArmed] = useState(false);
-  const [settingsDraft, setSettingsDraft] = useState<PomodoroSettingsDraft>(() => toSettingsDraft(pomodoro.settings));
-  const { state } = pomodoro;
-  const running = state.status === "running";
-  const paused = state.status === "paused";
-  const statusLabel = running ? "Running" : paused ? "Paused" : pomodoro.completionVisible ? `${getPomodoroPhaseLabel(state.lastCompletion?.completedPhase ?? state.phase)} complete` : "Ready";
-  const semanticStatus = running ? "running" : paused ? "paused" : pomodoro.completionVisible ? "done" : "ready";
-  const notificationFailed = pomodoro.notificationError !== null;
-  const notificationAvailable = pomodoro.notificationPermission !== "unsupported" && pomodoro.notificationPermission !== "denied";
-  const showNotificationNote = pomodoro.notificationError !== null || ["notDetermined", "denied", "unsupported"].includes(pomodoro.notificationPermission);
-  const resetDisabled = state.status === "idle" && pomodoro.remainingMs === pomodoro.durationMs && state.lastCompletion === null;
-  const resetAllDisabled = state.phase === "focus" && state.status === "idle" && state.completedFocusSessions === 0 && pomodoro.remainingMs === pomodoro.durationMs && state.lastCompletion === null;
-  const progressStyle = { "--pomodoro-progress": `${pomodoro.progress * 100}%` } as CSSProperties;
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [resetAllArmed, setResetAllArmed] = useState(false)
+  const [settingsDraft, setSettingsDraft] = useState<PomodoroSettingsDraft>(() => toSettingsDraft(pomodoro.settings))
+  const { state } = pomodoro
+  const running = state.status === 'running'
+  const paused = state.status === 'paused'
+  const statusLabel = running
+    ? 'Running'
+    : paused
+      ? 'Paused'
+      : pomodoro.completionVisible
+        ? `${getPomodoroPhaseLabel(state.lastCompletion?.completedPhase ?? state.phase)} complete`
+        : 'Ready'
+  const semanticStatus = running ? 'running' : paused ? 'paused' : pomodoro.completionVisible ? 'done' : 'ready'
+  const notificationFailed = pomodoro.notificationError !== null
+  const notificationAvailable =
+    pomodoro.notificationPermission !== 'unsupported' && pomodoro.notificationPermission !== 'denied'
+  const showNotificationNote =
+    pomodoro.notificationError !== null ||
+    ['notDetermined', 'denied', 'unsupported'].includes(pomodoro.notificationPermission)
+  const resetDisabled =
+    state.status === 'idle' && pomodoro.remainingMs === pomodoro.durationMs && state.lastCompletion === null
+  const resetAllDisabled =
+    state.phase === 'focus' &&
+    state.status === 'idle' &&
+    state.completedFocusSessions === 0 &&
+    pomodoro.remainingMs === pomodoro.durationMs &&
+    state.lastCompletion === null
+  const progressStyle = { '--pomodoro-progress': `${pomodoro.progress * 100}%` } as CSSProperties
   const settingsErrors = {
     focusMinutes: validateSetting(settingsDraft.focusMinutes, 1, 120),
     shortBreakMinutes: validateSetting(settingsDraft.shortBreakMinutes, 1, 60),
     longBreakMinutes: validateSetting(settingsDraft.longBreakMinutes, 1, 120),
     longBreakEvery: validateSetting(settingsDraft.longBreakEvery, 2, 12),
-  };
-  const settingsValid = Object.values(settingsErrors).every((error) => error === null);
+  }
+  const settingsValid = Object.values(settingsErrors).every((error) => error === null)
 
   useEffect(() => {
-    if (settingsOpen) setSettingsDraft(toSettingsDraft(pomodoro.settings));
-  }, [pomodoro.settings, settingsOpen]);
+    if (settingsOpen) setSettingsDraft(toSettingsDraft(pomodoro.settings))
+  }, [pomodoro.settings, settingsOpen])
 
   const updateDraft = (field: PomodoroSettingKey, value: string): void => {
-    setSettingsDraft((current) => ({ ...current, [field]: value }));
-  };
+    setSettingsDraft((current) => ({ ...current, [field]: value }))
+  }
 
   const applySettings = (): void => {
-    if (!settingsValid) return;
+    if (!settingsValid) return
     pomodoro.updateSettings({
       schemaVersion: 1,
       focusMinutes: Number(settingsDraft.focusMinutes),
       shortBreakMinutes: Number(settingsDraft.shortBreakMinutes),
       longBreakMinutes: Number(settingsDraft.longBreakMinutes),
       longBreakEvery: Number(settingsDraft.longBreakEvery),
-    });
-    setSettingsOpen(false);
-  };
+    })
+    setSettingsOpen(false)
+  }
 
   const restoreDefaults = (): void => {
-    setSettingsDraft(toSettingsDraft(DEFAULT_POMODORO_SETTINGS));
-  };
+    setSettingsDraft(toSettingsDraft(DEFAULT_POMODORO_SETTINGS))
+  }
 
   return (
     <div className="pomodoro-panel" data-phase={state.phase} data-status={state.status}>
       <div className="pomodoro-primary-zone">
-      <div className="pomodoro-phase-line">
-        <span className="pomodoro-phase-icon" aria-hidden="true"><Timer size={13} strokeWidth={2.3} /></span>
-        <span className="pomodoro-phase-label">Pomodoro</span>
-        <span className="pomodoro-phase-context">{pomodoro.phaseLabel}</span>
-        <span className="pomodoro-status" data-status={semanticStatus}>{statusLabel}</span>
-      </div>
+        <div className="pomodoro-phase-line">
+          <span className="pomodoro-phase-icon" aria-hidden="true">
+            <Timer size={13} strokeWidth={2.3} />
+          </span>
+          <span className="pomodoro-phase-label">Pomodoro</span>
+          <span className="pomodoro-phase-context">{pomodoro.phaseLabel}</span>
+          <span className="pomodoro-status" data-status={semanticStatus}>
+            {statusLabel}
+          </span>
+        </div>
 
-      <div className="pomodoro-clock" role="timer" aria-label={`${pomodoro.phaseLabel}, ${pomodoro.countdownLabel} remaining`}>
-        <span className="pomodoro-time">{pomodoro.countdownLabel}</span>
-        <span className="pomodoro-next">Next · {pomodoro.nextPhaseLabel}</span>
-      </div>
+        <div
+          className="pomodoro-clock"
+          role="timer"
+          aria-label={`${pomodoro.phaseLabel}, ${pomodoro.countdownLabel} remaining`}
+        >
+          <span className="pomodoro-time">{pomodoro.countdownLabel}</span>
+          <span className="pomodoro-next">Next · {pomodoro.nextPhaseLabel}</span>
+        </div>
 
-      <div className="pomodoro-progress" role="progressbar" aria-label={`${pomodoro.phaseLabel} progress`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pomodoro.progress * 100)} style={progressStyle}>
-        <span className="pomodoro-progress-fill" />
-      </div>
+        <div
+          className="pomodoro-progress"
+          role="progressbar"
+          aria-label={`${pomodoro.phaseLabel} progress`}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(pomodoro.progress * 100)}
+          style={progressStyle}
+        >
+          <span className="pomodoro-progress-fill" />
+        </div>
 
-      <div className="pomodoro-controls">
-        {running ? (
-          <SurfaceControl className="pomodoro-control primary" surfaceControlVariant="primary" type="button" onClick={pomodoro.pause} data-tauri-drag-region="false">
-            <Pause size={14} strokeWidth={2.4} />Pause
+        <div className="pomodoro-controls">
+          {running ? (
+            <SurfaceControl
+              className="pomodoro-control primary"
+              surfaceControlVariant="primary"
+              type="button"
+              onClick={pomodoro.pause}
+              data-tauri-drag-region="false"
+            >
+              <Pause size={14} strokeWidth={2.4} />
+              Pause
+            </SurfaceControl>
+          ) : (
+            <SurfaceControl
+              className="pomodoro-control primary"
+              surfaceControlVariant="primary"
+              type="button"
+              onClick={pomodoro.start}
+              data-tauri-drag-region="false"
+            >
+              <Play size={14} strokeWidth={2.4} />
+              {paused ? 'Resume' : 'Start'}
+            </SurfaceControl>
+          )}
+          <SurfaceControl
+            className="pomodoro-control"
+            type="button"
+            onClick={pomodoro.reset}
+            disabled={resetDisabled}
+            data-tauri-drag-region="false"
+            aria-label={`Repeat ${pomodoro.phaseLabel} from full duration`}
+          >
+            <RotateCcw size={13} strokeWidth={2.3} />
+            Restart
           </SurfaceControl>
-        ) : (
-          <SurfaceControl className="pomodoro-control primary" surfaceControlVariant="primary" type="button" onClick={pomodoro.start} data-tauri-drag-region="false">
-            <Play size={14} strokeWidth={2.4} />{paused ? "Resume" : "Start"}
+          <SurfaceControl
+            className="pomodoro-control"
+            type="button"
+            onClick={pomodoro.skip}
+            data-tauri-drag-region="false"
+          >
+            <SkipForward size={13} strokeWidth={2.3} />
+            Skip
           </SurfaceControl>
-        )}
-        <SurfaceControl className="pomodoro-control" type="button" onClick={pomodoro.reset} disabled={resetDisabled} data-tauri-drag-region="false" aria-label={`Repeat ${pomodoro.phaseLabel} from full duration`}>
-          <RotateCcw size={13} strokeWidth={2.3} />Restart
-        </SurfaceControl>
-        <SurfaceControl className="pomodoro-control" type="button" onClick={pomodoro.skip} data-tauri-drag-region="false">
-          <SkipForward size={13} strokeWidth={2.3} />Skip
-        </SurfaceControl>
-        <SurfaceControl className={`pomodoro-control ${resetAllArmed ? "danger" : ""}`} surfaceControlVariant={resetAllArmed ? "armed-danger" : "default"} type="button" disabled={resetAllDisabled} onClick={() => { if (!resetAllArmed) { setResetAllArmed(true); return; } (onResetAll ?? pomodoro.resetAll)(); setResetAllArmed(false); }} data-tauri-drag-region="false" aria-label={resetAllArmed ? "Confirm reset all Pomodoro progress" : "Reset all Pomodoro progress"}>
-          <RotateCcw size={13} strokeWidth={2.3} />{resetAllArmed ? "Confirm reset" : "Reset progress"}
-        </SurfaceControl>
-      </div>
+          <SurfaceControl
+            className={`pomodoro-control ${resetAllArmed ? 'danger' : ''}`}
+            surfaceControlVariant={resetAllArmed ? 'armed-danger' : 'default'}
+            type="button"
+            disabled={resetAllDisabled}
+            onClick={() => {
+              if (!resetAllArmed) {
+                setResetAllArmed(true)
+                return
+              }
+              ;(onResetAll ?? pomodoro.resetAll)()
+              setResetAllArmed(false)
+            }}
+            data-tauri-drag-region="false"
+            aria-label={resetAllArmed ? 'Confirm reset all Pomodoro progress' : 'Reset all Pomodoro progress'}
+          >
+            <RotateCcw size={13} strokeWidth={2.3} />
+            {resetAllArmed ? 'Confirm reset' : 'Reset progress'}
+          </SurfaceControl>
+        </div>
       </div>
 
       <div className="pomodoro-support-zone">
-      <div className="pomodoro-cycle-row">
-        <span className="pomodoro-cycle-label">Focus cycle</span>
-        <span className="pomodoro-cycle-dots" aria-label={`${pomodoro.cyclePosition} of ${pomodoro.settings.longBreakEvery} focus sessions before long break`}>
-          {Array.from({ length: pomodoro.settings.longBreakEvery }, (_, index) => (
-            <span className="pomodoro-cycle-dot" data-complete={index < pomodoro.cyclePosition} key={index} aria-hidden="true" />
-          ))}
-        </span>
-        <span className="pomodoro-cycle-total">{pomodoro.cyclePosition} / {pomodoro.settings.longBreakEvery}</span>
-      </div>
-
-      <button
-        className="pomodoro-settings-toggle"
-        type="button"
-        aria-expanded={settingsOpen}
-        aria-controls="pomodoro-settings"
-        onClick={() => setSettingsOpen((current) => !current)}
-        data-tauri-drag-region="false"
-      >
-        <SlidersHorizontal size={12} strokeWidth={2.2} />
-        <span>Timer settings</span>
-        <span className="pomodoro-settings-summary">{pomodoro.settings.focusMinutes} / {pomodoro.settings.shortBreakMinutes} / {pomodoro.settings.longBreakMinutes} · ×{pomodoro.settings.longBreakEvery}</span>
-        <ChevronDown className="pomodoro-settings-chevron" size={12} strokeWidth={2.2} />
-      </button>
-
-      {settingsOpen ? (
-        <div className="pomodoro-settings" id="pomodoro-settings">
-          <div className="pomodoro-settings-grid">
-            <label className="pomodoro-setting-field">
-              <span>Focus</span>
-              <span className="pomodoro-setting-input"><input name="focusMinutes" type="number" min={1} max={120} value={settingsDraft.focusMinutes} aria-invalid={settingsErrors.focusMinutes !== null} aria-describedby={settingsErrors.focusMinutes ? "pomodoro-focus-error" : undefined} onChange={(event) => updateDraft("focusMinutes", event.currentTarget.value)} data-tauri-drag-region="false" /><small>min</small></span>
-              {settingsErrors.focusMinutes ? <span className="pomodoro-setting-error" id="pomodoro-focus-error">{settingsErrors.focusMinutes}</span> : null}
-            </label>
-            <label className="pomodoro-setting-field">
-              <span>Short break</span>
-              <span className="pomodoro-setting-input"><input name="shortBreakMinutes" type="number" min={1} max={60} value={settingsDraft.shortBreakMinutes} aria-invalid={settingsErrors.shortBreakMinutes !== null} aria-describedby={settingsErrors.shortBreakMinutes ? "pomodoro-short-error" : undefined} onChange={(event) => updateDraft("shortBreakMinutes", event.currentTarget.value)} data-tauri-drag-region="false" /><small>min</small></span>
-              {settingsErrors.shortBreakMinutes ? <span className="pomodoro-setting-error" id="pomodoro-short-error">{settingsErrors.shortBreakMinutes}</span> : null}
-            </label>
-            <label className="pomodoro-setting-field">
-              <span>Long break</span>
-              <span className="pomodoro-setting-input"><input name="longBreakMinutes" type="number" min={1} max={120} value={settingsDraft.longBreakMinutes} aria-invalid={settingsErrors.longBreakMinutes !== null} aria-describedby={settingsErrors.longBreakMinutes ? "pomodoro-long-error" : undefined} onChange={(event) => updateDraft("longBreakMinutes", event.currentTarget.value)} data-tauri-drag-region="false" /><small>min</small></span>
-              {settingsErrors.longBreakMinutes ? <span className="pomodoro-setting-error" id="pomodoro-long-error">{settingsErrors.longBreakMinutes}</span> : null}
-            </label>
-            <label className="pomodoro-setting-field">
-              <span>Long break every</span>
-              <span className="pomodoro-setting-input"><input name="longBreakEvery" type="number" min={2} max={12} value={settingsDraft.longBreakEvery} aria-label="Focus sessions before long break" aria-invalid={settingsErrors.longBreakEvery !== null} aria-describedby={settingsErrors.longBreakEvery ? "pomodoro-cadence-error" : undefined} onChange={(event) => updateDraft("longBreakEvery", event.currentTarget.value)} data-tauri-drag-region="false" /><small>sessions</small></span>
-              {settingsErrors.longBreakEvery ? <span className="pomodoro-setting-error" id="pomodoro-cadence-error">{settingsErrors.longBreakEvery}</span> : null}
-            </label>
-          </div>
-          <div className="pomodoro-settings-actions">
-            <span>{state.status === "idle" ? "Applies before the next Start" : "Current timer keeps its duration"}</span>
-            <SurfaceControl surfaceControlSize="compact" type="button" onClick={restoreDefaults} data-tauri-drag-region="false">Defaults</SurfaceControl>
-            <SurfaceControl className="is-primary" surfaceControlSize="compact" surfaceControlVariant="primary" type="button" onClick={applySettings} disabled={!settingsValid} data-tauri-drag-region="false">Apply</SurfaceControl>
-          </div>
+        <div className="pomodoro-cycle-row">
+          <span className="pomodoro-cycle-label">Focus cycle</span>
+          <span
+            className="pomodoro-cycle-dots"
+            aria-label={`${pomodoro.cyclePosition} of ${pomodoro.settings.longBreakEvery} focus sessions before long break`}
+          >
+            {Array.from({ length: pomodoro.settings.longBreakEvery }, (_, index) => (
+              <span
+                className="pomodoro-cycle-dot"
+                data-complete={index < pomodoro.cyclePosition}
+                key={index}
+                aria-hidden="true"
+              />
+            ))}
+          </span>
+          <span className="pomodoro-cycle-total">
+            {pomodoro.cyclePosition} / {pomodoro.settings.longBreakEvery}
+          </span>
         </div>
-      ) : null}
 
-      {showNotificationNote ? (
-        <div className="pomodoro-notification" data-available={notificationAvailable} data-error={notificationFailed} role="status" aria-live="polite">
-          {notificationAvailable ? <Bell size={12} strokeWidth={2.2} /> : <BellOff size={12} strokeWidth={2.2} />}
-          <span>{pomodoro.notificationError ?? (pomodoro.notificationPermission === "notDetermined" ? "macOS asks for notifications on Start" : "Completion stays in Agent Halo")}</span>
-        </div>
-      ) : null}
+        <button
+          className="pomodoro-settings-toggle"
+          type="button"
+          aria-expanded={settingsOpen}
+          aria-controls="pomodoro-settings"
+          onClick={() => setSettingsOpen((current) => !current)}
+          data-tauri-drag-region="false"
+        >
+          <SlidersHorizontal size={12} strokeWidth={2.2} />
+          <span>Timer settings</span>
+          <span className="pomodoro-settings-summary">
+            {pomodoro.settings.focusMinutes} / {pomodoro.settings.shortBreakMinutes} /{' '}
+            {pomodoro.settings.longBreakMinutes} · ×{pomodoro.settings.longBreakEvery}
+          </span>
+          <ChevronDown className="pomodoro-settings-chevron" size={12} strokeWidth={2.2} />
+        </button>
+
+        {settingsOpen ? (
+          <div className="pomodoro-settings" id="pomodoro-settings">
+            <div className="pomodoro-settings-grid">
+              <label className="pomodoro-setting-field">
+                <span>Focus</span>
+                <span className="pomodoro-setting-input">
+                  <input
+                    name="focusMinutes"
+                    type="number"
+                    min={1}
+                    max={120}
+                    value={settingsDraft.focusMinutes}
+                    aria-invalid={settingsErrors.focusMinutes !== null}
+                    aria-describedby={settingsErrors.focusMinutes ? 'pomodoro-focus-error' : undefined}
+                    onChange={(event) => updateDraft('focusMinutes', event.currentTarget.value)}
+                    data-tauri-drag-region="false"
+                  />
+                  <small>min</small>
+                </span>
+                {settingsErrors.focusMinutes ? (
+                  <span className="pomodoro-setting-error" id="pomodoro-focus-error">
+                    {settingsErrors.focusMinutes}
+                  </span>
+                ) : null}
+              </label>
+              <label className="pomodoro-setting-field">
+                <span>Short break</span>
+                <span className="pomodoro-setting-input">
+                  <input
+                    name="shortBreakMinutes"
+                    type="number"
+                    min={1}
+                    max={60}
+                    value={settingsDraft.shortBreakMinutes}
+                    aria-invalid={settingsErrors.shortBreakMinutes !== null}
+                    aria-describedby={settingsErrors.shortBreakMinutes ? 'pomodoro-short-error' : undefined}
+                    onChange={(event) => updateDraft('shortBreakMinutes', event.currentTarget.value)}
+                    data-tauri-drag-region="false"
+                  />
+                  <small>min</small>
+                </span>
+                {settingsErrors.shortBreakMinutes ? (
+                  <span className="pomodoro-setting-error" id="pomodoro-short-error">
+                    {settingsErrors.shortBreakMinutes}
+                  </span>
+                ) : null}
+              </label>
+              <label className="pomodoro-setting-field">
+                <span>Long break</span>
+                <span className="pomodoro-setting-input">
+                  <input
+                    name="longBreakMinutes"
+                    type="number"
+                    min={1}
+                    max={120}
+                    value={settingsDraft.longBreakMinutes}
+                    aria-invalid={settingsErrors.longBreakMinutes !== null}
+                    aria-describedby={settingsErrors.longBreakMinutes ? 'pomodoro-long-error' : undefined}
+                    onChange={(event) => updateDraft('longBreakMinutes', event.currentTarget.value)}
+                    data-tauri-drag-region="false"
+                  />
+                  <small>min</small>
+                </span>
+                {settingsErrors.longBreakMinutes ? (
+                  <span className="pomodoro-setting-error" id="pomodoro-long-error">
+                    {settingsErrors.longBreakMinutes}
+                  </span>
+                ) : null}
+              </label>
+              <label className="pomodoro-setting-field">
+                <span>Long break every</span>
+                <span className="pomodoro-setting-input">
+                  <input
+                    name="longBreakEvery"
+                    type="number"
+                    min={2}
+                    max={12}
+                    value={settingsDraft.longBreakEvery}
+                    aria-label="Focus sessions before long break"
+                    aria-invalid={settingsErrors.longBreakEvery !== null}
+                    aria-describedby={settingsErrors.longBreakEvery ? 'pomodoro-cadence-error' : undefined}
+                    onChange={(event) => updateDraft('longBreakEvery', event.currentTarget.value)}
+                    data-tauri-drag-region="false"
+                  />
+                  <small>sessions</small>
+                </span>
+                {settingsErrors.longBreakEvery ? (
+                  <span className="pomodoro-setting-error" id="pomodoro-cadence-error">
+                    {settingsErrors.longBreakEvery}
+                  </span>
+                ) : null}
+              </label>
+            </div>
+            <div className="pomodoro-settings-actions">
+              <span>
+                {state.status === 'idle' ? 'Applies before the next Start' : 'Current timer keeps its duration'}
+              </span>
+              <SurfaceControl
+                surfaceControlSize="compact"
+                type="button"
+                onClick={restoreDefaults}
+                data-tauri-drag-region="false"
+              >
+                Defaults
+              </SurfaceControl>
+              <SurfaceControl
+                className="is-primary"
+                surfaceControlSize="compact"
+                surfaceControlVariant="primary"
+                type="button"
+                onClick={applySettings}
+                disabled={!settingsValid}
+                data-tauri-drag-region="false"
+              >
+                Apply
+              </SurfaceControl>
+            </div>
+          </div>
+        ) : null}
+
+        {showNotificationNote ? (
+          <div
+            className="pomodoro-notification"
+            data-available={notificationAvailable}
+            data-error={notificationFailed}
+            role="status"
+            aria-live="polite"
+          >
+            {notificationAvailable ? <Bell size={12} strokeWidth={2.2} /> : <BellOff size={12} strokeWidth={2.2} />}
+            <span>
+              {pomodoro.notificationError ??
+                (pomodoro.notificationPermission === 'notDetermined'
+                  ? 'macOS asks for notifications on Start'
+                  : 'Completion stays in Agent Halo')}
+            </span>
+          </div>
+        ) : null}
       </div>
     </div>
-  );
-};
+  )
+}

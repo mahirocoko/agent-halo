@@ -1,4 +1,3 @@
-
 .overlay-root {
   width: 100%;
   height: 100%;
@@ -267,11 +266,8 @@
   width: var(--halo-pet-frame-width);
   height: var(--halo-pet-frame-height);
   background-image: var(--halo-pet-body);
-  filter:
-    drop-shadow(0 0 2px rgba(85, 199, 232, 0.32))
-    hue-rotate(var(--halo-pet-hue))
-    saturate(var(--halo-pet-saturation))
-    brightness(var(--halo-pet-brightness));
+  filter: drop-shadow(0 0 2px rgba(85, 199, 232, 0.32)) hue-rotate(var(--halo-pet-hue))
+    saturate(var(--halo-pet-saturation)) brightness(var(--halo-pet-brightness));
 }
 
 .pixabot-body {
@@ -325,7 +321,8 @@
   animation: pixabot-working-body 450ms step-end infinite;
 }
 
-.halo-pet[data-pet="halo-bot"][data-motion="working"] .pixabot-layer:is([data-category="heads"], [data-category="eyes"]) {
+.halo-pet[data-pet="halo-bot"][data-motion="working"]
+  .pixabot-layer:is([data-category="heads"], [data-category="eyes"]) {
   animation: pixabot-working-head 450ms step-end infinite;
 }
 
@@ -456,7 +453,10 @@
   animation: haloform-error 0.48s step-end infinite;
 }
 
-.halo-pet[data-signal]:not([data-signal="none"]):not([data-signal="thinking-model"]):not([data-signal="attention-asking"]):not([data-signal="done"]) .halo-pet-signal {
+.halo-pet[data-signal]:not([data-signal="none"]):not([data-signal="thinking-model"]):not(
+    [data-signal="attention-asking"]
+  ):not([data-signal="done"])
+  .halo-pet-signal {
   animation: halo-pet-signal-three-frame-loop 0.6s step-end infinite;
 }
 
@@ -492,74 +492,180 @@
 }
 
 @keyframes pixabot-idle-top {
-  0%, 24.99% { transform: translateY(0); }
-  25%, 37.49% { transform: translateY(0); }
-  37.5%, 49.99% { transform: translateY(3.125%); }
-  50%, 62.49% { transform: translateY(6.25%); }
-  62.5%, 74.99% { transform: translateY(7.8125%); }
-  75%, 87.49% { transform: translateY(6.25%); }
-  87.5%, 100% { transform: translateY(3.125%); }
+  0%,
+  24.99% {
+    transform: translateY(0);
+  }
+  25%,
+  37.49% {
+    transform: translateY(0);
+  }
+  37.5%,
+  49.99% {
+    transform: translateY(3.125%);
+  }
+  50%,
+  62.49% {
+    transform: translateY(6.25%);
+  }
+  62.5%,
+  74.99% {
+    transform: translateY(7.8125%);
+  }
+  75%,
+  87.49% {
+    transform: translateY(6.25%);
+  }
+  87.5%,
+  100% {
+    transform: translateY(3.125%);
+  }
 }
 
 @keyframes pixabot-idle-head {
-  0%, 24.99% { transform: translateY(0); }
-  25%, 37.49% { transform: translateY(3.125%); }
-  37.5%, 74.99% { transform: translateY(6.25%); }
-  75%, 87.49% { transform: translateY(3.125%); }
-  87.5%, 100% { transform: translateY(0); }
+  0%,
+  24.99% {
+    transform: translateY(0);
+  }
+  25%,
+  37.49% {
+    transform: translateY(3.125%);
+  }
+  37.5%,
+  74.99% {
+    transform: translateY(6.25%);
+  }
+  75%,
+  87.49% {
+    transform: translateY(3.125%);
+  }
+  87.5%,
+  100% {
+    transform: translateY(0);
+  }
 }
 
 @keyframes pixabot-idle-body {
-  0%, 37.49% { transform: translateY(0); }
-  37.5%, 87.49% { transform: translateY(3.125%); }
-  87.5%, 100% { transform: translateY(0); }
+  0%,
+  37.49% {
+    transform: translateY(0);
+  }
+  37.5%,
+  87.49% {
+    transform: translateY(3.125%);
+  }
+  87.5%,
+  100% {
+    transform: translateY(0);
+  }
 }
 
 @keyframes pixabot-working-top {
-  0%, 33.32% { transform: translateX(-3.125%); }
-  33.33%, 66.65% { transform: translateX(6.25%); }
-  66.66%, 100% { transform: translateY(3.125%); }
+  0%,
+  33.32% {
+    transform: translateX(-3.125%);
+  }
+  33.33%,
+  66.65% {
+    transform: translateX(6.25%);
+  }
+  66.66%,
+  100% {
+    transform: translateY(3.125%);
+  }
 }
 
 @keyframes pixabot-working-body {
-  0%, 33.32% { transform: translateX(-3.125%); }
-  33.33%, 100% { transform: translateX(3.125%); }
+  0%,
+  33.32% {
+    transform: translateX(-3.125%);
+  }
+  33.33%,
+  100% {
+    transform: translateX(3.125%);
+  }
 }
 
 @keyframes pixabot-working-head {
-  0%, 33.32% { transform: translate(-6.25%, 6.25%); }
-  33.33%, 66.65% { transform: translateX(6.25%); }
-  66.66%, 100% { transform: translateY(6.25%); }
+  0%,
+  33.32% {
+    transform: translate(-6.25%, 6.25%);
+  }
+  33.33%,
+  66.65% {
+    transform: translateX(6.25%);
+  }
+  66.66%,
+  100% {
+    transform: translateY(6.25%);
+  }
 }
 
 @keyframes pixabot-attention {
-  0%, 100% { transform: translateY(1px); }
-  34% { transform: translateY(-2px) scale(1.02); }
+  0%,
+  100% {
+    transform: translateY(1px);
+  }
+  34% {
+    transform: translateY(-2px) scale(1.02);
+  }
 }
 
 @keyframes pixabot-error {
-  0%, 100% { transform: translateX(-2px) rotate(-2deg); }
-  50% { transform: translateX(2px) rotate(2deg); }
+  0%,
+  100% {
+    transform: translateX(-2px) rotate(-2deg);
+  }
+  50% {
+    transform: translateX(2px) rotate(2deg);
+  }
 }
 
 @keyframes pixabot-done {
-  0% { transform: translateY(1px); }
-  28% { transform: translateY(-3px) scale(1.04); }
-  58% { transform: translateY(1px); }
-  100% { transform: translateY(0); }
+  0% {
+    transform: translateY(1px);
+  }
+  28% {
+    transform: translateY(-3px) scale(1.04);
+  }
+  58% {
+    transform: translateY(1px);
+  }
+  100% {
+    transform: translateY(0);
+  }
 }
 
 @keyframes pixabot-blink {
-  0%, 6.249% { background-position-x: 0; }
-  6.25%, 12.499% { background-position-x: 100%; }
-  12.5%, 18.749% { background-position-x: 0; }
-  18.75%, 24.999% { background-position-x: 100%; }
-  25%, 100% { background-position-x: 0; }
+  0%,
+  6.249% {
+    background-position-x: 0;
+  }
+  6.25%,
+  12.499% {
+    background-position-x: 100%;
+  }
+  12.5%,
+  18.749% {
+    background-position-x: 0;
+  }
+  18.75%,
+  24.999% {
+    background-position-x: 100%;
+  }
+  25%,
+  100% {
+    background-position-x: 0;
+  }
 }
 
 @keyframes pixabot-sequence {
-  from { background-position-x: 0; }
-  to { background-position-x: 100%; }
+  from {
+    background-position-x: 0;
+  }
+  to {
+    background-position-x: 100%;
+  }
 }
 
 @keyframes halo-pet-done {
@@ -612,34 +718,82 @@
 }
 
 @keyframes haloform-idle {
-  0%, 44.06% { background-position-x: 0; }
-  44.07%, 64.4% { background-position-x: var(--halo-pet-frame-1-x); }
-  64.41%, 100% { background-position-x: var(--halo-pet-frame-2-x); }
+  0%,
+  44.06% {
+    background-position-x: 0;
+  }
+  44.07%,
+  64.4% {
+    background-position-x: var(--halo-pet-frame-1-x);
+  }
+  64.41%,
+  100% {
+    background-position-x: var(--halo-pet-frame-2-x);
+  }
 }
 
 @keyframes haloform-working {
-  0%, 35.99% { background-position-x: 0; }
-  36%, 63.99% { background-position-x: var(--halo-pet-frame-1-x); }
-  64%, 100% { background-position-x: var(--halo-pet-frame-2-x); }
+  0%,
+  35.99% {
+    background-position-x: 0;
+  }
+  36%,
+  63.99% {
+    background-position-x: var(--halo-pet-frame-1-x);
+  }
+  64%,
+  100% {
+    background-position-x: var(--halo-pet-frame-2-x);
+  }
 }
 
 @keyframes haloform-attention {
-  0%, 35.89% { background-position-x: 0; }
-  35.9%, 58.97% { background-position-x: var(--halo-pet-frame-1-x); }
-  58.98%, 100% { background-position-x: var(--halo-pet-frame-2-x); }
+  0%,
+  35.89% {
+    background-position-x: 0;
+  }
+  35.9%,
+  58.97% {
+    background-position-x: var(--halo-pet-frame-1-x);
+  }
+  58.98%,
+  100% {
+    background-position-x: var(--halo-pet-frame-2-x);
+  }
 }
 
 @keyframes haloform-done {
-  0%, 18.05% { background-position-x: 0; }
-  18.06%, 33.32% { background-position-x: var(--halo-pet-frame-1-x); }
-  33.33%, 51.38% { background-position-x: var(--halo-pet-frame-2-x); }
-  51.39%, 100% { background-position-x: var(--halo-pet-frame-3-x); }
+  0%,
+  18.05% {
+    background-position-x: 0;
+  }
+  18.06%,
+  33.32% {
+    background-position-x: var(--halo-pet-frame-1-x);
+  }
+  33.33%,
+  51.38% {
+    background-position-x: var(--halo-pet-frame-2-x);
+  }
+  51.39%,
+  100% {
+    background-position-x: var(--halo-pet-frame-3-x);
+  }
 }
 
 @keyframes haloform-error {
-  0%, 29.16% { background-position-x: 0; }
-  29.17%, 54.16% { background-position-x: var(--halo-pet-frame-1-x); }
-  54.17%, 100% { background-position-x: var(--halo-pet-frame-2-x); }
+  0%,
+  29.16% {
+    background-position-x: 0;
+  }
+  29.17%,
+  54.16% {
+    background-position-x: var(--halo-pet-frame-1-x);
+  }
+  54.17%,
+  100% {
+    background-position-x: var(--halo-pet-frame-2-x);
+  }
 }
 
 @keyframes halo-pet-signal-three-frame-loop {

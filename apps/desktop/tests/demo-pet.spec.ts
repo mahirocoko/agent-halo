@@ -73,7 +73,7 @@ test("every surface uses the Halo Bot default with one stable loadout and no ran
 test("pet normalization defaults invalid or missing values to Halo Bot", async ({ page }) => {
   await page.goto("/?demo=1&demoScenario=idle");
   const result = await page.evaluate(async () => {
-    const { getHaloPetName, HALO_PET_ROSTER } = await import("/src/features/session/HaloPet.tsx");
+    const { getHaloPetName, HALO_PET_ROSTER } = await import("/src/features/session/halo-pet.tsx");
     return {
       fallback: getHaloPetName(null),
       invalid: getHaloPetName("/Users/mahiro/Git/one"),
@@ -90,7 +90,7 @@ test("pet normalization defaults invalid or missing values to Halo Bot", async (
 test("Halo Bot normalizes direct loadout props before rendering metadata and layers", async ({ page }) => {
   await page.goto("/?demo=1&demoScenario=idle");
   const result = await page.evaluate(async () => {
-    const { getHaloBotLoadout } = await import("/src/features/session/haloBot.ts");
+    const { getHaloBotLoadout } = await import("/src/features/session/halo-bot.ts");
     return {
       uppercase: getHaloBotLoadout("F76B"),
       invalid: getHaloBotLoadout("invalid"),
@@ -160,7 +160,7 @@ test("setup selects one global pet and persists the preference", async ({ page }
   await page.locator(".session-row-main").click();
   await expect(page.locator(".session-context-summary .halo-pet")).toHaveAttribute("data-pet", "haloform");
   await expect.poll(() => page.evaluate(() => window.localStorage.getItem("agent-halo.pet"))).toBe("haloform");
-  const stored = await page.evaluate(async () => (await import("/src/features/session/petPreference.ts")).readHaloPetPreference());
+  const stored = await page.evaluate(async () => (await import("/src/features/session/pet-preference.ts")).readHaloPetPreference());
   expect(stored).toBe("haloform");
 });
 
@@ -198,7 +198,7 @@ test("Halo Bot exposes the complete layered Pixabots catalog and persists any va
   await expect(pet.locator('.pixabot-layer[data-category="top"] .pixabot-part')).toHaveCSS("background-image", /\/body\/halo-bot\/parts\/top\/spikes\.png/);
 
   const normalized = await page.evaluate(async () => {
-    const module = await import("/src/features/session/haloBot.ts");
+    const module = await import("/src/features/session/halo-bot.ts");
     return {
       invalid: module.getHaloBotLoadout("invalid"),
       selected: module.getHaloBotLoadout("f061"),
@@ -231,7 +231,7 @@ test("Letta state motion mapping changes only body presentation and persists", a
   await expect(pet.locator('.pixabot-layer[data-category="top"]')).toHaveCSS("animation-duration", "0.576s");
   await expect.poll(() => page.evaluate(() => window.localStorage.getItem("agent-halo.pet-motion-map"))).toContain('"working":"idle"');
 
-  const persisted = await page.evaluate(async () => (await import("/src/features/session/petMotion.ts")).readHaloPetMotionMapping());
+  const persisted = await page.evaluate(async () => (await import("/src/features/session/pet-motion.ts")).readHaloPetMotionMapping());
   expect(persisted.working).toBe("idle");
 });
 
@@ -250,14 +250,14 @@ test("Halo Bot Working uses the approved per-layer rig without whole-body rotati
 test("invalid motion mapping values normalize independently to truthful defaults", async ({ page }) => {
   await page.addInitScript(() => window.localStorage.setItem("agent-halo.pet-motion-map", JSON.stringify({ schemaVersion: 1, mapping: { idle: "error", working: "unknown", attention: "done" } })));
   await page.goto("/?demo=1&demoScenario=long-llm");
-  const normalized = await page.evaluate(async () => (await import("/src/features/session/petMotion.ts")).readHaloPetMotionMapping());
+  const normalized = await page.evaluate(async () => (await import("/src/features/session/pet-motion.ts")).readHaloPetMotionMapping());
   expect(normalized).toEqual({ idle: "error", working: "working", attention: "done", done: "done", error: "error" });
   const pet = page.locator('.session-row .halo-pet[data-state="working"]');
   await expect(pet).toHaveAttribute("data-motion", "working");
   await expect(pet).toHaveAttribute("data-signal", "thinking-model");
   const malformed = await page.evaluate(async () => {
     window.localStorage.setItem("agent-halo.pet-motion-map", "not-json");
-    return (await import("/src/features/session/petMotion.ts")).readHaloPetMotionMapping();
+    return (await import("/src/features/session/pet-motion.ts")).readHaloPetMotionMapping();
   });
   expect(malformed).toEqual({ idle: "idle", working: "working", attention: "attention", done: "done", error: "error" });
   await expect.poll(() => page.evaluate(() => window.localStorage.getItem("agent-halo.pet-motion-map"))).toContain('"schemaVersion":1');
@@ -371,7 +371,7 @@ test("Pet Setup persists floating size and shows an isolated native preview", as
 test("every ActivityKind maps to one bounded signal group", async ({ page }) => {
   await page.goto("/?demo=1&demoScenario=idle");
   const mappings = await page.evaluate(async () => {
-    const { getHaloPetSignal } = await import("/src/features/session/HaloPet.tsx");
+    const { getHaloPetSignal } = await import("/src/features/session/halo-pet.tsx");
     const kinds = [
       "session", "thinking", "planning", "tool", "shell", "editing",
       "delegating", "visual", "memory", "asking", "skill", "goal",
@@ -404,7 +404,7 @@ test("every ActivityKind maps to one bounded signal group", async ({ page }) => 
 test("status precedence hides stale signals and preserves truthful terminal signals", async ({ page }) => {
   await page.goto("/?demo=1&demoScenario=idle");
   const result = await page.evaluate(async () => {
-    const { getHaloPetSignal } = await import("/src/features/session/HaloPet.tsx");
+    const { getHaloPetSignal } = await import("/src/features/session/halo-pet.tsx");
     return {
       idleShell: getHaloPetSignal("idle", "shell"),
       inactiveError: getHaloPetSignal("inactive", "error"),

@@ -236,21 +236,45 @@
 }
 
 @keyframes movement-success-pop {
-  0% { opacity: 0; transform: translateY(10px) scale(0.72) rotate(-4deg); }
-  64% { opacity: 1; transform: translateY(-2px) scale(1.08) rotate(1deg); }
-  100% { opacity: 1; transform: translateY(0) scale(1) rotate(0); }
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.72) rotate(-4deg);
+  }
+  64% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1.08) rotate(1deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1) rotate(0);
+  }
 }
 
 @keyframes movement-success-bob {
-  0% { transform: translateY(0) rotate(-2deg); }
-  48% { transform: translateY(-7px) rotate(3deg); }
-  100% { transform: translateY(0) rotate(0); }
+  0% {
+    transform: translateY(0) rotate(-2deg);
+  }
+  48% {
+    transform: translateY(-7px) rotate(3deg);
+  }
+  100% {
+    transform: translateY(0) rotate(0);
+  }
 }
 
 @keyframes movement-success-spark {
-  0% { opacity: 0; scale: 0.4; }
-  55% { opacity: 1; scale: 1.2; }
-  100% { opacity: 0.84; scale: 1; }
+  0% {
+    opacity: 0;
+    scale: 0.4;
+  }
+  55% {
+    opacity: 1;
+    scale: 1.2;
+  }
+  100% {
+    opacity: 0.84;
+    scale: 1;
+  }
 }
 
 .movement-privacy {

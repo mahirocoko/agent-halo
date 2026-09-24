@@ -1,22 +1,61 @@
-import { invoke } from "@tauri-apps/api/core";
-import { Activity, BarChart3, Check, ChevronLeft, Clock3, Focus, List, Server, Settings, Timer, Trash2, X } from "lucide-react";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { createRoot } from "react-dom/client";
-import type { AgentHaloPresenceStatus } from "@agent-halo/protocol";
-import { BoardScroll, BoardSurface } from "./components/board-surface";
-import { ResizableCardDivider, useResizableCardLayout, type IResizableCardSpec } from "./components/resizable-card-tray";
-import { SurfaceControl } from "./components/surface-control";
-import { ActivityPet, type HaloPetName } from "./features/session/HaloPet";
-import { SessionContextSummary, StatusGlyph, WorkspaceSessionGroupItem } from "./features/session/components";
+import type { AgentHaloPresenceStatus } from '@agent-halo/protocol'
+import { invoke } from '@tauri-apps/api/core'
 import {
-  formatTime,
-  getEventActivity,
-  getEventDetail,
-  projectName,
-  shortenPath,
-} from "./features/session/activity";
-import { DONE_SIGNAL_MS, STALE_AFTER_MS } from "./features/session/constants";
-import { getUniqueSortedEvents } from "./features/session/eventRegistry";
+  Activity,
+  BarChart3,
+  Check,
+  ChevronLeft,
+  Clock3,
+  Focus,
+  List,
+  Server,
+  Settings,
+  Timer,
+  Trash2,
+  X,
+} from 'lucide-react'
+import {
+  type CSSProperties,
+  lazy,
+  type KeyboardEvent as ReactKeyboardEvent,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
+import { createRoot } from 'react-dom/client'
+import { BoardScroll, BoardSurface } from './components/board-surface'
+import { type IResizableCardSpec, ResizableCardDivider, useResizableCardLayout } from './components/resizable-card-tray'
+import { SurfaceControl } from './components/surface-control'
+import { FocusToolsPanel } from './features/focus/components'
+import { readMovementBreakEnabled, writeMovementBreakEnabled } from './features/movement/preferences'
+import type { MovementExerciseId } from './features/movement/types'
+import { buildCompanionProjection } from './features/pet/companion-projection'
+import {
+  type CompletionPetSize,
+  readCompletionPetEnabled,
+  readCompletionPetSize,
+  writeCompletionPetEnabled,
+  writeCompletionPetSize,
+} from './features/pet/preferences'
+import type { ICompletionPetActionRequest, ICompletionPetSummon } from './features/pet/types'
+import { POMODORO_PET_HANDOFF_WINDOW_MS } from './features/pomodoro/model'
+import { usePomodoro } from './features/pomodoro/use-pomodoro'
+import { useAgentHaloPresence } from './features/presence/use-agent-halo-presence'
+import { reconcileEndedRuntimeSessions } from './features/runtime/model'
+import { useRuntimeMonitor } from './features/runtime/use-runtime-monitor'
+import { formatTime, getEventActivity, getEventDetail, projectName, shortenPath } from './features/session/activity'
+import { SessionContextSummary, StatusGlyph, WorkspaceSessionGroupItem } from './features/session/components'
+import { DONE_SIGNAL_MS, STALE_AFTER_MS } from './features/session/constants'
+import { getUniqueSortedEvents } from './features/session/event-registry'
+import {
+  type HaloBotLoadout,
+  readHaloBotLoadoutPreference,
+  writeHaloBotLoadoutPreference,
+} from './features/session/halo-bot'
+import { ActivityPet, type HaloPetName } from './features/session/halo-pet'
 import {
   isDeletedAfter,
   isDismissedAfter,
@@ -25,124 +64,129 @@ import {
   writeDeletedSessionIds,
   writeDismissedSessionIds,
   writeSessionEventRegistry,
-} from "./features/session/persistence";
-import { readHaloPetPreference, writeHaloPetPreference } from "./features/session/petPreference";
-import { readHaloBotLoadoutPreference, writeHaloBotLoadoutPreference, type HaloBotLoadout } from "./features/session/haloBot";
-import { DEFAULT_HALO_PET_MOTION_MAPPING, readHaloPetMotionMapping, writeHaloPetMotionMapping, type HaloPetMotion, type HaloPetMotionMapping, type HaloPetSemanticState } from "./features/session/petMotion";
+} from './features/session/persistence'
+import {
+  DEFAULT_HALO_PET_MOTION_MAPPING,
+  type HaloPetMotion,
+  type HaloPetMotionMapping,
+  type HaloPetSemanticState,
+  readHaloPetMotionMapping,
+  writeHaloPetMotionMapping,
+} from './features/session/pet-motion'
+import { readHaloPetPreference, writeHaloPetPreference } from './features/session/pet-preference'
 import {
   buildSessionDetail,
   buildSessionSummaries,
   buildWorkspaceSessionGroups,
   shouldKeepDisplayAwakeForActivity,
-} from "./features/session/selectors";
-import type { ActivityKind, DeletedSessionRegistry, DismissedSessionRegistry, ISessionDetail, ISessionSummary, IWorkspaceSessionGroup } from "./features/session/types";
-import { useAgentHaloPresence } from "./features/presence/useAgentHaloPresence";
-import { FocusToolsPanel } from "./features/focus/components";
-import { POMODORO_PET_HANDOFF_WINDOW_MS } from "./features/pomodoro/model";
-import { usePomodoro } from "./features/pomodoro/usePomodoro";
-import { useStopwatch } from "./features/stopwatch/useStopwatch";
-import { readCompletionPetEnabled, readCompletionPetSize, writeCompletionPetEnabled, writeCompletionPetSize, type CompletionPetSize } from "./features/pet/preferences";
-import { buildCompanionProjection } from "./features/pet/companionProjection";
-import type { ICompletionPetActionRequest, ICompletionPetSummon } from "./features/pet/types";
-import type { IDisplayStateSnapshot } from "./features/setup/display";
-import { readUsageSettings, writeUsageSettings } from "./features/usage/adapters";
-import { AgentUsageList } from "./features/usage/components";
-import type { IUsageSettings } from "./features/usage/types";
-import { useAgentUsageList } from "./features/usage/useAgentUsageList";
-import { useRuntimeMonitor } from "./features/runtime/useRuntimeMonitor";
-import { reconcileEndedRuntimeSessions } from "./features/runtime/model";
-import { readMovementBreakEnabled, writeMovementBreakEnabled } from "./features/movement/preferences";
-import type { MovementExerciseId } from "./features/movement/types";
-import "./styles.css";
+} from './features/session/selectors'
+import type {
+  ActivityKind,
+  DeletedSessionRegistry,
+  DismissedSessionRegistry,
+  ISessionDetail,
+  ISessionSummary,
+  IWorkspaceSessionGroup,
+} from './features/session/types'
+import type { IDisplayStateSnapshot } from './features/setup/display'
+import { useStopwatch } from './features/stopwatch/use-stopwatch'
+import { readUsageSettings, writeUsageSettings } from './features/usage/adapters'
+import { AgentUsageList } from './features/usage/components'
+import type { IUsageSettings } from './features/usage/types'
+import { useAgentUsageList } from './features/usage/use-agent-usage-list'
+import './styles.css'
 
-const KEEP_AWAKE_STORAGE_KEY = "agent-halo.keep-awake-while-working";
+const KEEP_AWAKE_STORAGE_KEY = 'agent-halo.keep-awake-while-working'
 const SESSION_DETAIL_CARD_SPECS: IResizableCardSpec[] = [
-  { id: "overview", defaultRatio: 0.55 },
-  { id: "activity", defaultRatio: 0.45 },
-];
-const SEARCH_PARAMS = new URLSearchParams(window.location.search);
-const DEMO_MODE = SEARCH_PARAMS.has("demo");
-const DEMO_SCENARIO = SEARCH_PARAMS.get("demoScenario");
-const DEMO_COLLAPSED = SEARCH_PARAMS.has("demoCollapsed");
-const PET_SURFACE = SEARCH_PARAMS.get("surface") === "pet";
+  { id: 'overview', defaultRatio: 0.55 },
+  { id: 'activity', defaultRatio: 0.45 },
+]
+const SEARCH_PARAMS = new URLSearchParams(window.location.search)
+const DEMO_MODE = SEARCH_PARAMS.has('demo')
+const DEMO_SCENARIO = SEARCH_PARAMS.get('demoScenario')
+const DEMO_COLLAPSED = SEARCH_PARAMS.has('demoCollapsed')
+const PET_SURFACE = SEARCH_PARAMS.get('surface') === 'pet'
 const PetApp = lazy(async () => {
-  const module = await import("./features/pet/PetApp");
-  return { default: module.PetApp };
-});
+  const module = await import('./features/pet/pet-app')
+  return { default: module.PetApp }
+})
 const RuntimeProcessesPanel = lazy(async () => {
-  const module = await import("./features/runtime/components");
-  return { default: module.RuntimeProcessesPanel };
-});
+  const module = await import('./features/runtime/components')
+  return { default: module.RuntimeProcessesPanel }
+})
 const LocalServicesPanel = lazy(async () => {
-  const module = await import("./features/runtime/components");
-  return { default: module.LocalServicesPanel };
-});
+  const module = await import('./features/runtime/components')
+  return { default: module.LocalServicesPanel }
+})
 const SetupPanel = lazy(async () => {
-  const module = await import("./features/setup/SetupPanel");
-  return { default: module.SetupPanel };
-});
-const DEFAULT_CAMERA_NOTCH_WIDTH = 184;
-const DEFAULT_CLOSED_NOTCH_HEIGHT = 36;
-const MIN_LIVE_ACTIVITY_WING_WIDTH = 66;
-const MAX_LIVE_ACTIVITY_WING_WIDTH = 110;
-const LIVE_ACTIVITY_TEXT_WIDTH_BUFFER = 52;
-type MainPanelTab = "sessions" | "pomodoro" | "usage" | "runtime" | "services";
-type PanelWidthView = MainPanelTab | "session-detail" | "setup";
+  const module = await import('./features/setup/setup-panel')
+  return { default: module.SetupPanel }
+})
+const DEFAULT_CAMERA_NOTCH_WIDTH = 184
+const DEFAULT_CLOSED_NOTCH_HEIGHT = 36
+const MIN_LIVE_ACTIVITY_WING_WIDTH = 66
+const MAX_LIVE_ACTIVITY_WING_WIDTH = 110
+const LIVE_ACTIVITY_TEXT_WIDTH_BUFFER = 52
+type MainPanelTab = 'sessions' | 'pomodoro' | 'usage' | 'runtime' | 'services'
+type PanelWidthView = MainPanelTab | 'session-detail' | 'setup'
 
-const PANEL_WINDOW_WIDTH = 1040;
+const PANEL_WINDOW_WIDTH = 1040
 
-const MIN_PANEL_WINDOW_WIDTH = 280;
-const PANEL_MIN_HEIGHT = 218;
-const PANEL_MAX_HEIGHT = 440;
-const TALL_PANEL_HEIGHT = 500;
+const MIN_PANEL_WINDOW_WIDTH = 280
+const PANEL_MIN_HEIGHT = 218
+const PANEL_MAX_HEIGHT = 440
+const TALL_PANEL_HEIGHT = 500
 const SETTLED_PANEL_HEIGHT_BY_VIEW: Partial<Record<PanelWidthView, number>> = {
-  "session-detail": TALL_PANEL_HEIGHT,
+  'session-detail': TALL_PANEL_HEIGHT,
   pomodoro: TALL_PANEL_HEIGHT,
   runtime: TALL_PANEL_HEIGHT,
   services: TALL_PANEL_HEIGHT,
   usage: PANEL_MAX_HEIGHT,
   setup: TALL_PANEL_HEIGHT,
-};
-const ACTIVITY_COLLAPSE_MS = 220;
-const HOVER_OPEN_DELAY_MS = 24;
-const HOVER_CLOSE_DELAY_MS = 170;
-const DISPLAY_RECONCILE_INTERVAL_MS = 3_000;
-const KEEP_AWAKE_RETRY_DELAYS_MS = [750, 2_500] as const;
-const CLOSED_TOP_SHOULDER_RADIUS = 11;
-const OPEN_TOP_SHOULDER_RADIUS = 19;
-const CLOSED_BOTTOM_RADIUS = 15;
-const PANEL_BOTTOM_RADIUS = 22;
+}
+const ACTIVITY_COLLAPSE_MS = 220
+const HOVER_OPEN_DELAY_MS = 24
+const HOVER_CLOSE_DELAY_MS = 170
+const DISPLAY_RECONCILE_INTERVAL_MS = 3_000
+const KEEP_AWAKE_RETRY_DELAYS_MS = [750, 2_500] as const
+const CLOSED_TOP_SHOULDER_RADIUS = 11
+const OPEN_TOP_SHOULDER_RADIUS = 19
+const CLOSED_BOTTOM_RADIUS = 15
+const PANEL_BOTTOM_RADIUS = 22
 
 interface INativeActionState {
-  bridgeOnline: boolean | null;
-  message: string | null;
+  bridgeOnline: boolean | null
+  message: string | null
 }
 
 interface ISessionActionState {
-  ok: boolean | null;
-  message: string | null;
+  ok: boolean | null
+  message: string | null
 }
 
 interface IModStatus {
-  path: string | null;
-  installed: boolean | null;
+  path: string | null
+  installed: boolean | null
 }
 
 interface INotchMetrics {
-  cameraWidth: number;
-  closedHeight: number;
+  cameraWidth: number
+  closedHeight: number
 }
 
 const estimateLiveActivityWingWidth = (label: string): number => {
-  const textWidth = Math.ceil(label.length * 5.6);
-  return Math.min(MAX_LIVE_ACTIVITY_WING_WIDTH, Math.max(MIN_LIVE_ACTIVITY_WING_WIDTH, LIVE_ACTIVITY_TEXT_WIDTH_BUFFER + textWidth));
-};
+  const textWidth = Math.ceil(label.length * 5.6)
+  return Math.min(
+    MAX_LIVE_ACTIVITY_WING_WIDTH,
+    Math.max(MIN_LIVE_ACTIVITY_WING_WIDTH, LIVE_ACTIVITY_TEXT_WIDTH_BUFFER + textWidth),
+  )
+}
 
 const buildNotchShapePath = (width: number, height: number, topRadius: number, bottomRadius: number): string => {
-  const safeWidth = Math.max(1, width);
-  const safeHeight = Math.max(1, height);
-  const top = Math.min(Math.max(0, topRadius), safeWidth / 2, safeHeight / 2);
-  const bottom = Math.min(Math.max(0, bottomRadius), safeWidth / 2, safeHeight / 2);
+  const safeWidth = Math.max(1, width)
+  const safeHeight = Math.max(1, height)
+  const top = Math.min(Math.max(0, topRadius), safeWidth / 2, safeHeight / 2)
+  const bottom = Math.min(Math.max(0, bottomRadius), safeWidth / 2, safeHeight / 2)
 
   return [
     `M 0 0`,
@@ -153,1574 +197,1794 @@ const buildNotchShapePath = (width: number, height: number, topRadius: number, b
     `Q ${safeWidth - top} ${safeHeight} ${safeWidth - top} ${safeHeight - bottom}`,
     `L ${safeWidth - top} ${top}`,
     `Q ${safeWidth - top} 0 ${safeWidth} 0`,
-    "Z",
-  ].join(" ");
-};
+    'Z',
+  ].join(' ')
+}
 
-const waitForNextPaint = () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+const waitForNextPaint = () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()))
 
-const clampPanelHeight = (value: number): number => Math.min(PANEL_MAX_HEIGHT, Math.max(PANEL_MIN_HEIGHT, Math.ceil(value)));
-const tallPanelHeight = (availableHeight?: number): number => Math.max(PANEL_MIN_HEIGHT, Math.min(TALL_PANEL_HEIGHT, availableHeight ?? TALL_PANEL_HEIGHT));
-const getAvailableTallPanelHeight = (): number => tallPanelHeight(DEMO_MODE ? window.innerHeight : undefined);
-const resolvePanelWidthView = (setupOpen: boolean, hasSessionDetail: boolean, activeMainTab: MainPanelTab): PanelWidthView => {
-  if (setupOpen) return "setup";
-  if (hasSessionDetail) return "session-detail";
-  return activeMainTab;
-};
-const getAvailablePanelWidth = (): number => Math.max(MIN_PANEL_WINDOW_WIDTH, DEMO_MODE ? window.innerWidth : window.screen.availWidth);
+const clampPanelHeight = (value: number): number =>
+  Math.min(PANEL_MAX_HEIGHT, Math.max(PANEL_MIN_HEIGHT, Math.ceil(value)))
+const tallPanelHeight = (availableHeight?: number): number =>
+  Math.max(PANEL_MIN_HEIGHT, Math.min(TALL_PANEL_HEIGHT, availableHeight ?? TALL_PANEL_HEIGHT))
+const getAvailableTallPanelHeight = (): number => tallPanelHeight(DEMO_MODE ? window.innerHeight : undefined)
+const resolvePanelWidthView = (
+  setupOpen: boolean,
+  hasSessionDetail: boolean,
+  activeMainTab: MainPanelTab,
+): PanelWidthView => {
+  if (setupOpen) return 'setup'
+  if (hasSessionDetail) return 'session-detail'
+  return activeMainTab
+}
+const getAvailablePanelWidth = (): number =>
+  Math.max(MIN_PANEL_WINDOW_WIDTH, DEMO_MODE ? window.innerWidth : window.screen.availWidth)
 
 interface IStatusView {
-  status: AgentHaloPresenceStatus | "stale";
-  label: string;
-  isStale: boolean;
-  staleForMs: number;
+  status: AgentHaloPresenceStatus | 'stale'
+  label: string
+  isStale: boolean
+  staleForMs: number
 }
 
 interface ICompanionPresentation {
-  sessionStatus: ISessionSummary["status"];
-  activityKind: ActivityKind;
-  motionMapping: HaloPetMotionMapping;
-  replayId: string;
+  sessionStatus: ISessionSummary['status']
+  activityKind: ActivityKind
+  motionMapping: HaloPetMotionMapping
+  replayId: string
 }
 
-const getGlyphStatus = (status: IStatusView["status"]): ISessionSummary["status"] => {
-  if (status === "thinking" || status === "tool-running") return "working";
-  if (status === "stale") return "inactive";
-  if (status === "attention") return "attention";
-  if (status === "closed") return "done";
-  if (status === "error" || status === "offline") return "error";
-  return "idle";
-};
+const getGlyphStatus = (status: IStatusView['status']): ISessionSummary['status'] => {
+  if (status === 'thinking' || status === 'tool-running') return 'working'
+  if (status === 'stale') return 'inactive'
+  if (status === 'attention') return 'attention'
+  if (status === 'closed') return 'done'
+  if (status === 'error' || status === 'offline') return 'error'
+  return 'idle'
+}
 
 const readKeepAwakeEnabled = (): boolean => {
-  try { return window.localStorage.getItem(KEEP_AWAKE_STORAGE_KEY) === "true"; } catch { return false; }
-};
+  try {
+    return window.localStorage.getItem(KEEP_AWAKE_STORAGE_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
 const writeKeepAwakeEnabled = (enabled: boolean) => {
-  try { window.localStorage.setItem(KEEP_AWAKE_STORAGE_KEY, `${enabled}`); } catch { /* current runtime still owns state */ }
-};
+  try {
+    window.localStorage.setItem(KEEP_AWAKE_STORAGE_KEY, `${enabled}`)
+  } catch {
+    /* current runtime still owns state */
+  }
+}
 
-const getGroupRemovalId = (groupKey: string, group: IWorkspaceSessionGroup) => [groupKey, ...group.sessions.map((session) => session.conversationId).sort()].join("\n");
+const getGroupRemovalId = (groupKey: string, group: IWorkspaceSessionGroup) =>
+  [groupKey, ...group.sessions.map((session) => session.conversationId).sort()].join('\n')
 
-type SessionsCardRatios = [number, number, number];
-const DEFAULT_SESSIONS_RATIOS: SessionsCardRatios = [0.39, 0.41, 0.2];
-const SESSIONS_CARD_MIN_WIDTH = 190;
+type SessionsCardRatios = [number, number, number]
+const DEFAULT_SESSIONS_RATIOS: SessionsCardRatios = [0.39, 0.41, 0.2]
+const SESSIONS_CARD_MIN_WIDTH = 190
 
 type SessionsCardScroll = {
-  active: number;
-  completed: number;
-  recent: number;
-};
+  active: number
+  completed: number
+  recent: number
+}
 
 type DragDividerState = {
-  divider: number;
-  startX: number;
-  startWidths: [number, number, number];
-  totalAvail: number;
-};
+  divider: number
+  startX: number
+  startWidths: [number, number, number]
+  totalAvail: number
+}
 
 const App = () => {
-  const { capabilities, connection, lastLiveEvent, now, presence, recentEvents, refreshCapabilities, sessionEventRegistry, setSessionEventRegistry, view } = useAgentHaloPresence({ demoMode: DEMO_MODE, demoScenario: DEMO_SCENARIO });
-  const sessionsTrayRef = useRef<HTMLDivElement | null>(null);
-  const sessionsRatiosRef = useRef<SessionsCardRatios>(DEFAULT_SESSIONS_RATIOS);
-  const [sessionsRatios, setSessionsRatios] = useState<SessionsCardRatios>(() => sessionsRatiosRef.current);
+  const {
+    capabilities,
+    connection,
+    lastLiveEvent,
+    now,
+    presence,
+    recentEvents,
+    refreshCapabilities,
+    sessionEventRegistry,
+    setSessionEventRegistry,
+    view,
+  } = useAgentHaloPresence({ demoMode: DEMO_MODE, demoScenario: DEMO_SCENARIO })
+  const sessionsTrayRef = useRef<HTMLDivElement | null>(null)
+  const sessionsRatiosRef = useRef<SessionsCardRatios>(DEFAULT_SESSIONS_RATIOS)
+  const [sessionsRatios, setSessionsRatios] = useState<SessionsCardRatios>(() => sessionsRatiosRef.current)
   const sessionsCardScrollRef = useRef<SessionsCardScroll>({
     active: 0,
     completed: 0,
     recent: 0,
-  });
-  const sessionDetailLayout = useResizableCardLayout({ storageKey: "agent-halo.session-detail-layout.v1", specs: SESSION_DETAIL_CARD_SPECS });
-  const activeDragDividerRef = useRef<DragDividerState | null>(null);
-  const [usageSettings, setUsageSettings] = useState<IUsageSettings>(readUsageSettings);
-  const [pet, setPet] = useState<HaloPetName>(readHaloPetPreference);
-  const [haloBotLoadout, setHaloBotLoadout] = useState<HaloBotLoadout>(readHaloBotLoadoutPreference);
-  const [petMotionMapping, setPetMotionMapping] = useState<HaloPetMotionMapping>(readHaloPetMotionMapping);
-  const [completionPetEnabled, setCompletionPetEnabled] = useState(readCompletionPetEnabled);
-  const [completionPetSize, setCompletionPetSize] = useState<CompletionPetSize>(readCompletionPetSize);
-  const [movementBreakEnabled, setMovementBreakEnabled] = useState(readMovementBreakEnabled);
-  const [petPreviewStatus, setPetPreviewStatus] = useState<string | null>(null);
-  const [petPreviewState, setPetPreviewState] = useState<"idle" | "showing" | "shown" | "stale" | "error">("idle");
-  const [activePetSummon, setActivePetSummon] = useState<ICompletionPetSummon | null>(null);
-  const completionPetEnabledRef = useRef(completionPetEnabled);
-  const completionPetSummonGenerationRef = useRef(0);
+  })
+  const sessionDetailLayout = useResizableCardLayout({
+    storageKey: 'agent-halo.session-detail-layout.v1',
+    specs: SESSION_DETAIL_CARD_SPECS,
+  })
+  const activeDragDividerRef = useRef<DragDividerState | null>(null)
+  const [usageSettings, setUsageSettings] = useState<IUsageSettings>(readUsageSettings)
+  const [pet, setPet] = useState<HaloPetName>(readHaloPetPreference)
+  const [haloBotLoadout, setHaloBotLoadout] = useState<HaloBotLoadout>(readHaloBotLoadoutPreference)
+  const [petMotionMapping, setPetMotionMapping] = useState<HaloPetMotionMapping>(readHaloPetMotionMapping)
+  const [completionPetEnabled, setCompletionPetEnabled] = useState(readCompletionPetEnabled)
+  const [completionPetSize, setCompletionPetSize] = useState<CompletionPetSize>(readCompletionPetSize)
+  const [movementBreakEnabled, setMovementBreakEnabled] = useState(readMovementBreakEnabled)
+  const [petPreviewStatus, setPetPreviewStatus] = useState<string | null>(null)
+  const [petPreviewState, setPetPreviewState] = useState<'idle' | 'showing' | 'shown' | 'stale' | 'error'>('idle')
+  const [activePetSummon, setActivePetSummon] = useState<ICompletionPetSummon | null>(null)
+  const completionPetEnabledRef = useRef(completionPetEnabled)
+  const completionPetSummonGenerationRef = useRef(0)
   const companionPresentationRef = useRef<ICompanionPresentation>({
-    sessionStatus: "idle",
-    activityKind: "session",
+    sessionStatus: 'idle',
+    activityKind: 'session',
     motionMapping: petMotionMapping,
-    replayId: "companion-initial",
-  });
-  const [displayState, setDisplayState] = useState<IDisplayStateSnapshot | null>(null);
-  const [displayLoading, setDisplayLoading] = useState(false);
-  const [displayError, setDisplayError] = useState<string | null>(null);
-  const { refresh: refreshAgentUsage, usages: agentUsages } = useAgentUsageList(usageSettings, DEMO_MODE);
-  const [acknowledgedConversationId, setAcknowledgedConversationId] = useState<string | null>(null);
-  const [nativeAction, setNativeAction] = useState<INativeActionState>({ bridgeOnline: null, message: null });
-  const [sessionAction, setSessionAction] = useState<ISessionActionState>({ ok: null, message: null });
-  const [panelOpen, setPanelOpen] = useState(DEMO_MODE && !DEMO_COLLAPSED);
-  const [renderPanel, setRenderPanel] = useState(DEMO_MODE && !DEMO_COLLAPSED);
-  const [panelHeight, setPanelHeight] = useState(PANEL_MIN_HEIGHT);
-  const [availablePanelWidth, setAvailablePanelWidth] = useState(getAvailablePanelWidth);
-  const [availableTallPanelHeight, setAvailableTallPanelHeight] = useState(getAvailableTallPanelHeight);
-  const [panelFocusRequestId, setPanelFocusRequestId] = useState(0);
-  const [hoverExpandSuppressed, setHoverExpandSuppressed] = useState(false);
-  const [activeMainTab, setActiveMainTab] = useState<MainPanelTab>("sessions");
-  const [setupOpen, setSetupOpen] = useState(false);
-  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
-  const panelWidthView = resolvePanelWidthView(setupOpen, selectedSessionId !== null, activeMainTab);
-  const panelWindowWidth = Math.min(PANEL_WINDOW_WIDTH, availablePanelWidth);
-  const [modStatus, setModStatus] = useState<IModStatus>({ path: null, installed: null });
-  const [agyHookStatus, setAgyHookStatus] = useState<{ path: string | null; installed: boolean | null }>({ path: null, installed: null });
-  const [notchMetrics, setNotchMetrics] = useState<INotchMetrics>({ cameraWidth: DEFAULT_CAMERA_NOTCH_WIDTH, closedHeight: DEFAULT_CLOSED_NOTCH_HEIGHT });
-  const [nativeClosedSurfaceWidth, setNativeClosedSurfaceWidth] = useState(DEFAULT_CAMERA_NOTCH_WIDTH);
-  const [dismissedSessionIds, setDismissedSessionIds] = useState<DismissedSessionRegistry>(readDismissedSessionIds);
-  const [deletedSessionIds, setDeletedSessionIds] = useState<DeletedSessionRegistry>(readDeletedSessionIds);
-  const [keepAwakeEnabled, setKeepAwakeEnabled] = useState(readKeepAwakeEnabled);
-  const [keepAwakeActive, setKeepAwakeActive] = useState(false);
-  const [keepAwakeError, setKeepAwakeError] = useState<string | null>(null);
-  const [expandedSessionGroupKeys, setExpandedSessionGroupKeys] = useState<Set<string>>(() => new Set());
-  const [clearCompletedArmed, setClearCompletedArmed] = useState(false);
-  const [pendingRemoveHistoryId, setPendingRemoveHistoryId] = useState<string | null>(null);
-  const [pendingGroupHistoryRemoval, setPendingGroupHistoryRemoval] = useState<string | null>(null);
-  const surfaceRef = useRef<HTMLDivElement | null>(null);
-  const sheetInnerRef = useRef<HTMLDivElement | null>(null);
-  const returnFocusRef = useRef<HTMLElement | null>(null);
-  const returnSessionIdRef = useRef<string | null>(null);
-  const shouldFocusPanelRef = useRef(false);
-  const nativeFocusRequestRef = useRef(false);
-  const keyboardNavigationRef = useRef(false);
-  const hoverOpenTimerRef = useRef<number | null>(null);
-  const hoverCloseTimerRef = useRef<number | null>(null);
-  const panelNativeOperationRef = useRef<Promise<void>>(Promise.resolve());
-  const panelNativeRequestVersionRef = useRef(0);
-  const keepAwakeRequestRef = useRef<Promise<unknown>>(Promise.resolve());
-  const displayRequestBusyRef = useRef(false);
-  const displayStateRef = useRef<IDisplayStateSnapshot | null>(null);
+    replayId: 'companion-initial',
+  })
+  const [displayState, setDisplayState] = useState<IDisplayStateSnapshot | null>(null)
+  const [displayLoading, setDisplayLoading] = useState(false)
+  const [displayError, setDisplayError] = useState<string | null>(null)
+  const { refresh: refreshAgentUsage, usages: agentUsages } = useAgentUsageList(usageSettings, DEMO_MODE)
+  const [acknowledgedConversationId, setAcknowledgedConversationId] = useState<string | null>(null)
+  const [nativeAction, setNativeAction] = useState<INativeActionState>({ bridgeOnline: null, message: null })
+  const [sessionAction, setSessionAction] = useState<ISessionActionState>({ ok: null, message: null })
+  const [panelOpen, setPanelOpen] = useState(DEMO_MODE && !DEMO_COLLAPSED)
+  const [renderPanel, setRenderPanel] = useState(DEMO_MODE && !DEMO_COLLAPSED)
+  const [panelHeight, setPanelHeight] = useState(PANEL_MIN_HEIGHT)
+  const [availablePanelWidth, setAvailablePanelWidth] = useState(getAvailablePanelWidth)
+  const [availableTallPanelHeight, setAvailableTallPanelHeight] = useState(getAvailableTallPanelHeight)
+  const [panelFocusRequestId, setPanelFocusRequestId] = useState(0)
+  const [hoverExpandSuppressed, setHoverExpandSuppressed] = useState(false)
+  const [activeMainTab, setActiveMainTab] = useState<MainPanelTab>('sessions')
+  const [setupOpen, setSetupOpen] = useState(false)
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null)
+  const panelWidthView = resolvePanelWidthView(setupOpen, selectedSessionId !== null, activeMainTab)
+  const panelWindowWidth = Math.min(PANEL_WINDOW_WIDTH, availablePanelWidth)
+  const [modStatus, setModStatus] = useState<IModStatus>({ path: null, installed: null })
+  const [agyHookStatus, setAgyHookStatus] = useState<{ path: string | null; installed: boolean | null }>({
+    path: null,
+    installed: null,
+  })
+  const [notchMetrics, setNotchMetrics] = useState<INotchMetrics>({
+    cameraWidth: DEFAULT_CAMERA_NOTCH_WIDTH,
+    closedHeight: DEFAULT_CLOSED_NOTCH_HEIGHT,
+  })
+  const [nativeClosedSurfaceWidth, setNativeClosedSurfaceWidth] = useState(DEFAULT_CAMERA_NOTCH_WIDTH)
+  const [dismissedSessionIds, setDismissedSessionIds] = useState<DismissedSessionRegistry>(readDismissedSessionIds)
+  const [deletedSessionIds, setDeletedSessionIds] = useState<DeletedSessionRegistry>(readDeletedSessionIds)
+  const [keepAwakeEnabled, setKeepAwakeEnabled] = useState(readKeepAwakeEnabled)
+  const [keepAwakeActive, setKeepAwakeActive] = useState(false)
+  const [keepAwakeError, setKeepAwakeError] = useState<string | null>(null)
+  const [expandedSessionGroupKeys, setExpandedSessionGroupKeys] = useState<Set<string>>(() => new Set())
+  const [clearCompletedArmed, setClearCompletedArmed] = useState(false)
+  const [pendingRemoveHistoryId, setPendingRemoveHistoryId] = useState<string | null>(null)
+  const [pendingGroupHistoryRemoval, setPendingGroupHistoryRemoval] = useState<string | null>(null)
+  const surfaceRef = useRef<HTMLDivElement | null>(null)
+  const sheetInnerRef = useRef<HTMLDivElement | null>(null)
+  const returnFocusRef = useRef<HTMLElement | null>(null)
+  const returnSessionIdRef = useRef<string | null>(null)
+  const shouldFocusPanelRef = useRef(false)
+  const nativeFocusRequestRef = useRef(false)
+  const keyboardNavigationRef = useRef(false)
+  const hoverOpenTimerRef = useRef<number | null>(null)
+  const hoverCloseTimerRef = useRef<number | null>(null)
+  const panelNativeOperationRef = useRef<Promise<void>>(Promise.resolve())
+  const panelNativeRequestVersionRef = useRef(0)
+  const keepAwakeRequestRef = useRef<Promise<unknown>>(Promise.resolve())
+  const displayRequestBusyRef = useRef(false)
+  const displayStateRef = useRef<IDisplayStateSnapshot | null>(null)
   const displayView =
     isDeletedAfter(deletedSessionIds, presence.conversationId, presence.lastEventAt) ||
-    (view.status === "closed" && (acknowledgedConversationId === presence.conversationId || isDismissedAfter(dismissedSessionIds, presence.conversationId, presence.lastEventAt)))
-      ? ({ ...view, status: "idle", label: "idle" } satisfies IStatusView)
-      : view;
-  const canUseNativeControls = typeof window.__TAURI_INTERNALS__ !== "undefined";
-  const pomodoro = usePomodoro(canUseNativeControls, completionPetEnabled);
-  const stopwatch = useStopwatch();
-  const pomodoroRef = useRef(pomodoro);
-  const observedCompletionIdRef = useRef(pomodoro.state.lastCompletion?.id ?? null);
-  pomodoroRef.current = pomodoro;
+    (view.status === 'closed' &&
+      (acknowledgedConversationId === presence.conversationId ||
+        isDismissedAfter(dismissedSessionIds, presence.conversationId, presence.lastEventAt)))
+      ? ({ ...view, status: 'idle', label: 'idle' } satisfies IStatusView)
+      : view
+  const canUseNativeControls = typeof window.__TAURI_INTERNALS__ !== 'undefined'
+  const pomodoro = usePomodoro(canUseNativeControls, completionPetEnabled)
+  const stopwatch = useStopwatch()
+  const pomodoroRef = useRef(pomodoro)
+  const observedCompletionIdRef = useRef(pomodoro.state.lastCompletion?.id ?? null)
+  pomodoroRef.current = pomodoro
 
-  const showCompanionSummon = useCallback(async (summon: ICompletionPetSummon): Promise<boolean> => {
-    if (!canUseNativeControls) return false;
-    try {
-      const projection = buildCompanionProjection({ summon, ...companionPresentationRef.current });
-      const shown = await invoke<boolean>("show_completion_pet", { summon, projection });
-      if (!shown) return false;
-      setActivePetSummon(summon);
-      return true;
-    } catch {
-      await invoke("hide_completion_pet").catch(() => undefined);
-      setActivePetSummon(null);
-      return false;
-    }
-  }, [canUseNativeControls]);
+  const showCompanionSummon = useCallback(
+    async (summon: ICompletionPetSummon): Promise<boolean> => {
+      if (!canUseNativeControls) return false
+      try {
+        const projection = buildCompanionProjection({ summon, ...companionPresentationRef.current })
+        const shown = await invoke<boolean>('show_completion_pet', { summon, projection })
+        if (!shown) return false
+        setActivePetSummon(summon)
+        return true
+      } catch {
+        await invoke('hide_completion_pet').catch(() => undefined)
+        setActivePetSummon(null)
+        return false
+      }
+    },
+    [canUseNativeControls],
+  )
 
   useEffect(() => {
-    if (!canUseNativeControls) return undefined;
-    let disposed = false;
-    let busy = false;
+    if (!canUseNativeControls) return undefined
+    let disposed = false
+    let busy = false
     const consumeAction = async () => {
-      if (busy || disposed) return;
-      busy = true;
+      if (busy || disposed) return
+      busy = true
       try {
-        const action = await invoke<ICompletionPetActionRequest | null>("take_completion_pet_action");
-        if (disposed || !action) return;
-        if (action.action === "dismiss") {
-          setActivePetSummon((current) => current?.id === action.summonId ? null : current);
-          return;
+        const action = await invoke<ICompletionPetActionRequest | null>('take_completion_pet_action')
+        if (disposed || !action) return
+        if (action.action === 'dismiss') {
+          setActivePetSummon((current) => (current?.id === action.summonId ? null : current))
+          return
         }
-        if (action.action === "open-focus") {
-          rememberFocusOrigin();
-          shouldFocusPanelRef.current = true;
-          nativeFocusRequestRef.current = true;
-          setPanelFocusRequestId((current) => current + 1);
-          setSelectedSessionId(null);
-          setSetupOpen(false);
-          setActiveMainTab("pomodoro");
-          setPanelOpen(true);
-          return;
+        if (action.action === 'open-focus') {
+          rememberFocusOrigin()
+          shouldFocusPanelRef.current = true
+          nativeFocusRequestRef.current = true
+          setPanelFocusRequestId((current) => current + 1)
+          setSelectedSessionId(null)
+          setSetupOpen(false)
+          setActiveMainTab('pomodoro')
+          setPanelOpen(true)
+          return
         }
-        if (!["movement-complete", "start-break"].includes(action.action) || action.nextPhase === null) return;
-        setActivePetSummon(null);
-        const current = pomodoroRef.current;
-        if (current.state.status === "idle" && current.state.phase === action.nextPhase && current.state.lastCompletion?.completedPhase === "focus" && current.state.lastCompletion.id === action.summonId) {
-          current.start();
+        if (!['movement-complete', 'start-break'].includes(action.action) || action.nextPhase === null) return
+        setActivePetSummon(null)
+        const current = pomodoroRef.current
+        if (
+          current.state.status === 'idle' &&
+          current.state.phase === action.nextPhase &&
+          current.state.lastCompletion?.completedPhase === 'focus' &&
+          current.state.lastCompletion.id === action.summonId
+        ) {
+          current.start()
         }
       } catch {
         // The main Pomodoro remains unchanged when no native Pet action is available.
       } finally {
-        busy = false;
+        busy = false
       }
-    };
-    void consumeAction();
-    const timer = window.setInterval(() => void consumeAction(), 200);
+    }
+    void consumeAction()
+    const timer = window.setInterval(() => void consumeAction(), 200)
     return () => {
-      disposed = true;
-      window.clearInterval(timer);
-    };
-  }, [canUseNativeControls]);
+      disposed = true
+      window.clearInterval(timer)
+    }
+  }, [canUseNativeControls])
 
   useEffect(() => {
-    const completion = pomodoro.state.lastCompletion;
-    if (!completion || completion.id === observedCompletionIdRef.current) return;
-    observedCompletionIdRef.current = completion.id;
-    if (!completionPetEnabled || !canUseNativeControls || completion.completedPhase !== "focus") return;
+    const completion = pomodoro.state.lastCompletion
+    if (!completion || completion.id === observedCompletionIdRef.current) return
+    observedCompletionIdRef.current = completion.id
+    if (!completionPetEnabled || !canUseNativeControls || completion.completedPhase !== 'focus') return
     // An intentionally shown manual companion is pinned until Hide. Keep its
     // delayed macOS notification instead of replacing it with completion UI.
-    if (activePetSummon?.purpose === "manual-companion") return;
-    if (completion.observedAt - completion.completedAt >= POMODORO_PET_HANDOFF_WINDOW_MS) return;
-    if (completion.nextPhase !== "short-break" && completion.nextPhase !== "long-break") return;
-    const summonGeneration = completionPetSummonGenerationRef.current + 1;
-    completionPetSummonGenerationRef.current = summonGeneration;
+    if (activePetSummon?.purpose === 'manual-companion') return
+    if (completion.observedAt - completion.completedAt >= POMODORO_PET_HANDOFF_WINDOW_MS) return
+    if (completion.nextPhase !== 'short-break' && completion.nextPhase !== 'long-break') return
+    const summonGeneration = completionPetSummonGenerationRef.current + 1
+    completionPetSummonGenerationRef.current = summonGeneration
     const summon: ICompletionPetSummon = {
       schemaVersion: 2,
       id: completion.id,
-      purpose: "focus-completion",
+      purpose: 'focus-completion',
       pet,
-      loadout: pet === "halo-bot" ? haloBotLoadout : undefined,
+      loadout: pet === 'halo-bot' ? haloBotLoadout : undefined,
       petSize: completionPetSize,
       movementBreakEnabled,
       nextPhase: completion.nextPhase,
-    };
+    }
     void (async () => {
-      const handoffDeadlineMs = completion.completedAt + POMODORO_PET_HANDOFF_WINDOW_MS;
-      const claimed = await pomodoroRef.current.resolveCompletionWithPet(handoffDeadlineMs);
-      if (!claimed) return;
+      const handoffDeadlineMs = completion.completedAt + POMODORO_PET_HANDOFF_WINDOW_MS
+      const claimed = await pomodoroRef.current.resolveCompletionWithPet(handoffDeadlineMs)
+      if (!claimed) return
       const restoreFallback = async () => {
-        await pomodoroRef.current.restoreCompletionNotificationFallback(completion.id);
-      };
-      if (!completionPetEnabledRef.current || completionPetSummonGenerationRef.current !== summonGeneration || Date.now() >= handoffDeadlineMs) {
-        await restoreFallback();
-        return;
+        await pomodoroRef.current.restoreCompletionNotificationFallback(completion.id)
       }
-      let shown = false;
+      if (
+        !completionPetEnabledRef.current ||
+        completionPetSummonGenerationRef.current !== summonGeneration ||
+        Date.now() >= handoffDeadlineMs
+      ) {
+        await restoreFallback()
+        return
+      }
+      let shown = false
       try {
-        shown = await showCompanionSummon(summon);
+        shown = await showCompanionSummon(summon)
       } catch {
-        shown = false;
+        shown = false
       }
-      if (shown && completionPetEnabledRef.current && completionPetSummonGenerationRef.current === summonGeneration && Date.now() < handoffDeadlineMs) return;
+      if (
+        shown &&
+        completionPetEnabledRef.current &&
+        completionPetSummonGenerationRef.current === summonGeneration &&
+        Date.now() < handoffDeadlineMs
+      )
+        return
       if (shown) {
-        setActivePetSummon(null);
-        await invoke("hide_completion_pet").catch(() => undefined);
+        setActivePetSummon(null)
+        await invoke('hide_completion_pet').catch(() => undefined)
       }
-      await restoreFallback();
-    })();
-  }, [activePetSummon?.purpose, canUseNativeControls, completionPetEnabled, completionPetSize, haloBotLoadout, movementBreakEnabled, pet, pomodoro.state.lastCompletion, showCompanionSummon]);
-  const isConnected = connection.status === "connected";
-  const connectionTitle = DEMO_MODE ? "Demo mode" : (connection.message ?? connection.status);
-  const workspace = shortenPath(presence.cwd);
-  const project = projectName(presence.cwd);
-  const model = presence.model?.split("/").slice(-1)[0] ?? "Letta Code";
+      await restoreFallback()
+    })()
+  }, [
+    activePetSummon?.purpose,
+    canUseNativeControls,
+    completionPetEnabled,
+    completionPetSize,
+    haloBotLoadout,
+    movementBreakEnabled,
+    pet,
+    pomodoro.state.lastCompletion,
+    showCompanionSummon,
+  ])
+  const isConnected = connection.status === 'connected'
+  const connectionTitle = DEMO_MODE ? 'Demo mode' : (connection.message ?? connection.status)
+  const workspace = shortenPath(presence.cwd)
+  const project = projectName(presence.cwd)
+  const model = presence.model?.split('/').slice(-1)[0] ?? 'Letta Code'
   const rawSessions = useMemo(
     () =>
       buildSessionSummaries(sessionEventRegistry, presence, now).filter(
-        (session) =>
-          !isDeletedAfter(deletedSessionIds, session.conversationId, session.lastActivityAt),
+        (session) => !isDeletedAfter(deletedSessionIds, session.conversationId, session.lastActivityAt),
       ),
     [deletedSessionIds, now, presence, sessionEventRegistry],
-  );
+  )
   const runtimeMonitor = useRuntimeMonitor({
     canUseNativeControls,
     demoMode: DEMO_MODE,
-    livenessActive: canUseNativeControls && !DEMO_MODE && rawSessions.some((session) => ["working", "attention"].includes(session.status)),
-    processActive: activeMainTab === "runtime" && panelOpen && !setupOpen && !selectedSessionId,
+    livenessActive:
+      canUseNativeControls &&
+      !DEMO_MODE &&
+      rawSessions.some((session) => ['working', 'attention'].includes(session.status)),
+    processActive: activeMainTab === 'runtime' && panelOpen && !setupOpen && !selectedSessionId,
     registry: sessionEventRegistry,
-    servicesActive: activeMainTab === "services" && panelOpen && !setupOpen && !selectedSessionId,
+    servicesActive: activeMainTab === 'services' && panelOpen && !setupOpen && !selectedSessionId,
     sessions: rawSessions,
-  });
+  })
   const allSessions = useMemo(
     () => reconcileEndedRuntimeSessions(rawSessions, runtimeMonitor.endedConversationIds),
     [rawSessions, runtimeMonitor.endedConversationIds],
-  );
+  )
   const sessions = useMemo(
     () =>
       allSessions.filter(
         (session) =>
           !isDismissedAfter(dismissedSessionIds, session.conversationId, session.lastActivityAt) ||
-          (session.conversationId === presence.conversationId && !["idle", "closed"].includes(displayView.status)),
+          (session.conversationId === presence.conversationId && !['idle', 'closed'].includes(displayView.status)),
       ),
     [allSessions, dismissedSessionIds, displayView.status, presence.conversationId],
-  );
+  )
   const selectedSession = useMemo(
     () => buildSessionDetail(selectedSessionId, sessions, sessionEventRegistry, presence),
     [presence, selectedSessionId, sessionEventRegistry, sessions],
-  );
+  )
   const selectedSessionActivityEvents = useMemo(() => {
-    if (!selectedSession) return [];
-    const fallbackEvents = recentEvents.filter((event) => event.conversationId === selectedSession.conversationId);
-    return getUniqueSortedEvents([...selectedSession.events, ...fallbackEvents]).slice(0, 16);
-  }, [recentEvents, selectedSession]);
-  const sessionGroups = useMemo(() => buildWorkspaceSessionGroups(sessions), [sessions]);
+    if (!selectedSession) return []
+    const fallbackEvents = recentEvents.filter((event) => event.conversationId === selectedSession.conversationId)
+    return getUniqueSortedEvents([...selectedSession.events, ...fallbackEvents]).slice(0, 16)
+  }, [recentEvents, selectedSession])
+  const sessionGroups = useMemo(() => buildWorkspaceSessionGroups(sessions), [sessions])
   const activeSessionGroups = useMemo(
-    () => buildWorkspaceSessionGroups(sessions.filter((session) => session.status !== "done")),
+    () => buildWorkspaceSessionGroups(sessions.filter((session) => session.status !== 'done')),
     [sessions],
-  );
-  const completedSessions = useMemo(() => sessions.filter((session) => session.status === "done"), [sessions]);
-  const completedSessionGroups = useMemo(() => buildWorkspaceSessionGroups(completedSessions), [completedSessions]);
+  )
+  const completedSessions = useMemo(() => sessions.filter((session) => session.status === 'done'), [sessions])
+  const completedSessionGroups = useMemo(() => buildWorkspaceSessionGroups(completedSessions), [completedSessions])
   useEffect(() => {
-    if (!clearCompletedArmed) return undefined;
-    const timer = window.setTimeout(() => setClearCompletedArmed(false), 4_000);
-    return () => window.clearTimeout(timer);
-  }, [clearCompletedArmed]);
+    if (!clearCompletedArmed) return undefined
+    const timer = window.setTimeout(() => setClearCompletedArmed(false), 4_000)
+    return () => window.clearTimeout(timer)
+  }, [clearCompletedArmed])
 
   useEffect(() => {
-    if (!pendingGroupHistoryRemoval) return undefined;
-    const timer = window.setTimeout(() => setPendingGroupHistoryRemoval(null), 4_000);
-    return () => window.clearTimeout(timer);
-  }, [pendingGroupHistoryRemoval]);
+    if (!pendingGroupHistoryRemoval) return undefined
+    const timer = window.setTimeout(() => setPendingGroupHistoryRemoval(null), 4_000)
+    return () => window.clearTimeout(timer)
+  }, [pendingGroupHistoryRemoval])
 
-  useEffect(() => setPendingGroupHistoryRemoval(null), [activeMainTab, panelOpen]);
-
-  useEffect(() => {
-    setPendingRemoveHistoryId(null);
-    setPendingGroupHistoryRemoval(null);
-  }, [selectedSessionId]);
+  useEffect(() => setPendingGroupHistoryRemoval(null), [activeMainTab, panelOpen])
 
   useEffect(() => {
-    if (!presence.conversationId) return;
-    if (acknowledgedConversationId !== presence.conversationId) return;
-    if (view.status !== "thinking" && view.status !== "tool-running" && view.status !== "attention" && view.status !== "stale") return;
-    setAcknowledgedConversationId(null);
-  }, [acknowledgedConversationId, presence.conversationId, view.status]);
+    setPendingRemoveHistoryId(null)
+    setPendingGroupHistoryRemoval(null)
+  }, [selectedSessionId])
 
   useEffect(() => {
-    if (!lastLiveEvent?.conversationId) return;
-    if (!["turn_start", "tool_start", "tool_end", "compact_start", "compact_end", "llm_start", "llm_end", "turn_stop", "turn_complete", "attention_requested"].includes(lastLiveEvent.type)) return;
+    if (!presence.conversationId) return
+    if (acknowledgedConversationId !== presence.conversationId) return
+    if (
+      view.status !== 'thinking' &&
+      view.status !== 'tool-running' &&
+      view.status !== 'attention' &&
+      view.status !== 'stale'
+    )
+      return
+    setAcknowledgedConversationId(null)
+  }, [acknowledgedConversationId, presence.conversationId, view.status])
+
+  useEffect(() => {
+    if (!lastLiveEvent?.conversationId) return
+    if (
+      ![
+        'turn_start',
+        'tool_start',
+        'tool_end',
+        'compact_start',
+        'compact_end',
+        'llm_start',
+        'llm_end',
+        'turn_stop',
+        'turn_complete',
+        'attention_requested',
+      ].includes(lastLiveEvent.type)
+    )
+      return
 
     setDismissedSessionIds((current) => {
-      const conversationId = lastLiveEvent.conversationId ?? "";
-      if (typeof current[conversationId] !== "number" || isDismissedAfter(current, conversationId, lastLiveEvent.timestamp)) return current;
-      const { [conversationId]: _removed, ...next } = current;
-      writeDismissedSessionIds(next);
-      return next;
-    });
+      const conversationId = lastLiveEvent.conversationId ?? ''
+      if (
+        typeof current[conversationId] !== 'number' ||
+        isDismissedAfter(current, conversationId, lastLiveEvent.timestamp)
+      )
+        return current
+      const { [conversationId]: _removed, ...next } = current
+      writeDismissedSessionIds(next)
+      return next
+    })
 
     setDeletedSessionIds((current) => {
-      const conversationId = lastLiveEvent.conversationId ?? "";
-      if (typeof current[conversationId] !== "number" || isDeletedAfter(current, conversationId, lastLiveEvent.timestamp)) return current;
-      const { [conversationId]: _removed, ...next } = current;
-      writeDeletedSessionIds(next);
-      return next;
-    });
-  }, [lastLiveEvent]);
+      const conversationId = lastLiveEvent.conversationId ?? ''
+      if (
+        typeof current[conversationId] !== 'number' ||
+        isDeletedAfter(current, conversationId, lastLiveEvent.timestamp)
+      )
+        return current
+      const { [conversationId]: _removed, ...next } = current
+      writeDeletedSessionIds(next)
+      return next
+    })
+  }, [lastLiveEvent])
   const headerLabel = setupOpen
-    ? "Setup"
+    ? 'Setup'
     : selectedSession
       ? selectedSession.project
-      : activeMainTab === "sessions"
-        ? "Agent Halo"
-        : activeMainTab === "pomodoro"
-          ? "Focus"
-          : activeMainTab === "usage"
-            ? "Usage"
-            : activeMainTab === "runtime"
-              ? "Runtime"
-              : "Services";
+      : activeMainTab === 'sessions'
+        ? 'Agent Halo'
+        : activeMainTab === 'pomodoro'
+          ? 'Focus'
+          : activeMainTab === 'usage'
+            ? 'Usage'
+            : activeMainTab === 'runtime'
+              ? 'Runtime'
+              : 'Services'
   const activitySession =
-    sessions.find((session) => session.status === "attention") ??
-    sessions.find((session) => session.status === "error" && now.getTime() - Date.parse(session.lastActivityAt) <= STALE_AFTER_MS) ??
-    sessions.find((session) => session.status === "working") ??
+    sessions.find((session) => session.status === 'attention') ??
+    sessions.find(
+      (session) => session.status === 'error' && now.getTime() - Date.parse(session.lastActivityAt) <= STALE_AFTER_MS,
+    ) ??
+    sessions.find((session) => session.status === 'working') ??
     sessions.find(
       (session) =>
-        session.status === "done" &&
+        session.status === 'done' &&
         session.conversationId !== acknowledgedConversationId &&
         now.getTime() - Date.parse(session.lastActivityAt) <= DONE_SIGNAL_MS,
     ) ??
-    null;
-  const fallbackActivityStatus = getGlyphStatus(displayView.status);
+    null
+  const fallbackActivityStatus = getGlyphStatus(displayView.status)
   const hasRecentUnscopedDone =
     !lastLiveEvent?.conversationId &&
-    (lastLiveEvent?.type === "turn_complete" || lastLiveEvent?.type === "turn_stop") &&
-    now.getTime() - Date.parse(lastLiveEvent.timestamp) <= DONE_SIGNAL_MS;
-  const hasRecentFallbackError = fallbackActivityStatus === "error" && presence.lastEventAt !== null && now.getTime() - Date.parse(presence.lastEventAt) <= STALE_AFTER_MS;
-  const activityStatus = activitySession?.status ?? (hasRecentUnscopedDone ? "done" : fallbackActivityStatus === "working" || fallbackActivityStatus === "attention" || hasRecentFallbackError ? fallbackActivityStatus : "idle");
-  const activityKind: ActivityKind = activitySession?.activityKind ?? (activityStatus === "attention" ? "attention" : activityStatus === "done" ? "done" : displayView.status === "thinking" ? "thinking" : displayView.status === "error" ? "error" : "session");
-  const activityViewStatus: IStatusView["status"] = (() => {
-    if (activityStatus === "working") return "tool-running";
-    if (activityStatus === "attention") return "attention";
-    if (activityStatus === "inactive") return "stale";
-    if (activityStatus === "done") return "closed";
-    if (activityStatus === "error") return "error";
-    return displayView.status;
-  })();
-  const glyphStatus = getGlyphStatus(activityViewStatus);
-  const isWorkingActivity = activityStatus === "working";
-  const hasWorkingActivity = shouldKeepDisplayAwakeForActivity(
-    sessions,
-    fallbackActivityStatus,
-  );
-  const hasAgentLiveActivity = isWorkingActivity || activityStatus === "attention" || activityStatus === "done" || activityStatus === "error";
-  const hasCriticalAgentActivity = activityStatus === "attention" || activityStatus === "error";
-  const hasPomodoroActivity = pomodoro.state.status === "running" || pomodoro.state.status === "paused" || pomodoro.completionVisible;
-  const showPomodoroActivity = !hasCriticalAgentActivity && hasPomodoroActivity;
-  const hasStopwatchActivity = stopwatch.state.status === "running" || stopwatch.state.status === "paused";
-  const showStopwatchActivity = !hasCriticalAgentActivity && !hasPomodoroActivity && hasStopwatchActivity;
-  const hasLiveActivity = hasAgentLiveActivity || showPomodoroActivity || showStopwatchActivity;
+    (lastLiveEvent?.type === 'turn_complete' || lastLiveEvent?.type === 'turn_stop') &&
+    now.getTime() - Date.parse(lastLiveEvent.timestamp) <= DONE_SIGNAL_MS
+  const hasRecentFallbackError =
+    fallbackActivityStatus === 'error' &&
+    presence.lastEventAt !== null &&
+    now.getTime() - Date.parse(presence.lastEventAt) <= STALE_AFTER_MS
+  const activityStatus =
+    activitySession?.status ??
+    (hasRecentUnscopedDone
+      ? 'done'
+      : fallbackActivityStatus === 'working' || fallbackActivityStatus === 'attention' || hasRecentFallbackError
+        ? fallbackActivityStatus
+        : 'idle')
+  const activityKind: ActivityKind =
+    activitySession?.activityKind ??
+    (activityStatus === 'attention'
+      ? 'attention'
+      : activityStatus === 'done'
+        ? 'done'
+        : displayView.status === 'thinking'
+          ? 'thinking'
+          : displayView.status === 'error'
+            ? 'error'
+            : 'session')
+  const activityViewStatus: IStatusView['status'] = (() => {
+    if (activityStatus === 'working') return 'tool-running'
+    if (activityStatus === 'attention') return 'attention'
+    if (activityStatus === 'inactive') return 'stale'
+    if (activityStatus === 'done') return 'closed'
+    if (activityStatus === 'error') return 'error'
+    return displayView.status
+  })()
+  const glyphStatus = getGlyphStatus(activityViewStatus)
+  const isWorkingActivity = activityStatus === 'working'
+  const hasWorkingActivity = shouldKeepDisplayAwakeForActivity(sessions, fallbackActivityStatus)
+  const hasAgentLiveActivity =
+    isWorkingActivity || activityStatus === 'attention' || activityStatus === 'done' || activityStatus === 'error'
+  const hasCriticalAgentActivity = activityStatus === 'attention' || activityStatus === 'error'
+  const hasPomodoroActivity =
+    pomodoro.state.status === 'running' || pomodoro.state.status === 'paused' || pomodoro.completionVisible
+  const showPomodoroActivity = !hasCriticalAgentActivity && hasPomodoroActivity
+  const hasStopwatchActivity = stopwatch.state.status === 'running' || stopwatch.state.status === 'paused'
+  const showStopwatchActivity = !hasCriticalAgentActivity && !hasPomodoroActivity && hasStopwatchActivity
+  const hasLiveActivity = hasAgentLiveActivity || showPomodoroActivity || showStopwatchActivity
   const companionReplayId = activitySession
     ? `${activitySession.conversationId}:${activitySession.lastActivityAt}:${activityKind}`
     : lastLiveEvent
       ? `${lastLiveEvent.type}:${lastLiveEvent.timestamp}`
-      : `${presence.conversationId ?? "idle"}:${presence.lastEventAt ?? "initial"}:${activityStatus}`;
+      : `${presence.conversationId ?? 'idle'}:${presence.lastEventAt ?? 'initial'}:${activityStatus}`
   companionPresentationRef.current = {
     sessionStatus: activityStatus,
     activityKind,
     motionMapping: petMotionMapping,
     replayId: companionReplayId,
-  };
+  }
 
   useEffect(() => {
-    if (!canUseNativeControls || !activePetSummon) return;
+    if (!canUseNativeControls || !activePetSummon) return
     const projection = buildCompanionProjection({
       summon: activePetSummon,
       sessionStatus: activityStatus,
       activityKind,
       motionMapping: petMotionMapping,
       replayId: companionReplayId,
-    });
-    void invoke("update_completion_pet_projection", { projection }).catch(() => {
-      setActivePetSummon((current) => current?.id === activePetSummon.id ? null : current);
-    });
-  }, [activePetSummon, activityKind, activityStatus, canUseNativeControls, companionReplayId, petMotionMapping]);
+    })
+    void invoke('update_completion_pet_projection', { projection }).catch(() => {
+      setActivePetSummon((current) => (current?.id === activePetSummon.id ? null : current))
+    })
+  }, [activePetSummon, activityKind, activityStatus, canUseNativeControls, companionReplayId, petMotionMapping])
 
   useEffect(() => {
     if (!canUseNativeControls) {
-      setKeepAwakeActive(false);
-      setKeepAwakeError(null);
-      return undefined;
+      setKeepAwakeActive(false)
+      setKeepAwakeError(null)
+      return undefined
     }
 
-    let cancelled = false;
-    let retryTimer: number | null = null;
-    const requestedActive = keepAwakeEnabled && hasWorkingActivity;
+    let cancelled = false
+    let retryTimer: number | null = null
+    const requestedActive = keepAwakeEnabled && hasWorkingActivity
     const syncNativeState = (attempt: number) => {
       const request = keepAwakeRequestRef.current
         .catch(() => undefined)
-        .then(() => invoke<boolean>("set_keep_awake", { active: requestedActive }))
+        .then(() => invoke<boolean>('set_keep_awake', { active: requestedActive }))
         .then((active) => {
           if (active !== requestedActive) {
-            throw new Error("Native keep-awake state did not match the requested state");
+            throw new Error('Native keep-awake state did not match the requested state')
           }
-          return active;
-        });
-      keepAwakeRequestRef.current = request;
+          return active
+        })
+      keepAwakeRequestRef.current = request
       void request
         .then((active) => {
-          if (cancelled) return;
-          setKeepAwakeActive(active);
-          setKeepAwakeError(null);
+          if (cancelled) return
+          setKeepAwakeActive(active)
+          setKeepAwakeError(null)
         })
         .catch((error) => {
-          if (cancelled) return;
-          const retryDelay = KEEP_AWAKE_RETRY_DELAYS_MS[attempt];
+          if (cancelled) return
+          const retryDelay = KEEP_AWAKE_RETRY_DELAYS_MS[attempt]
           if (retryDelay !== undefined) {
-            retryTimer = window.setTimeout(() => syncNativeState(attempt + 1), retryDelay);
-            return;
+            retryTimer = window.setTimeout(() => syncNativeState(attempt + 1), retryDelay)
+            return
           }
-          setKeepAwakeActive(false);
-          setKeepAwakeError(error instanceof Error ? error.message : String(error || "Keep awake unavailable"));
-        });
-    };
-    setKeepAwakeError(null);
-    syncNativeState(0);
+          setKeepAwakeActive(false)
+          setKeepAwakeError(error instanceof Error ? error.message : String(error || 'Keep awake unavailable'))
+        })
+    }
+    setKeepAwakeError(null)
+    syncNativeState(0)
 
     return () => {
-      cancelled = true;
-      if (retryTimer !== null) window.clearTimeout(retryTimer);
-    };
-  }, [canUseNativeControls, hasWorkingActivity, keepAwakeEnabled]);
+      cancelled = true
+      if (retryTimer !== null) window.clearTimeout(retryTimer)
+    }
+  }, [canUseNativeControls, hasWorkingActivity, keepAwakeEnabled])
 
   const pillDetail = (() => {
-    if (showPomodoroActivity) return pomodoro.completionVisible ? "Done" : pomodoro.countdownLabel;
-    if (showStopwatchActivity) return stopwatch.compactElapsedLabel;
-    if (activitySession?.status === "working") return activitySession.detail === "thinking" ? "Thinking" : activitySession.detail;
-    if (activityStatus === "attention") return activitySession?.detail ?? (lastLiveEvent?.type === "attention_requested" && lastLiveEvent.data.kind === "question" ? "Question" : "Approval needed");
-    if (activitySession?.status === "done") return "Done";
-    if (activityStatus === "error") return "Error";
-    return project;
-  })();
+    if (showPomodoroActivity) return pomodoro.completionVisible ? 'Done' : pomodoro.countdownLabel
+    if (showStopwatchActivity) return stopwatch.compactElapsedLabel
+    if (activitySession?.status === 'working')
+      return activitySession.detail === 'thinking' ? 'Thinking' : activitySession.detail
+    if (activityStatus === 'attention')
+      return (
+        activitySession?.detail ??
+        (lastLiveEvent?.type === 'attention_requested' && lastLiveEvent.data.kind === 'question'
+          ? 'Question'
+          : 'Approval needed')
+      )
+    if (activitySession?.status === 'done') return 'Done'
+    if (activityStatus === 'error') return 'Error'
+    return project
+  })()
   const pomodoroPhaseDetail = pomodoro.completionVisible
     ? `${pomodoro.phaseLabel} ready`
-    : pomodoro.state.status === "paused"
+    : pomodoro.state.status === 'paused'
       ? `${pomodoro.phaseLabel} paused`
-      : pomodoro.phaseLabel;
-  const stopwatchDetail = stopwatch.state.status === "paused" ? "SW paused" : `SW ${stopwatch.compactElapsedLabel}`;
-  const timeActivityDetail = showPomodoroActivity && hasStopwatchActivity
-    ? stopwatchDetail
-    : showPomodoroActivity
-      ? pomodoroPhaseDetail
-      : showStopwatchActivity
-        ? stopwatch.state.status === "paused" ? "Stopwatch paused" : "Stopwatch"
-        : pillDetail;
-  const liveActivityWidthLabel = timeActivityDetail.length > pillDetail.length ? timeActivityDetail : pillDetail;
+      : pomodoro.phaseLabel
+  const stopwatchDetail = stopwatch.state.status === 'paused' ? 'SW paused' : `SW ${stopwatch.compactElapsedLabel}`
+  const timeActivityDetail =
+    showPomodoroActivity && hasStopwatchActivity
+      ? stopwatchDetail
+      : showPomodoroActivity
+        ? pomodoroPhaseDetail
+        : showStopwatchActivity
+          ? stopwatch.state.status === 'paused'
+            ? 'Stopwatch paused'
+            : 'Stopwatch'
+          : pillDetail
+  const liveActivityWidthLabel = timeActivityDetail.length > pillDetail.length ? timeActivityDetail : pillDetail
   const closedSurfaceLabel = showPomodoroActivity
     ? pomodoro.completionVisible
       ? `Open Agent Halo — ${pomodoro.phaseLabel} ready`
-      : `Open Agent Halo — ${pomodoro.phaseLabel}${pomodoro.state.status === "paused" ? " paused" : ""}, ${pomodoro.countdownLabel} remaining${hasStopwatchActivity ? `; Stopwatch ${stopwatch.state.status}, ${stopwatch.elapsedLabel} elapsed` : ""}`
+      : `Open Agent Halo — ${pomodoro.phaseLabel}${pomodoro.state.status === 'paused' ? ' paused' : ''}, ${pomodoro.countdownLabel} remaining${hasStopwatchActivity ? `; Stopwatch ${stopwatch.state.status}, ${stopwatch.elapsedLabel} elapsed` : ''}`
     : showStopwatchActivity
       ? `Open Agent Halo — Stopwatch ${stopwatch.state.status}, ${stopwatch.elapsedLabel} elapsed`
-    : "Open Agent Halo";
-  const liveActivityWingWidth = hasLiveActivity ? estimateLiveActivityWingWidth(liveActivityWidthLabel) : 0;
-  const closedSurfaceWidth = Math.round(notchMetrics.cameraWidth + liveActivityWingWidth * 2);
-  const closedSurfaceHeight = Math.round(notchMetrics.closedHeight);
+      : 'Open Agent Halo'
+  const liveActivityWingWidth = hasLiveActivity ? estimateLiveActivityWingWidth(liveActivityWidthLabel) : 0
+  const closedSurfaceWidth = Math.round(notchMetrics.cameraWidth + liveActivityWingWidth * 2)
+  const closedSurfaceHeight = Math.round(notchMetrics.closedHeight)
   const notchStyle = {
-    "--closed-width": `${closedSurfaceWidth}px`,
-    "--closed-height": `${closedSurfaceHeight}px`,
-    "--camera-width": `${Math.round(notchMetrics.cameraWidth)}px`,
-    "--panel-height": `${panelHeight}px`,
-    "--panel-width": `${panelWindowWidth}px`,
-    "--pill-text-width": `${Math.max(0, liveActivityWingWidth - LIVE_ACTIVITY_TEXT_WIDTH_BUFFER)}px`,
-  } as CSSProperties & Record<"--closed-width" | "--closed-height" | "--camera-width" | "--panel-height" | "--panel-width" | "--pill-text-width", string>;
-  const surfaceState = renderPanel ? (panelOpen ? "open" : "closing") : "closed";
-  const shapeMetrics = surfaceState === "open"
-    ? { width: panelWindowWidth, height: panelHeight, topRadius: OPEN_TOP_SHOULDER_RADIUS, bottomRadius: PANEL_BOTTOM_RADIUS }
-    : { width: closedSurfaceWidth, height: closedSurfaceHeight, topRadius: CLOSED_TOP_SHOULDER_RADIUS, bottomRadius: CLOSED_BOTTOM_RADIUS };
-  const notchShapePath = buildNotchShapePath(shapeMetrics.width, shapeMetrics.height, shapeMetrics.topRadius, shapeMetrics.bottomRadius);
+    '--closed-width': `${closedSurfaceWidth}px`,
+    '--closed-height': `${closedSurfaceHeight}px`,
+    '--camera-width': `${Math.round(notchMetrics.cameraWidth)}px`,
+    '--panel-height': `${panelHeight}px`,
+    '--panel-width': `${panelWindowWidth}px`,
+    '--pill-text-width': `${Math.max(0, liveActivityWingWidth - LIVE_ACTIVITY_TEXT_WIDTH_BUFFER)}px`,
+  } as CSSProperties &
+    Record<
+      | '--closed-width'
+      | '--closed-height'
+      | '--camera-width'
+      | '--panel-height'
+      | '--panel-width'
+      | '--pill-text-width',
+      string
+    >
+  const surfaceState = renderPanel ? (panelOpen ? 'open' : 'closing') : 'closed'
+  const shapeMetrics =
+    surfaceState === 'open'
+      ? {
+          width: panelWindowWidth,
+          height: panelHeight,
+          topRadius: OPEN_TOP_SHOULDER_RADIUS,
+          bottomRadius: PANEL_BOTTOM_RADIUS,
+        }
+      : {
+          width: closedSurfaceWidth,
+          height: closedSurfaceHeight,
+          topRadius: CLOSED_TOP_SHOULDER_RADIUS,
+          bottomRadius: CLOSED_BOTTOM_RADIUS,
+        }
+  const notchShapePath = buildNotchShapePath(
+    shapeMetrics.width,
+    shapeMetrics.height,
+    shapeMetrics.topRadius,
+    shapeMetrics.bottomRadius,
+  )
   const setupGuidance = (() => {
     if (!canUseNativeControls) {
       return {
-        title: "Open desktop runtime",
-        detail: DEMO_MODE ? "Browser demo cannot install or check the mod" : "Use pnpm desktop:dev for native setup",
-      };
+        title: 'Open desktop runtime',
+        detail: DEMO_MODE ? 'Browser demo cannot install or check the mod' : 'Use pnpm desktop:dev for native setup',
+      }
     }
 
     if (modStatus.installed === false) {
       return {
-        title: "Install Letta mod",
-        detail: "Writes ~/.letta/mods/agent-halo.js locally",
-      };
+        title: 'Install Letta mod',
+        detail: 'Writes ~/.letta/mods/agent-halo.js locally',
+      }
     }
 
     if (modStatus.installed === true && !isConnected) {
       return {
-        title: "Reload Letta Code",
-        detail: "Run /reload after install, then Check",
-      };
+        title: 'Reload Letta Code',
+        detail: 'Run /reload after install, then Check',
+      }
     }
 
     if (isConnected) {
       return {
-        title: "Ready",
-        detail: "Bridge streaming lifecycle, turn, and tool events",
-      };
+        title: 'Ready',
+        detail: 'Bridge streaming lifecycle, turn, and tool events',
+      }
     }
 
     return {
-      title: "Checking setup",
-      detail: canUseNativeControls ? "Reading local mod and bridge state" : "Waiting for runtime",
-    };
-  })();
+      title: 'Checking setup',
+      detail: canUseNativeControls ? 'Reading local mod and bridge state' : 'Waiting for runtime',
+    }
+  })()
 
   useEffect(() => {
-    let shrinkTimer: number | null = null;
+    let shrinkTimer: number | null = null
 
     setNativeClosedSurfaceWidth((currentWidth) => {
-      if (closedSurfaceWidth >= currentWidth) return closedSurfaceWidth;
-      shrinkTimer = window.setTimeout(() => setNativeClosedSurfaceWidth(closedSurfaceWidth), ACTIVITY_COLLAPSE_MS);
-      return currentWidth;
-    });
+      if (closedSurfaceWidth >= currentWidth) return closedSurfaceWidth
+      shrinkTimer = window.setTimeout(() => setNativeClosedSurfaceWidth(closedSurfaceWidth), ACTIVITY_COLLAPSE_MS)
+      return currentWidth
+    })
 
     return () => {
-      if (shrinkTimer !== null) window.clearTimeout(shrinkTimer);
-    };
-  }, [closedSurfaceWidth]);
+      if (shrinkTimer !== null) window.clearTimeout(shrinkTimer)
+    }
+  }, [closedSurfaceWidth])
 
   const refreshNotchMetrics = (): Promise<void> => {
-    if (!canUseNativeControls) return Promise.resolve();
-    return invoke<[number, number]>("notch_metrics")
+    if (!canUseNativeControls) return Promise.resolve()
+    return invoke<[number, number]>('notch_metrics')
       .then(([cameraWidth, closedHeight]) => {
         setNotchMetrics({
           cameraWidth: Number.isFinite(cameraWidth) ? cameraWidth : DEFAULT_CAMERA_NOTCH_WIDTH,
           closedHeight: Number.isFinite(closedHeight) ? closedHeight : DEFAULT_CLOSED_NOTCH_HEIGHT,
-        });
+        })
       })
       .catch(() => {
-        setNotchMetrics({ cameraWidth: DEFAULT_CAMERA_NOTCH_WIDTH, closedHeight: DEFAULT_CLOSED_NOTCH_HEIGHT });
-      });
-  };
+        setNotchMetrics({ cameraWidth: DEFAULT_CAMERA_NOTCH_WIDTH, closedHeight: DEFAULT_CLOSED_NOTCH_HEIGHT })
+      })
+  }
 
   const applyDisplayState = (next: IDisplayStateSnapshot | null): void => {
-    displayStateRef.current = next;
-    setDisplayState(next);
-  };
+    displayStateRef.current = next
+    setDisplayState(next)
+  }
 
   useEffect(() => {
-    void refreshNotchMetrics();
-  }, [canUseNativeControls]);
+    void refreshNotchMetrics()
+  }, [canUseNativeControls])
 
   useEffect(() => {
     const updateAvailablePanelSize = () => {
-      const nextWidth = getAvailablePanelWidth();
-      const nextFocusHeight = getAvailableTallPanelHeight();
-      setAvailablePanelWidth((current) => (current === nextWidth ? current : nextWidth));
-      setAvailableTallPanelHeight((current) => (current === nextFocusHeight ? current : nextFocusHeight));
-    };
-    updateAvailablePanelSize();
-    window.addEventListener("resize", updateAvailablePanelSize);
-    return () => window.removeEventListener("resize", updateAvailablePanelSize);
-  }, []);
+      const nextWidth = getAvailablePanelWidth()
+      const nextFocusHeight = getAvailableTallPanelHeight()
+      setAvailablePanelWidth((current) => (current === nextWidth ? current : nextWidth))
+      setAvailableTallPanelHeight((current) => (current === nextFocusHeight ? current : nextFocusHeight))
+    }
+    updateAvailablePanelSize()
+    window.addEventListener('resize', updateAvailablePanelSize)
+    return () => window.removeEventListener('resize', updateAvailablePanelSize)
+  }, [])
 
   useEffect(() => {
-    if (!canUseNativeControls) return undefined;
-    let cancelled = false;
+    if (!canUseNativeControls) return undefined
+    let cancelled = false
     const reconcile = async () => {
-      if (displayRequestBusyRef.current) return;
-      displayRequestBusyRef.current = true;
+      if (displayRequestBusyRef.current) return
+      displayRequestBusyRef.current = true
       try {
-        const next = await invoke<IDisplayStateSnapshot>("reconcile_display");
-        if (cancelled) return;
-        const current = displayStateRef.current;
-        const changed = current?.activeDisplayId !== next.activeDisplayId
-          || current?.fallbackActive !== next.fallbackActive
-          || current?.displays.map((display) => display.id).join("|") !== next.displays.map((display) => display.id).join("|");
-        applyDisplayState(next);
-        if (changed) await refreshNotchMetrics();
+        const next = await invoke<IDisplayStateSnapshot>('reconcile_display')
+        if (cancelled) return
+        const current = displayStateRef.current
+        const changed =
+          current?.activeDisplayId !== next.activeDisplayId ||
+          current?.fallbackActive !== next.fallbackActive ||
+          current?.displays.map((display) => display.id).join('|') !==
+            next.displays.map((display) => display.id).join('|')
+        applyDisplayState(next)
+        if (changed) await refreshNotchMetrics()
       } catch {
         // Keep the last usable display state; Setup refresh exposes persistent failures.
       } finally {
-        displayRequestBusyRef.current = false;
+        displayRequestBusyRef.current = false
       }
-    };
-    void reconcile();
-    const timer = window.setInterval(() => void reconcile(), DISPLAY_RECONCILE_INTERVAL_MS);
+    }
+    void reconcile()
+    const timer = window.setInterval(() => void reconcile(), DISPLAY_RECONCILE_INTERVAL_MS)
     return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [canUseNativeControls]);
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [canUseNativeControls])
 
   useEffect(() => {
     if (!renderPanel) {
-      setPanelHeight(PANEL_MIN_HEIGHT);
-      return;
+      setPanelHeight(PANEL_MIN_HEIGHT)
+      return
     }
 
-    const settledView: PanelWidthView = setupOpen ? "setup" : selectedSessionId ? "session-detail" : activeMainTab;
-    const settledHeight = SETTLED_PANEL_HEIGHT_BY_VIEW[settledView];
+    const settledView: PanelWidthView = setupOpen ? 'setup' : selectedSessionId ? 'session-detail' : activeMainTab
+    const settledHeight = SETTLED_PANEL_HEIGHT_BY_VIEW[settledView]
     if (settledHeight != null) {
-      setPanelHeight(settledHeight === TALL_PANEL_HEIGHT ? availableTallPanelHeight : settledHeight);
-      return;
+      setPanelHeight(settledHeight === TALL_PANEL_HEIGHT ? availableTallPanelHeight : settledHeight)
+      return
     }
 
-    const target = sheetInnerRef.current;
-    if (!target) return;
+    const target = sheetInnerRef.current
+    if (!target) return
 
-    const measureContentHeight = () => Array.from(target.children).reduce((total, child) => {
-      const element = child as HTMLElement;
-      if (element.classList.contains("sheet-body")) {
-        const style = window.getComputedStyle(element);
-        const padding = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
-        const bodyContent = Array.from(element.children).reduce((bodyTotal, bodyChild) => {
-          const innerScrolls = (bodyChild as HTMLElement).querySelectorAll<HTMLElement>("[data-scroll-owner='inner']");
-          if (innerScrolls.length > 1) {
-            const first = innerScrolls[0].getBoundingClientRect();
-            const second = innerScrolls[1].getBoundingClientRect();
-            const isStacked = Math.abs(first.left - second.left) < 10 && Math.abs(first.top - second.top) > 10;
-            if (isStacked) {
-              const totalScroll = Array.from(innerScrolls).reduce((sum, scroller) => sum + scroller.scrollHeight, 0);
-              return bodyTotal + Math.ceil(totalScroll);
+    const measureContentHeight = () =>
+      Array.from(target.children).reduce((total, child) => {
+        const element = child as HTMLElement
+        if (element.classList.contains('sheet-body')) {
+          const style = window.getComputedStyle(element)
+          const padding = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom)
+          const bodyContent = Array.from(element.children).reduce((bodyTotal, bodyChild) => {
+            const innerScrolls = (bodyChild as HTMLElement).querySelectorAll<HTMLElement>("[data-scroll-owner='inner']")
+            if (innerScrolls.length > 1) {
+              const first = innerScrolls[0].getBoundingClientRect()
+              const second = innerScrolls[1].getBoundingClientRect()
+              const isStacked = Math.abs(first.left - second.left) < 10 && Math.abs(first.top - second.top) > 10
+              if (isStacked) {
+                const totalScroll = Array.from(innerScrolls).reduce((sum, scroller) => sum + scroller.scrollHeight, 0)
+                return bodyTotal + Math.ceil(totalScroll)
+              }
+              const maxScroll = Math.max(...Array.from(innerScrolls).map((scroller) => scroller.scrollHeight))
+              return bodyTotal + Math.ceil(maxScroll)
             }
-            const maxScroll = Math.max(...Array.from(innerScrolls).map((scroller) => scroller.scrollHeight));
-            return bodyTotal + Math.ceil(maxScroll);
-          }
-          const innerScroll = (bodyChild as HTMLElement).querySelector<HTMLElement>("[data-scroll-owner='inner']");
-          const childHeight = innerScroll ? innerScroll.scrollHeight : (bodyChild as HTMLElement).scrollHeight;
-          return bodyTotal + Math.ceil(childHeight);
-        }, 0);
-        return total + padding + bodyContent;
-      }
-      return total + Math.ceil(element.getBoundingClientRect().height);
-    }, 0);
+            const innerScroll = (bodyChild as HTMLElement).querySelector<HTMLElement>("[data-scroll-owner='inner']")
+            const childHeight = innerScroll ? innerScroll.scrollHeight : (bodyChild as HTMLElement).scrollHeight
+            return bodyTotal + Math.ceil(childHeight)
+          }, 0)
+          return total + padding + bodyContent
+        }
+        return total + Math.ceil(element.getBoundingClientRect().height)
+      }, 0)
 
     const updateHeight = () => {
-      const measured = measureContentHeight();
+      const measured = measureContentHeight()
       setPanelHeight((current) => {
-        const next = clampPanelHeight(measured);
-        return Math.abs(next - current) < 2 ? current : next;
-      });
-    };
+        const next = clampPanelHeight(measured)
+        return Math.abs(next - current) < 2 ? current : next
+      })
+    }
 
-    updateHeight();
-    const observer = new ResizeObserver(updateHeight);
-    observer.observe(target);
-    for (const child of Array.from(target.children)) observer.observe(child);
-    return () => observer.disconnect();
-  }, [activeMainTab, agentUsages, availableTallPanelHeight, renderPanel, selectedSessionId, sessionGroups.length, setupOpen]);
+    updateHeight()
+    const observer = new ResizeObserver(updateHeight)
+    observer.observe(target)
+    for (const child of Array.from(target.children)) observer.observe(child)
+    return () => observer.disconnect()
+  }, [
+    activeMainTab,
+    agentUsages,
+    availableTallPanelHeight,
+    renderPanel,
+    selectedSessionId,
+    sessionGroups.length,
+    setupOpen,
+  ])
 
   useEffect(() => {
-    let cancelled = false;
-    let closeTimer: number | null = null;
-    const requestVersion = panelNativeRequestVersionRef.current + 1;
-    panelNativeRequestVersionRef.current = requestVersion;
-    const focus = panelOpen && nativeFocusRequestRef.current;
-    if (focus) nativeFocusRequestRef.current = false;
+    let cancelled = false
+    let closeTimer: number | null = null
+    const requestVersion = panelNativeRequestVersionRef.current + 1
+    panelNativeRequestVersionRef.current = requestVersion
+    const focus = panelOpen && nativeFocusRequestRef.current
+    if (focus) nativeFocusRequestRef.current = false
 
-    const isCurrent = () => !cancelled && panelNativeRequestVersionRef.current === requestVersion;
+    const isCurrent = () => !cancelled && panelNativeRequestVersionRef.current === requestVersion
 
     const resizeNativePanel = async (open: boolean): Promise<boolean | null> => {
-      if (!canUseNativeControls) return true;
+      if (!canUseNativeControls) return true
       for (let attempt = 0; attempt < 2; attempt += 1) {
-        if (!isCurrent()) return null;
+        if (!isCurrent()) return null
         try {
-          await invoke("set_panel_open", {
+          await invoke('set_panel_open', {
             open,
             focus: open && focus,
             width: open ? panelWindowWidth : nativeClosedSurfaceWidth,
             height: open ? panelHeight : closedSurfaceHeight,
-          });
-          if (!isCurrent()) return null;
-          return true;
+          })
+          if (!isCurrent()) return null
+          return true
         } catch (error) {
-          if (!isCurrent()) return null;
+          if (!isCurrent()) return null
           if (attempt === 0) {
-            await new Promise((resolve) => window.setTimeout(resolve, 120));
-            continue;
+            await new Promise((resolve) => window.setTimeout(resolve, 120))
+            continue
           }
           if (!cancelled) {
             setNativeAction((current) => ({
               bridgeOnline: current.bridgeOnline,
-              message: error instanceof Error ? `Window positioning unavailable · ${error.message}` : "Window positioning unavailable",
-            }));
+              message:
+                error instanceof Error
+                  ? `Window positioning unavailable · ${error.message}`
+                  : 'Window positioning unavailable',
+            }))
           }
         }
       }
-      return false;
-    };
+      return false
+    }
 
     const enqueueNativePanelOperation = (operation: () => Promise<void>) => {
-      const queued = panelNativeOperationRef.current.catch(() => undefined).then(operation);
-      panelNativeOperationRef.current = queued.catch(() => undefined);
-    };
+      const queued = panelNativeOperationRef.current.catch(() => undefined).then(operation)
+      panelNativeOperationRef.current = queued.catch(() => undefined)
+    }
 
     if (panelOpen) {
       enqueueNativePanelOperation(async () => {
-        const opened = await resizeNativePanel(true);
-        if (opened === null) return;
+        const opened = await resizeNativePanel(true)
+        if (opened === null) return
         if (opened === false) {
           if (isCurrent()) {
-            nativeFocusRequestRef.current = false;
-            setPanelOpen(false);
-            setRenderPanel(false);
+            nativeFocusRequestRef.current = false
+            setPanelOpen(false)
+            setRenderPanel(false)
           }
-          return;
+          return
         }
-        await waitForNextPaint();
-        await waitForNextPaint();
-        if (isCurrent()) setRenderPanel(true);
-      });
+        await waitForNextPaint()
+        await waitForNextPaint()
+        if (isCurrent()) setRenderPanel(true)
+      })
       return () => {
-        cancelled = true;
-      };
+        cancelled = true
+      }
     }
 
     if (!renderPanel) {
-      enqueueNativePanelOperation(async () => { await resizeNativePanel(false); });
+      enqueueNativePanelOperation(async () => {
+        await resizeNativePanel(false)
+      })
       return () => {
-        cancelled = true;
-      };
+        cancelled = true
+      }
     }
 
     closeTimer = window.setTimeout(() => {
-      if (!isCurrent()) return;
-      setRenderPanel(false);
-      enqueueNativePanelOperation(async () => { await resizeNativePanel(false); });
-    }, 220);
+      if (!isCurrent()) return
+      setRenderPanel(false)
+      enqueueNativePanelOperation(async () => {
+        await resizeNativePanel(false)
+      })
+    }, 220)
 
     return () => {
-      cancelled = true;
-      if (closeTimer !== null) window.clearTimeout(closeTimer);
-    };
-  }, [canUseNativeControls, closedSurfaceHeight, nativeClosedSurfaceWidth, panelFocusRequestId, panelHeight, panelOpen, panelWindowWidth, renderPanel]);
+      cancelled = true
+      if (closeTimer !== null) window.clearTimeout(closeTimer)
+    }
+  }, [
+    canUseNativeControls,
+    closedSurfaceHeight,
+    nativeClosedSurfaceWidth,
+    panelFocusRequestId,
+    panelHeight,
+    panelOpen,
+    panelWindowWidth,
+    renderPanel,
+  ])
 
   useEffect(
     () => () => {
-      if (hoverOpenTimerRef.current !== null) window.clearTimeout(hoverOpenTimerRef.current);
-      if (hoverCloseTimerRef.current !== null) window.clearTimeout(hoverCloseTimerRef.current);
+      if (hoverOpenTimerRef.current !== null) window.clearTimeout(hoverOpenTimerRef.current)
+      if (hoverCloseTimerRef.current !== null) window.clearTimeout(hoverCloseTimerRef.current)
     },
     [],
-  );
+  )
 
   useEffect(() => {
     const enterKeyboardMode = (event: KeyboardEvent) => {
-      if (["Tab", "Enter", " ", "Escape", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) {
-        keyboardNavigationRef.current = true;
+      if (
+        ['Tab', 'Enter', ' ', 'Escape', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(
+          event.key,
+        )
+      ) {
+        keyboardNavigationRef.current = true
       }
-    };
+    }
     const leaveKeyboardMode = () => {
-      keyboardNavigationRef.current = false;
-    };
-    window.addEventListener("keydown", enterKeyboardMode, true);
-    window.addEventListener("pointerdown", leaveKeyboardMode, true);
+      keyboardNavigationRef.current = false
+    }
+    window.addEventListener('keydown', enterKeyboardMode, true)
+    window.addEventListener('pointerdown', leaveKeyboardMode, true)
     return () => {
-      window.removeEventListener("keydown", enterKeyboardMode, true);
-      window.removeEventListener("pointerdown", leaveKeyboardMode, true);
-    };
-  }, []);
+      window.removeEventListener('keydown', enterKeyboardMode, true)
+      window.removeEventListener('pointerdown', leaveKeyboardMode, true)
+    }
+  }, [])
 
   useEffect(() => {
-    if (!renderPanel || !panelOpen || !shouldFocusPanelRef.current) return;
-    shouldFocusPanelRef.current = false;
+    if (!renderPanel || !panelOpen || !shouldFocusPanelRef.current) return
+    shouldFocusPanelRef.current = false
     window.requestAnimationFrame(() => {
-      const target = sheetInnerRef.current?.querySelector<HTMLElement>("[data-panel-focus-target]");
-      target?.focus({ preventScroll: true });
-    });
-  }, [activeMainTab, panelOpen, renderPanel, selectedSessionId, setupOpen]);
+      const target = sheetInnerRef.current?.querySelector<HTMLElement>('[data-panel-focus-target]')
+      target?.focus({ preventScroll: true })
+    })
+  }, [activeMainTab, panelOpen, renderPanel, selectedSessionId, setupOpen])
 
   const clearHoverOpenTimer = () => {
-    if (hoverOpenTimerRef.current === null) return;
-    window.clearTimeout(hoverOpenTimerRef.current);
-    hoverOpenTimerRef.current = null;
-  };
+    if (hoverOpenTimerRef.current === null) return
+    window.clearTimeout(hoverOpenTimerRef.current)
+    hoverOpenTimerRef.current = null
+  }
 
   const clearHoverCloseTimer = () => {
-    if (hoverCloseTimerRef.current === null) return;
-    window.clearTimeout(hoverCloseTimerRef.current);
-    hoverCloseTimerRef.current = null;
-  };
+    if (hoverCloseTimerRef.current === null) return
+    window.clearTimeout(hoverCloseTimerRef.current)
+    hoverCloseTimerRef.current = null
+  }
 
   const rememberFocusOrigin = () => {
     if (document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
-      returnFocusRef.current = document.activeElement;
+      returnFocusRef.current = document.activeElement
     }
-  };
+  }
 
   const restoreFocusOrigin = () => {
     window.requestAnimationFrame(() => {
       const target = returnFocusRef.current?.isConnected
         ? returnFocusRef.current
         : returnSessionIdRef.current
-          ? surfaceRef.current?.querySelector<HTMLElement>(`[data-session-id="${CSS.escape(returnSessionIdRef.current)}"]`)
-          : surfaceRef.current?.querySelector<HTMLElement>('.session-row-main, .header-tab[data-active="true"], .header-tab');
-      target?.focus({ preventScroll: true });
-      returnFocusRef.current = null;
-      returnSessionIdRef.current = null;
-    });
-  };
+          ? surfaceRef.current?.querySelector<HTMLElement>(
+              `[data-session-id="${CSS.escape(returnSessionIdRef.current)}"]`,
+            )
+          : surfaceRef.current?.querySelector<HTMLElement>(
+              '.session-row-main, .header-tab[data-active="true"], .header-tab',
+            )
+      target?.focus({ preventScroll: true })
+      returnFocusRef.current = null
+      returnSessionIdRef.current = null
+    })
+  }
 
-  const setupOriginTabRef = useRef<MainPanelTab>("sessions");
-  const pomodoroScrollTopRef = useRef(0);
-  const runtimeScrollTopRef = useRef(0);
-  const servicesScrollTopRef = useRef(0);
+  const setupOriginTabRef = useRef<MainPanelTab>('sessions')
+  const pomodoroScrollTopRef = useRef(0)
+  const runtimeScrollTopRef = useRef(0)
+  const servicesScrollTopRef = useRef(0)
 
   const saveCurrentTabScroll = () => {
-    if (setupOpen || selectedSessionId) return;
-    if (activeMainTab === "sessions") {
-      const activeScroller = sheetInnerRef.current?.querySelector<HTMLElement>("[data-scroll-card='active']");
-      const completedScroller = sheetInnerRef.current?.querySelector<HTMLElement>("[data-scroll-card='completed']");
-      const recentScroller = sheetInnerRef.current?.querySelector<HTMLElement>("[data-scroll-card='recent']");
-      if (activeScroller) sessionsCardScrollRef.current.active = activeScroller.scrollTop;
-      if (completedScroller) sessionsCardScrollRef.current.completed = completedScroller.scrollTop;
-      if (recentScroller) sessionsCardScrollRef.current.recent = recentScroller.scrollTop;
-    } else if (activeMainTab === "pomodoro") {
-      const inner = sheetInnerRef.current?.querySelector<HTMLElement>("[data-scroll-owner='inner']");
+    if (setupOpen || selectedSessionId) return
+    if (activeMainTab === 'sessions') {
+      const activeScroller = sheetInnerRef.current?.querySelector<HTMLElement>("[data-scroll-card='active']")
+      const completedScroller = sheetInnerRef.current?.querySelector<HTMLElement>("[data-scroll-card='completed']")
+      const recentScroller = sheetInnerRef.current?.querySelector<HTMLElement>("[data-scroll-card='recent']")
+      if (activeScroller) sessionsCardScrollRef.current.active = activeScroller.scrollTop
+      if (completedScroller) sessionsCardScrollRef.current.completed = completedScroller.scrollTop
+      if (recentScroller) sessionsCardScrollRef.current.recent = recentScroller.scrollTop
+    } else if (activeMainTab === 'pomodoro') {
+      const inner = sheetInnerRef.current?.querySelector<HTMLElement>("[data-scroll-owner='inner']")
       if (inner) {
-        pomodoroScrollTopRef.current = inner.scrollTop;
+        pomodoroScrollTopRef.current = inner.scrollTop
       }
-    } else if (activeMainTab === "runtime" || activeMainTab === "services") {
-      const inner = sheetInnerRef.current?.querySelector<HTMLElement>("[data-monitor-card='detail']");
+    } else if (activeMainTab === 'runtime' || activeMainTab === 'services') {
+      const inner = sheetInnerRef.current?.querySelector<HTMLElement>("[data-monitor-card='detail']")
       if (inner) {
-        if (activeMainTab === "runtime") runtimeScrollTopRef.current = inner.scrollTop;
-        else servicesScrollTopRef.current = inner.scrollTop;
+        if (activeMainTab === 'runtime') runtimeScrollTopRef.current = inner.scrollTop
+        else servicesScrollTopRef.current = inner.scrollTop
       }
     }
-  };
+  }
 
   const restoreTabScroll = (tab: MainPanelTab) => {
     window.requestAnimationFrame(() => {
-      if (tab === "sessions") {
-        const activeScroller = sheetInnerRef.current?.querySelector<HTMLElement>("[data-scroll-card='active']");
-        const completedScroller = sheetInnerRef.current?.querySelector<HTMLElement>("[data-scroll-card='completed']");
-        const recentScroller = sheetInnerRef.current?.querySelector<HTMLElement>("[data-scroll-card='recent']");
-        if (activeScroller) activeScroller.scrollTop = sessionsCardScrollRef.current.active;
-        if (completedScroller) completedScroller.scrollTop = sessionsCardScrollRef.current.completed;
-        if (recentScroller) recentScroller.scrollTop = sessionsCardScrollRef.current.recent;
-      } else if (tab === "pomodoro") {
-        const inner = sheetInnerRef.current?.querySelector<HTMLElement>("[data-scroll-owner='inner']");
+      if (tab === 'sessions') {
+        const activeScroller = sheetInnerRef.current?.querySelector<HTMLElement>("[data-scroll-card='active']")
+        const completedScroller = sheetInnerRef.current?.querySelector<HTMLElement>("[data-scroll-card='completed']")
+        const recentScroller = sheetInnerRef.current?.querySelector<HTMLElement>("[data-scroll-card='recent']")
+        if (activeScroller) activeScroller.scrollTop = sessionsCardScrollRef.current.active
+        if (completedScroller) completedScroller.scrollTop = sessionsCardScrollRef.current.completed
+        if (recentScroller) recentScroller.scrollTop = sessionsCardScrollRef.current.recent
+      } else if (tab === 'pomodoro') {
+        const inner = sheetInnerRef.current?.querySelector<HTMLElement>("[data-scroll-owner='inner']")
         if (inner) {
-          inner.scrollTop = pomodoroScrollTopRef.current;
+          inner.scrollTop = pomodoroScrollTopRef.current
         }
       }
-    });
-  };
+    })
+  }
 
   const handleDividerPointerDown = (dividerIndex: number, event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return;
-    const tray = sessionsTrayRef.current;
-    if (!tray) return;
-    const trayRect = tray.getBoundingClientRect();
-    const totalAvail = Math.max(0, trayRect.width - 24);
-    if (totalAvail < SESSIONS_CARD_MIN_WIDTH * 3) return;
+    if (event.button !== 0) return
+    const tray = sessionsTrayRef.current
+    if (!tray) return
+    const trayRect = tray.getBoundingClientRect()
+    const totalAvail = Math.max(0, trayRect.width - 24)
+    if (totalAvail < SESSIONS_CARD_MIN_WIDTH * 3) return
 
-    event.currentTarget.setPointerCapture(event.pointerId);
+    event.currentTarget.setPointerCapture(event.pointerId)
     const startWidths: [number, number, number] = [
       sessionsRatiosRef.current[0] * totalAvail,
       sessionsRatiosRef.current[1] * totalAvail,
       sessionsRatiosRef.current[2] * totalAvail,
-    ];
+    ]
     activeDragDividerRef.current = {
       divider: dividerIndex,
       startX: event.clientX,
       startWidths,
       totalAvail,
-    };
-  };
+    }
+  }
 
   const handleDividerPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    const drag = activeDragDividerRef.current;
-    if (!drag) return;
-    const deltaX = event.clientX - drag.startX;
-    const { divider, startWidths, totalAvail } = drag;
+    const drag = activeDragDividerRef.current
+    if (!drag) return
+    const deltaX = event.clientX - drag.startX
+    const { divider, startWidths, totalAvail } = drag
 
     if (divider === 0) {
-      const combined01 = startWidths[0] + startWidths[1];
-      const newW0 = Math.max(SESSIONS_CARD_MIN_WIDTH, Math.min(combined01 - SESSIONS_CARD_MIN_WIDTH, startWidths[0] + deltaX));
-      const newW1 = combined01 - newW0;
-      const nextRatios: SessionsCardRatios = [
-        newW0 / totalAvail,
-        newW1 / totalAvail,
-        startWidths[2] / totalAvail,
-      ];
-      sessionsRatiosRef.current = nextRatios;
-      setSessionsRatios(nextRatios);
+      const combined01 = startWidths[0] + startWidths[1]
+      const newW0 = Math.max(
+        SESSIONS_CARD_MIN_WIDTH,
+        Math.min(combined01 - SESSIONS_CARD_MIN_WIDTH, startWidths[0] + deltaX),
+      )
+      const newW1 = combined01 - newW0
+      const nextRatios: SessionsCardRatios = [newW0 / totalAvail, newW1 / totalAvail, startWidths[2] / totalAvail]
+      sessionsRatiosRef.current = nextRatios
+      setSessionsRatios(nextRatios)
     } else if (divider === 1) {
-      const combined12 = startWidths[1] + startWidths[2];
-      const newW1 = Math.max(SESSIONS_CARD_MIN_WIDTH, Math.min(combined12 - SESSIONS_CARD_MIN_WIDTH, startWidths[1] + deltaX));
-      const newW2 = combined12 - newW1;
-      const nextRatios: SessionsCardRatios = [
-        startWidths[0] / totalAvail,
-        newW1 / totalAvail,
-        newW2 / totalAvail,
-      ];
-      sessionsRatiosRef.current = nextRatios;
-      setSessionsRatios(nextRatios);
+      const combined12 = startWidths[1] + startWidths[2]
+      const newW1 = Math.max(
+        SESSIONS_CARD_MIN_WIDTH,
+        Math.min(combined12 - SESSIONS_CARD_MIN_WIDTH, startWidths[1] + deltaX),
+      )
+      const newW2 = combined12 - newW1
+      const nextRatios: SessionsCardRatios = [startWidths[0] / totalAvail, newW1 / totalAvail, newW2 / totalAvail]
+      sessionsRatiosRef.current = nextRatios
+      setSessionsRatios(nextRatios)
     }
-  };
+  }
 
   const handleDividerPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
     if (activeDragDividerRef.current) {
       try {
-        event.currentTarget.releasePointerCapture(event.pointerId);
+        event.currentTarget.releasePointerCapture(event.pointerId)
       } catch {
         // Ignore
       }
-      activeDragDividerRef.current = null;
+      activeDragDividerRef.current = null
     }
-  };
+  }
 
   const handleDividerKeyDown = (dividerIndex: number, event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-    event.preventDefault();
-    const tray = sessionsTrayRef.current;
-    const trayRect = tray?.getBoundingClientRect();
-    const totalAvail = Math.max(0, (trayRect?.width ?? 960) - 24);
-    if (totalAvail < SESSIONS_CARD_MIN_WIDTH * 3) return;
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+    event.preventDefault()
+    const tray = sessionsTrayRef.current
+    const trayRect = tray?.getBoundingClientRect()
+    const totalAvail = Math.max(0, (trayRect?.width ?? 960) - 24)
+    if (totalAvail < SESSIONS_CARD_MIN_WIDTH * 3) return
 
-    const step = event.key === "ArrowLeft" ? -16 : 16;
+    const step = event.key === 'ArrowLeft' ? -16 : 16
     const currentWidths: [number, number, number] = [
       sessionsRatiosRef.current[0] * totalAvail,
       sessionsRatiosRef.current[1] * totalAvail,
       sessionsRatiosRef.current[2] * totalAvail,
-    ];
+    ]
 
     if (dividerIndex === 0) {
-      const combined01 = currentWidths[0] + currentWidths[1];
-      const newW0 = Math.max(SESSIONS_CARD_MIN_WIDTH, Math.min(combined01 - SESSIONS_CARD_MIN_WIDTH, currentWidths[0] + step));
-      const newW1 = combined01 - newW0;
-      const nextRatios: SessionsCardRatios = [
-        newW0 / totalAvail,
-        newW1 / totalAvail,
-        currentWidths[2] / totalAvail,
-      ];
-      sessionsRatiosRef.current = nextRatios;
-      setSessionsRatios(nextRatios);
+      const combined01 = currentWidths[0] + currentWidths[1]
+      const newW0 = Math.max(
+        SESSIONS_CARD_MIN_WIDTH,
+        Math.min(combined01 - SESSIONS_CARD_MIN_WIDTH, currentWidths[0] + step),
+      )
+      const newW1 = combined01 - newW0
+      const nextRatios: SessionsCardRatios = [newW0 / totalAvail, newW1 / totalAvail, currentWidths[2] / totalAvail]
+      sessionsRatiosRef.current = nextRatios
+      setSessionsRatios(nextRatios)
     } else if (dividerIndex === 1) {
-      const combined12 = currentWidths[1] + currentWidths[2];
-      const newW1 = Math.max(SESSIONS_CARD_MIN_WIDTH, Math.min(combined12 - SESSIONS_CARD_MIN_WIDTH, currentWidths[1] + step));
-      const newW2 = combined12 - newW1;
-      const nextRatios: SessionsCardRatios = [
-        currentWidths[0] / totalAvail,
-        newW1 / totalAvail,
-        newW2 / totalAvail,
-      ];
-      sessionsRatiosRef.current = nextRatios;
-      setSessionsRatios(nextRatios);
+      const combined12 = currentWidths[1] + currentWidths[2]
+      const newW1 = Math.max(
+        SESSIONS_CARD_MIN_WIDTH,
+        Math.min(combined12 - SESSIONS_CARD_MIN_WIDTH, currentWidths[1] + step),
+      )
+      const newW2 = combined12 - newW1
+      const nextRatios: SessionsCardRatios = [currentWidths[0] / totalAvail, newW1 / totalAvail, newW2 / totalAvail]
+      sessionsRatiosRef.current = nextRatios
+      setSessionsRatios(nextRatios)
     }
-  };
+  }
 
   const closePanel = ({ suppressHover }: { suppressHover: boolean }) => {
-    saveCurrentTabScroll();
-    clearHoverOpenTimer();
-    clearHoverCloseTimer();
-    if (suppressHover) setHoverExpandSuppressed(true);
-    nativeFocusRequestRef.current = false;
+    saveCurrentTabScroll()
+    clearHoverOpenTimer()
+    clearHoverCloseTimer()
+    if (suppressHover) setHoverExpandSuppressed(true)
+    nativeFocusRequestRef.current = false
     if (setupOpen) {
-      setSetupOpen(false);
-      setActiveMainTab(setupOriginTabRef.current || "sessions");
+      setSetupOpen(false)
+      setActiveMainTab(setupOriginTabRef.current || 'sessions')
     }
     if (selectedSessionId) {
-      setSelectedSessionId(null);
-      setActiveMainTab("sessions");
+      setSelectedSessionId(null)
+      setActiveMainTab('sessions')
     }
-    setPanelOpen(false);
-  };
+    setPanelOpen(false)
+  }
 
   const expandPanelOnHover = () => {
-    clearHoverCloseTimer();
-    if (renderPanel || panelOpen || hoverExpandSuppressed) return;
-    if (hoverOpenTimerRef.current !== null) return;
+    clearHoverCloseTimer()
+    if (renderPanel || panelOpen || hoverExpandSuppressed) return
+    if (hoverOpenTimerRef.current !== null) return
     hoverOpenTimerRef.current = window.setTimeout(() => {
-      hoverOpenTimerRef.current = null;
-      if (hoverExpandSuppressed) return;
-      setPanelOpen(true);
-    }, HOVER_OPEN_DELAY_MS);
-  };
+      hoverOpenTimerRef.current = null
+      if (hoverExpandSuppressed) return
+      setPanelOpen(true)
+    }, HOVER_OPEN_DELAY_MS)
+  }
 
   const scheduleHoverClose = () => {
-    clearHoverOpenTimer();
-    setHoverExpandSuppressed(false);
-    if (setupOpen || selectedSessionId || !panelOpen) return;
-    if (keyboardNavigationRef.current && surfaceRef.current?.contains(document.activeElement)) return;
-    if (hoverCloseTimerRef.current !== null) return;
+    clearHoverOpenTimer()
+    setHoverExpandSuppressed(false)
+    if (setupOpen || selectedSessionId || !panelOpen) return
+    if (keyboardNavigationRef.current && surfaceRef.current?.contains(document.activeElement)) return
+    if (hoverCloseTimerRef.current !== null) return
     hoverCloseTimerRef.current = window.setTimeout(() => {
-      hoverCloseTimerRef.current = null;
-      if (keyboardNavigationRef.current && surfaceRef.current?.contains(document.activeElement)) return;
-      closePanel({ suppressHover: false });
-    }, HOVER_CLOSE_DELAY_MS);
-  };
+      hoverCloseTimerRef.current = null
+      if (keyboardNavigationRef.current && surfaceRef.current?.contains(document.activeElement)) return
+      closePanel({ suppressHover: false })
+    }, HOVER_CLOSE_DELAY_MS)
+  }
 
   useEffect(() => {
-    if (!panelOpen || setupOpen || selectedSessionId) return;
+    if (!panelOpen || setupOpen || selectedSessionId) return
 
     const isOutsideSurface = (event: MouseEvent) => {
-      const surface = surfaceRef.current;
-      if (!surface) return false;
-      const rect = surface.getBoundingClientRect();
-      return event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom;
-    };
+      const surface = surfaceRef.current
+      if (!surface) return false
+      const rect = surface.getBoundingClientRect()
+      return (
+        event.clientX < rect.left ||
+        event.clientX > rect.right ||
+        event.clientY < rect.top ||
+        event.clientY > rect.bottom
+      )
+    }
 
     const handleMouseMove = (event: MouseEvent) => {
-      if (isOutsideSurface(event)) scheduleHoverClose();
-    };
+      if (isOutsideSurface(event)) scheduleHoverClose()
+    }
 
     const handleMouseOut = (event: MouseEvent) => {
-      if (event.relatedTarget === null) scheduleHoverClose();
-    };
+      if (event.relatedTarget === null) scheduleHoverClose()
+    }
 
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseout", handleMouseOut);
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseout', handleMouseOut)
     return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseout", handleMouseOut);
-    };
-  }, [panelOpen, selectedSessionId, setupOpen]);
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseout', handleMouseOut)
+    }
+  }, [panelOpen, selectedSessionId, setupOpen])
 
   useEffect(() => {
     if (panelOpen && renderPanel && !setupOpen && !selectedSessionId) {
-      restoreTabScroll(activeMainTab);
+      restoreTabScroll(activeMainTab)
     }
-  }, [activeMainTab, panelOpen, renderPanel, selectedSessionId, setupOpen]);
+  }, [activeMainTab, panelOpen, renderPanel, selectedSessionId, setupOpen])
 
   const resetBoardScroll = () => {
     window.requestAnimationFrame(() => {
-      const inner = sheetInnerRef.current?.querySelector<HTMLElement>("[data-scroll-owner='inner']");
-      if (inner) inner.scrollTop = 0;
-    });
-  };
+      const inner = sheetInnerRef.current?.querySelector<HTMLElement>("[data-scroll-owner='inner']")
+      if (inner) inner.scrollTop = 0
+    })
+  }
 
   const openSession = (conversationId: string) => {
-    rememberFocusOrigin();
-    saveCurrentTabScroll();
-    returnSessionIdRef.current = conversationId;
-    shouldFocusPanelRef.current = true;
-    nativeFocusRequestRef.current = true;
-    clearHoverOpenTimer();
-    clearHoverCloseTimer();
-    setSetupOpen(false);
-    setActiveMainTab("sessions");
-    setSessionAction({ ok: null, message: null });
-    setSelectedSessionId(conversationId);
-    setPanelOpen(true);
-    resetBoardScroll();
-  };
+    rememberFocusOrigin()
+    saveCurrentTabScroll()
+    returnSessionIdRef.current = conversationId
+    shouldFocusPanelRef.current = true
+    nativeFocusRequestRef.current = true
+    clearHoverOpenTimer()
+    clearHoverCloseTimer()
+    setSetupOpen(false)
+    setActiveMainTab('sessions')
+    setSessionAction({ ok: null, message: null })
+    setSelectedSessionId(conversationId)
+    setPanelOpen(true)
+    resetBoardScroll()
+  }
 
   const openSetup = () => {
-    rememberFocusOrigin();
-    saveCurrentTabScroll();
-    returnSessionIdRef.current = null;
-    setupOriginTabRef.current = activeMainTab;
-    shouldFocusPanelRef.current = true;
-    nativeFocusRequestRef.current = true;
-    clearHoverOpenTimer();
-    clearHoverCloseTimer();
-    setSelectedSessionId(null);
-    setSetupOpen(true);
-    setPanelOpen(true);
-    resetBoardScroll();
-  };
+    rememberFocusOrigin()
+    saveCurrentTabScroll()
+    returnSessionIdRef.current = null
+    setupOriginTabRef.current = activeMainTab
+    shouldFocusPanelRef.current = true
+    nativeFocusRequestRef.current = true
+    clearHoverOpenTimer()
+    clearHoverCloseTimer()
+    setSelectedSessionId(null)
+    setSetupOpen(true)
+    setPanelOpen(true)
+    resetBoardScroll()
+  }
 
   const backFromSetup = () => {
-    setSetupOpen(false);
-    const originTab = setupOriginTabRef.current || "sessions";
-    setActiveMainTab(originTab);
-    restoreTabScroll(originTab);
-    restoreFocusOrigin();
-  };
+    setSetupOpen(false)
+    const originTab = setupOriginTabRef.current || 'sessions'
+    setActiveMainTab(originTab)
+    restoreTabScroll(originTab)
+    restoreFocusOrigin()
+  }
 
   const backToSessionsList = () => {
-    setSelectedSessionId(null);
-    restoreTabScroll("sessions");
-    restoreFocusOrigin();
-  };
+    setSelectedSessionId(null)
+    restoreTabScroll('sessions')
+    restoreFocusOrigin()
+  }
 
   const backToSessions = () => {
     if (setupOpen) {
-      backFromSetup();
-      return;
+      backFromSetup()
+      return
     }
     if (selectedSessionId) {
-      backToSessionsList();
-      return;
+      backToSessionsList()
+      return
     }
-    setSelectedSessionId(null);
-    setSetupOpen(false);
-    setActiveMainTab("sessions");
-    restoreFocusOrigin();
-    restoreTabScroll("sessions");
-  };
+    setSelectedSessionId(null)
+    setSetupOpen(false)
+    setActiveMainTab('sessions')
+    restoreFocusOrigin()
+    restoreTabScroll('sessions')
+  }
 
   const activateMainTab = (tab: MainPanelTab) => {
-    saveCurrentTabScroll();
-    setSetupOpen(false);
-    setSelectedSessionId(null);
-    setActiveMainTab(tab);
-    setPanelOpen(true);
-    restoreTabScroll(tab);
-  };
+    saveCurrentTabScroll()
+    setSetupOpen(false)
+    setSelectedSessionId(null)
+    setActiveMainTab(tab)
+    setPanelOpen(true)
+    restoreTabScroll(tab)
+  }
 
   const handleMainTabKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, currentTab: MainPanelTab) => {
-    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-    event.preventDefault();
-    const tabs: MainPanelTab[] = ["sessions", "pomodoro", "usage", "runtime", "services"];
-    const currentIndex = tabs.indexOf(currentTab);
-    const nextTab = event.key === "Home"
-      ? tabs[0]
-      : event.key === "End"
-        ? tabs.at(-1) ?? tabs[0]
-        : tabs[(currentIndex + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length];
-    activateMainTab(nextTab);
-    window.requestAnimationFrame(() => document.getElementById(`main-tab-${nextTab}`)?.focus());
-  };
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+    event.preventDefault()
+    const tabs: MainPanelTab[] = ['sessions', 'pomodoro', 'usage', 'runtime', 'services']
+    const currentIndex = tabs.indexOf(currentTab)
+    const nextTab =
+      event.key === 'Home'
+        ? tabs[0]
+        : event.key === 'End'
+          ? (tabs.at(-1) ?? tabs[0])
+          : tabs[(currentIndex + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length]
+    activateMainTab(nextTab)
+    window.requestAnimationFrame(() => document.getElementById(`main-tab-${nextTab}`)?.focus())
+  }
 
   const handleSurfaceKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (event.key === "Escape") {
-      if (!panelOpen) return;
-      event.preventDefault();
+    if (event.key === 'Escape') {
+      if (!panelOpen) return
+      event.preventDefault()
       if (selectedSessionId || setupOpen) {
-        backToSessions();
-        return;
+        backToSessions()
+        return
       }
-      closePanel({ suppressHover: true });
-      window.requestAnimationFrame(() => surfaceRef.current?.focus({ preventScroll: true }));
-      return;
+      closePanel({ suppressHover: true })
+      window.requestAnimationFrame(() => surfaceRef.current?.focus({ preventScroll: true }))
+      return
     }
 
-    if (event.target !== event.currentTarget || panelOpen || !["Enter", " "].includes(event.key)) return;
-    event.preventDefault();
-    shouldFocusPanelRef.current = true;
-    nativeFocusRequestRef.current = true;
-    setHoverExpandSuppressed(false);
-    setPanelOpen(true);
-  };
+    if (event.target !== event.currentTarget || panelOpen || !['Enter', ' '].includes(event.key)) return
+    event.preventDefault()
+    shouldFocusPanelRef.current = true
+    nativeFocusRequestRef.current = true
+    setHoverExpandSuppressed(false)
+    setPanelOpen(true)
+  }
 
   const updateUsageSettings = (settings: IUsageSettings) => {
-    setUsageSettings(settings);
-    writeUsageSettings(settings);
-  };
+    setUsageSettings(settings)
+    writeUsageSettings(settings)
+  }
 
   const updatePet = (selection: HaloPetName) => {
-    setPet(selection);
-    writeHaloPetPreference(selection);
-    if (petPreviewState === "shown" || petPreviewState === "stale") {
-      setPetPreviewState("stale");
-      setPetPreviewStatus("Settings changed · update preview");
+    setPet(selection)
+    writeHaloPetPreference(selection)
+    if (petPreviewState === 'shown' || petPreviewState === 'stale') {
+      setPetPreviewState('stale')
+      setPetPreviewStatus('Settings changed · update preview')
     }
-  };
+  }
 
   const updateHaloBotLoadout = (selection: HaloBotLoadout) => {
-    setHaloBotLoadout(selection);
-    writeHaloBotLoadoutPreference(selection);
-    if (petPreviewState === "shown" || petPreviewState === "stale") {
-      setPetPreviewState("stale");
-      setPetPreviewStatus("Settings changed · update preview");
+    setHaloBotLoadout(selection)
+    writeHaloBotLoadoutPreference(selection)
+    if (petPreviewState === 'shown' || petPreviewState === 'stale') {
+      setPetPreviewState('stale')
+      setPetPreviewStatus('Settings changed · update preview')
     }
-  };
+  }
 
   const updatePetMotion = (state: HaloPetSemanticState, motion: HaloPetMotion) => {
     setPetMotionMapping((current) => {
-      const next = { ...current, [state]: motion };
-      writeHaloPetMotionMapping(next);
-      return next;
-    });
-  };
+      const next = { ...current, [state]: motion }
+      writeHaloPetMotionMapping(next)
+      return next
+    })
+  }
 
   const resetPetMotionMapping = () => {
-    const next = { ...DEFAULT_HALO_PET_MOTION_MAPPING };
-    setPetMotionMapping(next);
-    writeHaloPetMotionMapping(next);
-  };
+    const next = { ...DEFAULT_HALO_PET_MOTION_MAPPING }
+    setPetMotionMapping(next)
+    writeHaloPetMotionMapping(next)
+  }
 
   const updateCompletionPetEnabled = (enabled: boolean) => {
-    completionPetEnabledRef.current = enabled;
-    completionPetSummonGenerationRef.current += 1;
-    setCompletionPetEnabled(enabled);
-    writeCompletionPetEnabled(enabled);
-    if (!enabled && canUseNativeControls && activePetSummon?.purpose === "focus-completion") {
-      setActivePetSummon(null);
-      void invoke("hide_completion_pet").catch(() => undefined);
+    completionPetEnabledRef.current = enabled
+    completionPetSummonGenerationRef.current += 1
+    setCompletionPetEnabled(enabled)
+    writeCompletionPetEnabled(enabled)
+    if (!enabled && canUseNativeControls && activePetSummon?.purpose === 'focus-completion') {
+      setActivePetSummon(null)
+      void invoke('hide_completion_pet').catch(() => undefined)
     }
-  };
+  }
 
   const updateMovementBreakEnabled = (enabled: boolean) => {
-    setMovementBreakEnabled(enabled);
-    writeMovementBreakEnabled(enabled);
-  };
+    setMovementBreakEnabled(enabled)
+    writeMovementBreakEnabled(enabled)
+  }
 
   const updateCompletionPetSize = (size: CompletionPetSize) => {
-    setCompletionPetSize(size);
-    writeCompletionPetSize(size);
-    if (petPreviewState === "shown" || petPreviewState === "stale") {
-      setPetPreviewState("stale");
-      setPetPreviewStatus("Settings changed · update preview");
+    setCompletionPetSize(size)
+    writeCompletionPetSize(size)
+    if (petPreviewState === 'shown' || petPreviewState === 'stale') {
+      setPetPreviewState('stale')
+      setPetPreviewStatus('Settings changed · update preview')
     }
-  };
+  }
 
   const resetAllPomodoroCycle = () => {
-    completionPetSummonGenerationRef.current += 1;
-    if (canUseNativeControls && activePetSummon?.purpose === "focus-completion") {
-      setActivePetSummon(null);
-      void invoke("hide_completion_pet").catch(() => undefined);
+    completionPetSummonGenerationRef.current += 1
+    if (canUseNativeControls && activePetSummon?.purpose === 'focus-completion') {
+      setActivePetSummon(null)
+      void invoke('hide_completion_pet').catch(() => undefined)
     }
-    pomodoro.resetAll();
-  };
+    pomodoro.resetAll()
+  }
 
   const showManualCompanion = async (requestedExerciseId?: MovementExerciseId): Promise<boolean> => {
     const summon: ICompletionPetSummon = {
       schemaVersion: 2,
-      id: `manual-companion-${Date.now()}${requestedExerciseId ? `-${requestedExerciseId}` : ""}`,
-      purpose: "manual-companion",
+      id: `manual-companion-${Date.now()}${requestedExerciseId ? `-${requestedExerciseId}` : ''}`,
+      purpose: 'manual-companion',
       pet,
-      loadout: pet === "halo-bot" ? haloBotLoadout : undefined,
+      loadout: pet === 'halo-bot' ? haloBotLoadout : undefined,
       petSize: completionPetSize,
       nextPhase: null,
       ...(requestedExerciseId ? { requestedExerciseId } : {}),
-    };
-    return showCompanionSummon(summon);
-  };
+    }
+    return showCompanionSummon(summon)
+  }
 
   const showPetPreview = async (): Promise<void> => {
     if (!canUseNativeControls) {
-      setPetPreviewState("error");
-      setPetPreviewStatus("Desktop runtime required");
-      return;
+      setPetPreviewState('error')
+      setPetPreviewStatus('Desktop runtime required')
+      return
     }
-    setPetPreviewState("showing");
-    setPetPreviewStatus("Showing Pet preview…");
+    setPetPreviewState('showing')
+    setPetPreviewStatus('Showing Pet preview…')
     try {
       const shown = await showCompanionSummon({
         schemaVersion: 2,
         id: `pet-preview-${Date.now()}`,
-        purpose: "setup-preview",
+        purpose: 'setup-preview',
         pet,
-        loadout: pet === "halo-bot" ? haloBotLoadout : undefined,
+        loadout: pet === 'halo-bot' ? haloBotLoadout : undefined,
         petSize: completionPetSize,
         nextPhase: null,
-      });
-      setPetPreviewState(shown ? "shown" : "error");
-      setPetPreviewStatus(shown ? "Pet preview shown" : "Pet preview was superseded");
+      })
+      setPetPreviewState(shown ? 'shown' : 'error')
+      setPetPreviewStatus(shown ? 'Pet preview shown' : 'Pet preview was superseded')
     } catch (error) {
-      setPetPreviewState("error");
-      setPetPreviewStatus(error instanceof Error ? error.message : "Could not show Pet preview");
+      setPetPreviewState('error')
+      setPetPreviewStatus(error instanceof Error ? error.message : 'Could not show Pet preview')
     }
-  };
+  }
 
   const updateKeepAwakeEnabled = (enabled: boolean) => {
-    setKeepAwakeEnabled(enabled);
-    writeKeepAwakeEnabled(enabled);
-  };
+    setKeepAwakeEnabled(enabled)
+    writeKeepAwakeEnabled(enabled)
+  }
 
   const dismissSession = (conversationId: string) => {
     setDismissedSessionIds((current) => {
-      const next = { ...current, [conversationId]: Date.now() };
-      writeDismissedSessionIds(next);
-      return next;
-    });
-    if (conversationId === presence.conversationId) setAcknowledgedConversationId(conversationId);
-    if (selectedSessionId === conversationId) setSelectedSessionId(null);
-  };
+      const next = { ...current, [conversationId]: Date.now() }
+      writeDismissedSessionIds(next)
+      return next
+    })
+    if (conversationId === presence.conversationId) setAcknowledgedConversationId(conversationId)
+    if (selectedSessionId === conversationId) setSelectedSessionId(null)
+  }
 
   const clearCompletedSessionGroup = (group: IWorkspaceSessionGroup) => {
-    const completed = group.sessions.filter((session) => session.status === "done");
-    if (completed.length === 0) return;
-    const clearedAt = Date.now();
+    const completed = group.sessions.filter((session) => session.status === 'done')
+    if (completed.length === 0) return
+    const clearedAt = Date.now()
     setDismissedSessionIds((current) => {
-      const next = { ...current };
-      for (const session of completed) next[session.conversationId] = clearedAt;
-      writeDismissedSessionIds(next);
-      return next;
-    });
-    if (selectedSessionId && completed.some((session) => session.conversationId === selectedSessionId)) setSelectedSessionId(null);
-  };
+      const next = { ...current }
+      for (const session of completed) next[session.conversationId] = clearedAt
+      writeDismissedSessionIds(next)
+      return next
+    })
+    if (selectedSessionId && completed.some((session) => session.conversationId === selectedSessionId))
+      setSelectedSessionId(null)
+  }
 
   const clearCompletedSessions = () => {
     if (!clearCompletedArmed) {
-      setClearCompletedArmed(true);
-      return;
+      setClearCompletedArmed(true)
+      return
     }
 
-    const clearedAt = Date.now();
+    const clearedAt = Date.now()
     setDismissedSessionIds((current) => {
-      const next = { ...current };
-      for (const session of completedSessions) next[session.conversationId] = clearedAt;
-      writeDismissedSessionIds(next);
-      return next;
-    });
-    setAcknowledgedConversationId(null);
-    if (selectedSessionId && completedSessions.some((session) => session.conversationId === selectedSessionId)) setSelectedSessionId(null);
-    setClearCompletedArmed(false);
-  };
+      const next = { ...current }
+      for (const session of completedSessions) next[session.conversationId] = clearedAt
+      writeDismissedSessionIds(next)
+      return next
+    })
+    setAcknowledgedConversationId(null)
+    if (selectedSessionId && completedSessions.some((session) => session.conversationId === selectedSessionId))
+      setSelectedSessionId(null)
+    setClearCompletedArmed(false)
+  }
 
   const toggleSessionGroup = (groupKey: string) => {
     setExpandedSessionGroupKeys((current) => {
-      const next = new Set(current);
-      if (next.has(groupKey)) next.delete(groupKey);
-      else next.add(groupKey);
-      return next;
-    });
-  };
+      const next = new Set(current)
+      if (next.has(groupKey)) next.delete(groupKey)
+      else next.add(groupKey)
+      return next
+    })
+  }
 
   const deleteSessions = (conversationIds: string[]) => {
-    const removing = new Set(conversationIds);
-    if (removing.size === 0) return;
-    const deletedAt = Date.now();
-    setSessionAction({ ok: null, message: null });
+    const removing = new Set(conversationIds)
+    if (removing.size === 0) return
+    const deletedAt = Date.now()
+    setSessionAction({ ok: null, message: null })
     setSessionEventRegistry((current) => {
-      const next = { ...current };
-      for (const conversationId of removing) delete next[conversationId];
-      writeSessionEventRegistry(next);
-      return next;
-    });
+      const next = { ...current }
+      for (const conversationId of removing) delete next[conversationId]
+      writeSessionEventRegistry(next)
+      return next
+    })
     setDismissedSessionIds((current) => {
-      const next = { ...current };
-      for (const conversationId of removing) delete next[conversationId];
-      writeDismissedSessionIds(next);
-      return next;
-    });
+      const next = { ...current }
+      for (const conversationId of removing) delete next[conversationId]
+      writeDismissedSessionIds(next)
+      return next
+    })
     setDeletedSessionIds((current) => {
-      const next = { ...current };
-      for (const conversationId of removing) next[conversationId] = deletedAt;
-      writeDeletedSessionIds(next);
-      return next;
-    });
-    if (acknowledgedConversationId && removing.has(acknowledgedConversationId)) setAcknowledgedConversationId(null);
-    if (selectedSessionId && removing.has(selectedSessionId)) setSelectedSessionId(null);
-  };
+      const next = { ...current }
+      for (const conversationId of removing) next[conversationId] = deletedAt
+      writeDeletedSessionIds(next)
+      return next
+    })
+    if (acknowledgedConversationId && removing.has(acknowledgedConversationId)) setAcknowledgedConversationId(null)
+    if (selectedSessionId && removing.has(selectedSessionId)) setSelectedSessionId(null)
+  }
 
   const deleteSession = (conversationId: string) => {
-    deleteSessions([conversationId]);
-  };
+    deleteSessions([conversationId])
+  }
 
   const requestRemoveSessionHistory = (conversationId: string) => {
     if (pendingRemoveHistoryId !== conversationId) {
-      setPendingRemoveHistoryId(conversationId);
-      return;
+      setPendingRemoveHistoryId(conversationId)
+      return
     }
-    deleteSession(conversationId);
-    setPendingRemoveHistoryId(null);
-  };
+    deleteSession(conversationId)
+    setPendingRemoveHistoryId(null)
+  }
 
   const requestRemoveInactiveSessionGroup = (groupKey: string, group: IWorkspaceSessionGroup) => {
-    if (!group.sessions.every((session) => session.status === "inactive")) return;
-    const removalId = getGroupRemovalId(groupKey, group);
+    if (!group.sessions.every((session) => session.status === 'inactive')) return
+    const removalId = getGroupRemovalId(groupKey, group)
     if (pendingGroupHistoryRemoval !== removalId) {
-      setPendingGroupHistoryRemoval(removalId);
-      return;
+      setPendingGroupHistoryRemoval(removalId)
+      return
     }
-    deleteSessions(group.sessions.map((session) => session.conversationId));
-    setPendingGroupHistoryRemoval(null);
-  };
+    deleteSessions(group.sessions.map((session) => session.conversationId))
+    setPendingGroupHistoryRemoval(null)
+  }
 
   const handleSessionGroupAction = (groupKey: string, group: IWorkspaceSessionGroup) => {
-    if (group.sessions.every((session) => session.status === "done")) clearCompletedSessionGroup(group);
-    else requestRemoveInactiveSessionGroup(groupKey, group);
-  };
+    if (group.sessions.every((session) => session.status === 'done')) clearCompletedSessionGroup(group)
+    else requestRemoveInactiveSessionGroup(groupKey, group)
+  }
 
   const loadModStatus = async () => {
     if (!canUseNativeControls) {
-      setModStatus({ path: null, installed: null });
-      return;
+      setModStatus({ path: null, installed: null })
+      return
     }
 
     try {
-      const [path, installed] = await invoke<[string, boolean]>("agent_halo_mod_status");
-      setModStatus({ path, installed });
+      const [path, installed] = await invoke<[string, boolean]>('agent_halo_mod_status')
+      setModStatus({ path, installed })
     } catch {
-      setModStatus({ path: null, installed: null });
+      setModStatus({ path: null, installed: null })
     }
-  };
+  }
 
   const loadAgyHookStatus = async () => {
     if (!canUseNativeControls) {
-      setAgyHookStatus({ path: null, installed: null });
-      return;
+      setAgyHookStatus({ path: null, installed: null })
+      return
     }
 
     try {
-      const [path, installed] = await invoke<[string, boolean]>("agent_halo_agy_hook_status");
-      setAgyHookStatus({ path, installed });
+      const [path, installed] = await invoke<[string, boolean]>('agent_halo_agy_hook_status')
+      setAgyHookStatus({ path, installed })
     } catch {
-      setAgyHookStatus({ path: null, installed: null });
+      setAgyHookStatus({ path: null, installed: null })
     }
-  };
+  }
 
   const loadDisplayState = async () => {
     if (!canUseNativeControls) {
-      applyDisplayState(null);
-      setDisplayError(null);
-      return;
+      applyDisplayState(null)
+      setDisplayError(null)
+      return
     }
-    if (displayRequestBusyRef.current) return;
+    if (displayRequestBusyRef.current) return
 
-    displayRequestBusyRef.current = true;
-    setDisplayLoading(true);
+    displayRequestBusyRef.current = true
+    setDisplayLoading(true)
     try {
-      const next = await invoke<IDisplayStateSnapshot>("display_state");
-      applyDisplayState(next);
-      setDisplayError(null);
+      const next = await invoke<IDisplayStateSnapshot>('display_state')
+      applyDisplayState(next)
+      setDisplayError(null)
     } catch (error) {
-      setDisplayError(error instanceof Error ? error.message : "Could not read connected displays");
+      setDisplayError(error instanceof Error ? error.message : 'Could not read connected displays')
     } finally {
-      displayRequestBusyRef.current = false;
-      setDisplayLoading(false);
+      displayRequestBusyRef.current = false
+      setDisplayLoading(false)
     }
-  };
+  }
 
   const updateDisplay = async (displayId: string) => {
-    if (!canUseNativeControls) return;
-    if (displayRequestBusyRef.current) return;
-    displayRequestBusyRef.current = true;
-    setDisplayLoading(true);
+    if (!canUseNativeControls) return
+    if (displayRequestBusyRef.current) return
+    displayRequestBusyRef.current = true
+    setDisplayLoading(true)
     try {
-      const next = await invoke<IDisplayStateSnapshot>("select_display", { displayId });
-      applyDisplayState(next);
-      setDisplayError(null);
-      await refreshNotchMetrics();
+      const next = await invoke<IDisplayStateSnapshot>('select_display', { displayId })
+      applyDisplayState(next)
+      setDisplayError(null)
+      await refreshNotchMetrics()
     } catch (error) {
-      setDisplayError(error instanceof Error ? error.message : "Could not move Agent Halo to that display");
+      setDisplayError(error instanceof Error ? error.message : 'Could not move Agent Halo to that display')
     } finally {
-      displayRequestBusyRef.current = false;
-      setDisplayLoading(false);
+      displayRequestBusyRef.current = false
+      setDisplayLoading(false)
     }
-  };
+  }
 
   const acknowledgeDone = () => {
-    const conversationId = activitySession?.status === "done" ? activitySession.conversationId : presence.conversationId;
-    setAcknowledgedConversationId(conversationId);
-    setSelectedSessionId(null);
-    setPanelOpen(false);
-  };
+    const conversationId = activitySession?.status === 'done' ? activitySession.conversationId : presence.conversationId
+    setAcknowledgedConversationId(conversationId)
+    setSelectedSessionId(null)
+    setPanelOpen(false)
+  }
 
   const checkBridge = async () => {
     if (!canUseNativeControls) {
-      setNativeAction({ bridgeOnline: null, message: "Native controls need Tauri runtime" });
-      return;
+      setNativeAction({ bridgeOnline: null, message: 'Native controls need Tauri runtime' })
+      return
     }
 
     try {
-      const online = await invoke<boolean>("bridge_health");
-      const refreshed = online ? await refreshCapabilities() : false;
-      setNativeAction({ bridgeOnline: online, message: online ? (refreshed ? "Bridge reachable · capabilities synced" : "Bridge reachable") : "Bridge offline" });
+      const online = await invoke<boolean>('bridge_health')
+      const refreshed = online ? await refreshCapabilities() : false
+      setNativeAction({
+        bridgeOnline: online,
+        message: online
+          ? refreshed
+            ? 'Bridge reachable · capabilities synced'
+            : 'Bridge reachable'
+          : 'Bridge offline',
+      })
     } catch (error) {
-      setNativeAction({ bridgeOnline: false, message: error instanceof Error ? error.message : "Native bridge check unavailable" });
+      setNativeAction({
+        bridgeOnline: false,
+        message: error instanceof Error ? error.message : 'Native bridge check unavailable',
+      })
     }
-  };
+  }
 
   const installMod = async () => {
     if (!canUseNativeControls) {
-      setNativeAction({ bridgeOnline: nativeAction.bridgeOnline, message: "Open with pnpm desktop:dev" });
-      return;
+      setNativeAction({ bridgeOnline: nativeAction.bridgeOnline, message: 'Open with pnpm desktop:dev' })
+      return
     }
 
     try {
-      const path = await invoke<string>("install_agent_halo_mod");
-      setModStatus({ path, installed: true });
-      setNativeAction({ bridgeOnline: nativeAction.bridgeOnline, message: `Installed → ${shortenPath(path)} · reload Letta Code` });
+      const path = await invoke<string>('install_agent_halo_mod')
+      setModStatus({ path, installed: true })
+      setNativeAction({
+        bridgeOnline: nativeAction.bridgeOnline,
+        message: `Installed → ${shortenPath(path)} · reload Letta Code`,
+      })
     } catch (error) {
       setNativeAction({
         bridgeOnline: nativeAction.bridgeOnline,
-        message: error instanceof Error ? error.message : "Install failed; run pnpm mod:install",
-      });
+        message: error instanceof Error ? error.message : 'Install failed; run pnpm mod:install',
+      })
     }
-  };
+  }
 
   const installAgyHooks = async () => {
     if (!canUseNativeControls) {
-      setNativeAction({ bridgeOnline: nativeAction.bridgeOnline, message: "Open with pnpm desktop:dev" });
-      return;
+      setNativeAction({ bridgeOnline: nativeAction.bridgeOnline, message: 'Open with pnpm desktop:dev' })
+      return
     }
 
     try {
-      const path = await invoke<string>("install_agent_halo_agy_hooks");
-      setAgyHookStatus({ path, installed: true });
-      setNativeAction({ bridgeOnline: nativeAction.bridgeOnline, message: `Installed → ${shortenPath(path)}` });
+      const path = await invoke<string>('install_agent_halo_agy_hooks')
+      setAgyHookStatus({ path, installed: true })
+      setNativeAction({ bridgeOnline: nativeAction.bridgeOnline, message: `Installed → ${shortenPath(path)}` })
     } catch (error) {
       setNativeAction({
         bridgeOnline: nativeAction.bridgeOnline,
-        message: error instanceof Error ? error.message : "AGY hooks install failed",
-      });
+        message: error instanceof Error ? error.message : 'AGY hooks install failed',
+      })
     }
-  };
+  }
 
   const focusSelectedSession = async (session: ISessionDetail | ISessionSummary) => {
     if (!canUseNativeControls) {
-      setSessionAction({ ok: false, message: "Focus needs the desktop runtime" });
-      return;
+      setSessionAction({ ok: false, message: 'Focus needs the desktop runtime' })
+      return
     }
 
     try {
-      const message = await invoke<string>("focus_terminal", {
+      const message = await invoke<string>('focus_terminal', {
         conversationId: session.conversationId,
-        cwd: "cwd" in session ? session.cwd : session.workspacePath,
+        cwd: 'cwd' in session ? session.cwd : session.workspacePath,
         herdrSocketPath: session.herdrTarget?.socketPath ?? null,
         herdrPaneId: session.herdrTarget?.paneId ?? null,
         herdrSourcePid: session.herdrTarget?.sourcePid ?? null,
         herdrSourceStartedAtMs: session.herdrTarget?.sourceStartedAtMs ?? null,
-      });
-      const exactMatch = message.startsWith("Focused Herdr ·") || message.startsWith("Focused Ghostty ·");
-      setSessionAction({ ok: exactMatch, message });
-      if (exactMatch) closePanel({ suppressHover: true });
+      })
+      const exactMatch = message.startsWith('Focused Herdr ·') || message.startsWith('Focused Ghostty ·')
+      setSessionAction({ ok: exactMatch, message })
+      if (exactMatch) closePanel({ suppressHover: true })
     } catch (error) {
-      setSessionAction({ ok: false, message: error instanceof Error ? error.message : "Terminal focus failed" });
+      setSessionAction({ ok: false, message: error instanceof Error ? error.message : 'Terminal focus failed' })
     }
-  };
+  }
 
   useEffect(() => {
     if (setupOpen) {
-      void loadModStatus();
-      void loadAgyHookStatus();
-      void loadDisplayState();
-      void checkBridge();
+      void loadModStatus()
+      void loadAgyHookStatus()
+      void loadDisplayState()
+      void checkBridge()
     }
-  }, [setupOpen]);
+  }, [setupOpen])
 
   return (
-    <main className="overlay-root" data-live={hasLiveActivity ? "true" : "false"} data-running={isWorkingActivity || (showPomodoroActivity && pomodoro.state.status === "running") || (!hasCriticalAgentActivity && stopwatch.state.status === "running") ? "true" : "false"} data-status={activityViewStatus} data-pomodoro-status={pomodoro.state.status} data-pomodoro-complete={pomodoro.completionVisible ? "true" : "false"} data-stopwatch-status={stopwatch.state.status}>
-      <section className={`notch-wrap ${surfaceState === "open" ? "is-open" : surfaceState === "closing" ? "is-closing" : ""}`} style={notchStyle}>
+    <main
+      className="overlay-root"
+      data-live={hasLiveActivity ? 'true' : 'false'}
+      data-running={
+        isWorkingActivity ||
+        (showPomodoroActivity && pomodoro.state.status === 'running') ||
+        (!hasCriticalAgentActivity && stopwatch.state.status === 'running')
+          ? 'true'
+          : 'false'
+      }
+      data-status={activityViewStatus}
+      data-pomodoro-status={pomodoro.state.status}
+      data-pomodoro-complete={pomodoro.completionVisible ? 'true' : 'false'}
+      data-stopwatch-status={stopwatch.state.status}
+    >
+      <section
+        className={`notch-wrap ${surfaceState === 'open' ? 'is-open' : surfaceState === 'closing' ? 'is-closing' : ''}`}
+        style={notchStyle}
+      >
         <div
           ref={surfaceRef}
           className="halo-surface"
@@ -1730,33 +1994,47 @@ const App = () => {
           onMouseEnter={expandPanelOnHover}
           onMouseLeave={scheduleHoverClose}
           onPointerLeave={scheduleHoverClose}
-          onPointerMove={() => { keyboardNavigationRef.current = false; }}
+          onPointerMove={() => {
+            keyboardNavigationRef.current = false
+          }}
           onClick={(event) => {
-            if (event.target !== event.currentTarget || panelOpen) return;
-            nativeFocusRequestRef.current = true;
-            setPanelOpen(true);
+            if (event.target !== event.currentTarget || panelOpen) return
+            nativeFocusRequestRef.current = true
+            setPanelOpen(true)
           }}
           onKeyDown={handleSurfaceKeyDown}
-          role={renderPanel ? "region" : "button"}
-          aria-label={renderPanel ? "Agent Halo panel" : closedSurfaceLabel}
+          role={renderPanel ? 'region' : 'button'}
+          aria-label={renderPanel ? 'Agent Halo panel' : closedSurfaceLabel}
           aria-expanded={panelOpen}
           tabIndex={renderPanel ? -1 : 0}
           data-tauri-drag-region="false"
         >
-          <svg className="halo-shape" viewBox={`0 0 ${shapeMetrics.width} ${shapeMetrics.height}`} preserveAspectRatio="none" aria-hidden="true" focusable="false">
+          <svg
+            className="halo-shape"
+            viewBox={`0 0 ${shapeMetrics.width} ${shapeMetrics.height}`}
+            preserveAspectRatio="none"
+            aria-hidden="true"
+            focusable="false"
+          >
             <path d={notchShapePath} />
           </svg>
-          <div className="surface-pill" aria-hidden={surfaceState === "open"}>
-            <div className={`notch-wing notch-wing-left ${showPomodoroActivity ? "is-pomodoro" : showStopwatchActivity ? "is-stopwatch" : ""}`}>
+          <div className="surface-pill" aria-hidden={surfaceState === 'open'}>
+            <div
+              className={`notch-wing notch-wing-left ${showPomodoroActivity ? 'is-pomodoro' : showStopwatchActivity ? 'is-stopwatch' : ''}`}
+            >
               {hasLiveActivity ? (
                 showPomodoroActivity ? (
                   <>
-                    <span className="pomodoro-pill-icon"><Timer size={12} strokeWidth={2.4} /></span>
+                    <span className="pomodoro-pill-icon">
+                      <Timer size={12} strokeWidth={2.4} />
+                    </span>
                     <span className="pill-detail">{pillDetail}</span>
                   </>
                 ) : showStopwatchActivity ? (
                   <>
-                    <span className="stopwatch-pill-icon"><Clock3 size={12} strokeWidth={2.4} /></span>
+                    <span className="stopwatch-pill-icon">
+                      <Clock3 size={12} strokeWidth={2.4} />
+                    </span>
                     <span className="pill-detail">{pillDetail}</span>
                   </>
                 ) : (
@@ -1768,377 +2046,483 @@ const App = () => {
               ) : null}
             </div>
             <div className="camera-spacer" aria-hidden="true" />
-            <div className={`notch-wing notch-wing-right ${showPomodoroActivity ? "is-pomodoro" : showStopwatchActivity ? "is-stopwatch" : ""}`} aria-hidden="true">
-              {showPomodoroActivity ? <span className={hasStopwatchActivity ? "stopwatch-pill-secondary" : "pomodoro-pill-phase"}>{hasStopwatchActivity ? stopwatchDetail : pomodoroPhaseDetail}</span> : showStopwatchActivity ? <span className="stopwatch-pill-context">{stopwatch.state.status === "paused" ? "Paused" : "Stopwatch"}</span> : hasLiveActivity ? <ActivityPet activityKind={activityKind} loadout={haloBotLoadout} motionMapping={petMotionMapping} pet={pet} status={activityStatus} /> : null}
+            <div
+              className={`notch-wing notch-wing-right ${showPomodoroActivity ? 'is-pomodoro' : showStopwatchActivity ? 'is-stopwatch' : ''}`}
+              aria-hidden="true"
+            >
+              {showPomodoroActivity ? (
+                <span className={hasStopwatchActivity ? 'stopwatch-pill-secondary' : 'pomodoro-pill-phase'}>
+                  {hasStopwatchActivity ? stopwatchDetail : pomodoroPhaseDetail}
+                </span>
+              ) : showStopwatchActivity ? (
+                <span className="stopwatch-pill-context">
+                  {stopwatch.state.status === 'paused' ? 'Paused' : 'Stopwatch'}
+                </span>
+              ) : hasLiveActivity ? (
+                <ActivityPet
+                  activityKind={activityKind}
+                  loadout={haloBotLoadout}
+                  motionMapping={petMotionMapping}
+                  pet={pet}
+                  status={activityStatus}
+                />
+              ) : null}
             </div>
           </div>
 
-          {renderPanel ? <div className="sheet-inner" ref={sheetInnerRef}>
-            {selectedSession ? (
-              <div className="sheet-header detail-header" data-tauri-drag-region="false">
-                <div className="header-brand">
-                  <button
-                    className="gear-btn"
-                    type="button"
-                    onClick={backToSessionsList}
-                    data-tauri-drag-region="false"
-                    title="Back to sessions"
-                    aria-label="Back to sessions"
-                  >
-                    <ChevronLeft size={14} strokeWidth={2.3} />
-                  </button>
-                  <StatusGlyph status={selectedSession.status} />
-                  <span className="header-title">{headerLabel}</span>
-                </div>
-                <div className="header-camera-corridor" aria-hidden="true" />
-                <div className="header-right-wing">
-                  <button
-                    className="header-close-btn"
-                    type="button"
-                    aria-label="Close"
-                    title="Close"
-                    onClick={() => closePanel({ suppressHover: true })}
-                    data-tauri-drag-region="false"
-                  >
-                    <X size={14} strokeWidth={2.2} />
-                  </button>
-                </div>
-              </div>
-            ) : setupOpen ? (
-              <div className="sheet-header detail-header" data-tauri-drag-region="false">
-                <div className="header-brand">
-                  <button
-                    className="gear-btn"
-                    type="button"
-                    onClick={backFromSetup}
-                    data-panel-focus-target
-                    data-tauri-drag-region="false"
-                    title={`Back to ${setupOriginTabRef.current || "sessions"}`}
-                    aria-label={`Back to ${setupOriginTabRef.current || "sessions"}`}
-                  >
-                    <ChevronLeft size={14} strokeWidth={2.3} />
-                  </button>
-                  <span className="status-slot"><Settings className="setup-icon" size={14} strokeWidth={2.3} /></span>
-                  <span className="header-title">Setup</span>
-                </div>
-                <div className="header-camera-corridor" aria-hidden="true" />
-                <div className="header-right-wing">
-                  {DEMO_MODE ? <span className="agent-badge">DEMO</span> : null}
-                  <button
-                    className="header-close-btn"
-                    type="button"
-                    aria-label="Close"
-                    title="Close"
-                    onClick={() => closePanel({ suppressHover: true })}
-                    data-tauri-drag-region="false"
-                  >
-                    <X size={14} strokeWidth={2.2} />
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="sheet-header" data-tauri-drag-region="false">
-                <div className="header-brand">
-                  <div className="header-brand-logo">
-                    <Activity size={13} strokeWidth={2.4} />
+          {renderPanel ? (
+            <div className="sheet-inner" ref={sheetInnerRef}>
+              {selectedSession ? (
+                <div className="sheet-header detail-header" data-tauri-drag-region="false">
+                  <div className="header-brand">
+                    <button
+                      className="gear-btn"
+                      type="button"
+                      onClick={backToSessionsList}
+                      data-tauri-drag-region="false"
+                      title="Back to sessions"
+                      aria-label="Back to sessions"
+                    >
+                      <ChevronLeft size={14} strokeWidth={2.3} />
+                    </button>
+                    <StatusGlyph status={selectedSession.status} />
+                    <span className="header-title">{headerLabel}</span>
                   </div>
-                  <span className="header-brand-name">Agent Halo</span>
-                  <span className="bridge-dot" data-connected={isConnected} title={connectionTitle} />
-                  {DEMO_MODE ? <span className="agent-badge">DEMO</span> : null}
-                </div>
-                <div className="header-camera-corridor" aria-hidden="true" />
-                <div className="header-right-wing">
-                  <div className="header-tabs-rail">
-                    <div className="header-tablist" role="tablist" aria-label="Agent Halo sections">
-                      <button
-                        id="main-tab-sessions"
-                        className="header-tab-discrete"
-                        data-active={activeMainTab === "sessions"}
-                        data-panel-focus-target={activeMainTab === "sessions" ? "true" : undefined}
-                        type="button"
-                        role="tab"
-                        aria-label="Sessions"
-                        aria-selected={activeMainTab === "sessions"}
-                        aria-controls="main-panel-sessions"
-                        tabIndex={activeMainTab === "sessions" ? 0 : -1}
-                        onKeyDown={(event) => handleMainTabKeyDown(event, "sessions")}
-                        onClick={(event) => { event.stopPropagation(); activateMainTab("sessions"); }}
-                        data-tauri-drag-region="false"
-                        title="Sessions"
-                      >
-                        <List size={13} strokeWidth={2.3} />
-                        <span className="tab-label">Sessions</span>
-                        <span className="tab-active-indicator" data-tab="sessions" aria-hidden="true" />
-                      </button>
-                      <button
-                        id="main-tab-pomodoro"
-                        className="header-tab-discrete"
-                        data-active={activeMainTab === "pomodoro"}
-                        data-panel-focus-target={activeMainTab === "pomodoro" ? "true" : undefined}
-                        type="button"
-                        role="tab"
-                        aria-label="Focus"
-                        aria-selected={activeMainTab === "pomodoro"}
-                        aria-controls="main-panel-pomodoro"
-                        tabIndex={activeMainTab === "pomodoro" ? 0 : -1}
-                        onKeyDown={(event) => handleMainTabKeyDown(event, "pomodoro")}
-                        onClick={(event) => { event.stopPropagation(); activateMainTab("pomodoro"); }}
-                        data-tauri-drag-region="false"
-                        title="Focus"
-                      >
-                        <Timer size={13} strokeWidth={2.3} />
-                        <span className="tab-label">Focus</span>
-                        <span className="tab-active-indicator" data-tab="pomodoro" aria-hidden="true" />
-                      </button>
-                      <button
-                        id="main-tab-usage"
-                        className="header-tab-discrete"
-                        data-active={activeMainTab === "usage"}
-                        data-panel-focus-target={activeMainTab === "usage" ? "true" : undefined}
-                        type="button"
-                        role="tab"
-                        aria-label="Usage"
-                        aria-selected={activeMainTab === "usage"}
-                        aria-controls="main-panel-usage"
-                        tabIndex={activeMainTab === "usage" ? 0 : -1}
-                        onKeyDown={(event) => handleMainTabKeyDown(event, "usage")}
-                        onClick={(event) => { event.stopPropagation(); activateMainTab("usage"); }}
-                        data-tauri-drag-region="false"
-                        title="Usage"
-                      >
-                        <BarChart3 size={13} strokeWidth={2.3} />
-                        <span className="tab-label">Usage</span>
-                        <span className="tab-active-indicator" data-tab="usage" aria-hidden="true" />
-                      </button>
-                      <button
-                        id="main-tab-runtime"
-                        className="header-tab-discrete"
-                        data-active={activeMainTab === "runtime"}
-                        data-panel-focus-target={activeMainTab === "runtime" ? "true" : undefined}
-                        type="button"
-                        role="tab"
-                        aria-label="Runtime"
-                        aria-selected={activeMainTab === "runtime"}
-                        aria-controls="main-panel-runtime"
-                        tabIndex={activeMainTab === "runtime" ? 0 : -1}
-                        onKeyDown={(event) => handleMainTabKeyDown(event, "runtime")}
-                        onClick={(event) => { event.stopPropagation(); activateMainTab("runtime"); }}
-                        data-tauri-drag-region="false"
-                        title="Runtime"
-                      >
-                        <Activity size={13} strokeWidth={2.3} />
-                        <span className="tab-label">Runtime</span>
-                        <span className="tab-active-indicator" data-tab="runtime" aria-hidden="true" />
-                      </button>
-                      <button
-                        id="main-tab-services"
-                        className="header-tab-discrete"
-                        data-active={activeMainTab === "services"}
-                        data-panel-focus-target={activeMainTab === "services" ? "true" : undefined}
-                        type="button"
-                        role="tab"
-                        aria-label="Services"
-                        aria-selected={activeMainTab === "services"}
-                        aria-controls="main-panel-services"
-                        tabIndex={activeMainTab === "services" ? 0 : -1}
-                        onKeyDown={(event) => handleMainTabKeyDown(event, "services")}
-                        onClick={(event) => { event.stopPropagation(); activateMainTab("services"); }}
-                        data-tauri-drag-region="false"
-                        title="Services"
-                      >
-                        <Server size={13} strokeWidth={2.3} />
-                        <span className="tab-label">Services</span>
-                        <span className="tab-active-indicator" data-tab="services" aria-hidden="true" />
-                      </button>
-                    </div>
+                  <div className="header-camera-corridor" aria-hidden="true" />
+                  <div className="header-right-wing">
+                    <button
+                      className="header-close-btn"
+                      type="button"
+                      aria-label="Close"
+                      title="Close"
+                      onClick={() => closePanel({ suppressHover: true })}
+                      data-tauri-drag-region="false"
+                    >
+                      <X size={14} strokeWidth={2.2} />
+                    </button>
                   </div>
-                  <button
-                    className="gear-btn header-setup-btn"
-                    type="button"
-                    aria-label="Setup"
-                    title="Setup"
-                    onClick={(event) => { event.stopPropagation(); openSetup(); }}
-                    data-tauri-drag-region="false"
-                  >
-                    <Settings size={13} strokeWidth={2.3} />
-                  </button>
-                  <button
-                    className="header-close-btn"
-                    type="button"
-                    aria-label="Close"
-                    title="Close"
-                    onClick={() => closePanel({ suppressHover: true })}
-                    data-tauri-drag-region="false"
-                  >
-                    <X size={14} strokeWidth={2.2} />
-                  </button>
                 </div>
-              </div>
-            )}
-            <div
-              className="sheet-body"
-              data-view={panelWidthView}
-              id={!setupOpen && !selectedSession ? `main-panel-${activeMainTab}` : undefined}
-              role={!setupOpen && !selectedSession ? "tabpanel" : undefined}
-              aria-labelledby={!setupOpen && !selectedSession ? `main-tab-${activeMainTab}` : undefined}
-              onScroll={(event) => {
-                if (event.currentTarget.scrollLeft !== 0) {
-                  event.currentTarget.scrollLeft = 0;
-                }
-              }}
-            >
-              {setupOpen ? (
-                <Suspense fallback={null}>
-                  <SetupPanel
-                    capabilities={capabilities}
-                    canUseNativeControls={canUseNativeControls}
-                    connectionTitle={connectionTitle}
-                    displayError={displayError}
-                    displayLoading={displayLoading}
-                    displayState={displayState}
-                    guidance={setupGuidance}
-                    haloBotLoadout={haloBotLoadout}
-                    isConnected={isConnected}
-                    keepAwakeActive={keepAwakeActive}
-                    keepAwakeEnabled={keepAwakeEnabled}
-                    keepAwakeError={keepAwakeError}
-                    pet={pet}
-                    petMotionMapping={petMotionMapping}
-                    completionPetEnabled={completionPetEnabled}
-                    completionPetSize={completionPetSize}
-                    movementBreakEnabled={movementBreakEnabled}
-                    petPreviewStatus={petPreviewStatus}
-                    petPreviewState={petPreviewState}
-                    modStatus={modStatus}
-                    agyHookStatus={agyHookStatus}
-                    nativeAction={nativeAction}
-                    onCheckBridge={() => void checkBridge()}
-                    onDisplayChange={updateDisplay}
-                    onDisplayRefresh={loadDisplayState}
-                    onInstallMod={() => void installMod()}
-                    onInstallAgyHooks={() => void installAgyHooks()}
-                    onHaloBotLoadoutChange={updateHaloBotLoadout}
-                    onKeepAwakeChange={updateKeepAwakeEnabled}
-                    onPetChange={updatePet}
-                    onPetMotionChange={updatePetMotion}
-                    onPetMotionReset={resetPetMotionMapping}
-                    onCompletionPetEnabledChange={updateCompletionPetEnabled}
-                    onCompletionPetSizeChange={updateCompletionPetSize}
-                    onMovementBreakEnabledChange={updateMovementBreakEnabled}
-                    onShowPetPreview={showPetPreview}
-                  />
-                </Suspense>
-              ) : selectedSession ? (
-                <div className="session-detail-tray" data-testid="session-detail-board" ref={sessionDetailLayout.trayRef}>
-                  <BoardSurface className="session-detail-card session-detail-overview-card" tone="mint" style={sessionDetailLayout.cardStyle(0)}>
-                    <BoardScroll className="session-detail-overview-scroll session-context-view" data-session-detail-card="overview" data-status={selectedSession.status}>
-                      <div className="session-detail-overview-content">
-                        <SessionContextSummary loadout={haloBotLoadout} motionMapping={petMotionMapping} pet={pet} session={selectedSession} />
-                        <div className="detail-path" title={selectedSession.cwd}>{shortenPath(selectedSession.cwd)}</div>
-                        {canUseNativeControls ? (
-                          <div className="capability-note">Focus matches Ghostty terminal cwd/title and selects its tab</div>
-                        ) : (
-                          <div className="capability-note">Focus needs the desktop runtime</div>
-                        )}
-                        {sessionAction.message ? (
-                          <div className="notice-row compact" data-online={sessionAction.ok === true} role="status" aria-live="polite">{sessionAction.message}</div>
-                        ) : null}
-                      </div>
-                      <div className="session-detail-controls">
-                        <div className="session-context-actions">
-                          <SurfaceControl surfaceControlVariant="primary" type="button" onClick={() => void focusSelectedSession(selectedSession)} data-tauri-drag-region="false">
-                            <Focus size={12} strokeWidth={2.3} />
-                            Focus
-                          </SurfaceControl>
-                          {selectedSession.status === "done" ? (
-                            <SurfaceControl type="button" onClick={() => dismissSession(selectedSession.conversationId)} data-tauri-drag-region="false" title="Hide until fresh activity arrives">
-                              <X size={12} strokeWidth={2.4} />
-                              Clear
-                            </SurfaceControl>
-                          ) : null}
-                          <SurfaceControl
-                            className="session-history-action"
-                            surfaceControlSize={pendingRemoveHistoryId === selectedSession.conversationId ? "compact" : "icon"}
-                            surfaceControlVariant={pendingRemoveHistoryId === selectedSession.conversationId ? "armed-danger" : "default"}
-                            type="button"
-                            onClick={() => requestRemoveSessionHistory(selectedSession.conversationId)}
-                            data-tauri-drag-region="false"
-                            title="Remove this session's locally stored activity"
-                            aria-label={pendingRemoveHistoryId === selectedSession.conversationId ? "Confirm remove" : "Remove history"}
-                          >
-                            <Trash2 size={12} strokeWidth={2.3} />
-                            {pendingRemoveHistoryId === selectedSession.conversationId ? "Confirm remove" : null}
-                          </SurfaceControl>
-                        </div>
-                        <SurfaceControl
-                          className="session-context-return"
-                          type="button"
-                          onClick={backToSessions}
-                          data-tauri-drag-region="false"
-                          aria-label={`Back to all ${sessions.length} ${sessions.length === 1 ? "session" : "sessions"}`}
-                        >
-                          <ChevronLeft size={12} strokeWidth={2.3} />
-                          <span>Back to sessions</span>
-                          <span className="session-context-return-count">{sessions.length}</span>
-                        </SurfaceControl>
-                      </div>
-                    </BoardScroll>
-                  </BoardSurface>
-                  <ResizableCardDivider layout={sessionDetailLayout} index={0} label="Resize session overview and activity log" />
-                  <BoardSurface className="session-detail-card session-detail-activity-card" tone="parchment" style={sessionDetailLayout.cardStyle(1)}>
-                    <div className="session-detail-activity-heading">
-                      <span className="session-detail-activity-kicker">Session log</span>
-                      <h2>Recent activity</h2>
-                    </div>
-                    <BoardScroll className="session-detail-activity-scroll" data-session-detail-card="activity">
-                      {selectedSessionActivityEvents.length === 0 ? (
-                        <div className="empty-text small">No events captured yet</div>
-                      ) : (
-                        <div className="action-list">
-                          {selectedSessionActivityEvents.map((event) => {
-                            const activity = getEventActivity(event);
-
-                            return (
-                              <div className="action-row" data-kind={activity.kind} key={event.id}>
-                                <span className="action-mark" aria-hidden="true" />
-                                <span className="action-tool">{activity.label}</span>
-                                <span className="action-detail">{activity.detail}</span>
-                                <span className="session-time">{formatTime(event.timestamp)}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </BoardScroll>
-                  </BoardSurface>
+              ) : setupOpen ? (
+                <div className="sheet-header detail-header" data-tauri-drag-region="false">
+                  <div className="header-brand">
+                    <button
+                      className="gear-btn"
+                      type="button"
+                      onClick={backFromSetup}
+                      data-panel-focus-target
+                      data-tauri-drag-region="false"
+                      title={`Back to ${setupOriginTabRef.current || 'sessions'}`}
+                      aria-label={`Back to ${setupOriginTabRef.current || 'sessions'}`}
+                    >
+                      <ChevronLeft size={14} strokeWidth={2.3} />
+                    </button>
+                    <span className="status-slot">
+                      <Settings className="setup-icon" size={14} strokeWidth={2.3} />
+                    </span>
+                    <span className="header-title">Setup</span>
+                  </div>
+                  <div className="header-camera-corridor" aria-hidden="true" />
+                  <div className="header-right-wing">
+                    {DEMO_MODE ? <span className="agent-badge">DEMO</span> : null}
+                    <button
+                      className="header-close-btn"
+                      type="button"
+                      aria-label="Close"
+                      title="Close"
+                      onClick={() => closePanel({ suppressHover: true })}
+                      data-tauri-drag-region="false"
+                    >
+                      <X size={14} strokeWidth={2.2} />
+                    </button>
+                  </div>
                 </div>
-              ) : activeMainTab === "pomodoro" ? (
-                <FocusToolsPanel
-                  nativeAvailable={canUseNativeControls}
-                  onResetAllPomodoro={resetAllPomodoroCycle}
-                  onShowCompanion={() => showManualCompanion()}
-                  onStartMovement={(exerciseId) => showManualCompanion(exerciseId)}
-                  pomodoro={pomodoro}
-                  stopwatch={stopwatch}
-                />
-              ) : activeMainTab === "usage" ? (
-                <AgentUsageList usages={agentUsages} onRefresh={refreshAgentUsage} settings={usageSettings} onSettingsChange={updateUsageSettings} />
-              ) : activeMainTab === "runtime" ? (
-                <Suspense fallback={<div className="empty-text small">Loading Runtime…</div>}>
-                  <RuntimeProcessesPanel detailScrollTop={runtimeScrollTopRef.current} monitor={runtimeMonitor} />
-                </Suspense>
-              ) : activeMainTab === "services" ? (
-                <Suspense fallback={<div className="empty-text small">Loading Services…</div>}>
-                  <LocalServicesPanel detailScrollTop={servicesScrollTopRef.current} monitor={runtimeMonitor} />
-                </Suspense>
               ) : (
-                sessions.length === 0 ? (
+                <div className="sheet-header" data-tauri-drag-region="false">
+                  <div className="header-brand">
+                    <div className="header-brand-logo">
+                      <Activity size={13} strokeWidth={2.4} />
+                    </div>
+                    <span className="header-brand-name">Agent Halo</span>
+                    <span className="bridge-dot" data-connected={isConnected} title={connectionTitle} />
+                    {DEMO_MODE ? <span className="agent-badge">DEMO</span> : null}
+                  </div>
+                  <div className="header-camera-corridor" aria-hidden="true" />
+                  <div className="header-right-wing">
+                    <div className="header-tabs-rail">
+                      <div className="header-tablist" role="tablist" aria-label="Agent Halo sections">
+                        <button
+                          id="main-tab-sessions"
+                          className="header-tab-discrete"
+                          data-active={activeMainTab === 'sessions'}
+                          data-panel-focus-target={activeMainTab === 'sessions' ? 'true' : undefined}
+                          type="button"
+                          role="tab"
+                          aria-label="Sessions"
+                          aria-selected={activeMainTab === 'sessions'}
+                          aria-controls="main-panel-sessions"
+                          tabIndex={activeMainTab === 'sessions' ? 0 : -1}
+                          onKeyDown={(event) => handleMainTabKeyDown(event, 'sessions')}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            activateMainTab('sessions')
+                          }}
+                          data-tauri-drag-region="false"
+                          title="Sessions"
+                        >
+                          <List size={13} strokeWidth={2.3} />
+                          <span className="tab-label">Sessions</span>
+                          <span className="tab-active-indicator" data-tab="sessions" aria-hidden="true" />
+                        </button>
+                        <button
+                          id="main-tab-pomodoro"
+                          className="header-tab-discrete"
+                          data-active={activeMainTab === 'pomodoro'}
+                          data-panel-focus-target={activeMainTab === 'pomodoro' ? 'true' : undefined}
+                          type="button"
+                          role="tab"
+                          aria-label="Focus"
+                          aria-selected={activeMainTab === 'pomodoro'}
+                          aria-controls="main-panel-pomodoro"
+                          tabIndex={activeMainTab === 'pomodoro' ? 0 : -1}
+                          onKeyDown={(event) => handleMainTabKeyDown(event, 'pomodoro')}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            activateMainTab('pomodoro')
+                          }}
+                          data-tauri-drag-region="false"
+                          title="Focus"
+                        >
+                          <Timer size={13} strokeWidth={2.3} />
+                          <span className="tab-label">Focus</span>
+                          <span className="tab-active-indicator" data-tab="pomodoro" aria-hidden="true" />
+                        </button>
+                        <button
+                          id="main-tab-usage"
+                          className="header-tab-discrete"
+                          data-active={activeMainTab === 'usage'}
+                          data-panel-focus-target={activeMainTab === 'usage' ? 'true' : undefined}
+                          type="button"
+                          role="tab"
+                          aria-label="Usage"
+                          aria-selected={activeMainTab === 'usage'}
+                          aria-controls="main-panel-usage"
+                          tabIndex={activeMainTab === 'usage' ? 0 : -1}
+                          onKeyDown={(event) => handleMainTabKeyDown(event, 'usage')}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            activateMainTab('usage')
+                          }}
+                          data-tauri-drag-region="false"
+                          title="Usage"
+                        >
+                          <BarChart3 size={13} strokeWidth={2.3} />
+                          <span className="tab-label">Usage</span>
+                          <span className="tab-active-indicator" data-tab="usage" aria-hidden="true" />
+                        </button>
+                        <button
+                          id="main-tab-runtime"
+                          className="header-tab-discrete"
+                          data-active={activeMainTab === 'runtime'}
+                          data-panel-focus-target={activeMainTab === 'runtime' ? 'true' : undefined}
+                          type="button"
+                          role="tab"
+                          aria-label="Runtime"
+                          aria-selected={activeMainTab === 'runtime'}
+                          aria-controls="main-panel-runtime"
+                          tabIndex={activeMainTab === 'runtime' ? 0 : -1}
+                          onKeyDown={(event) => handleMainTabKeyDown(event, 'runtime')}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            activateMainTab('runtime')
+                          }}
+                          data-tauri-drag-region="false"
+                          title="Runtime"
+                        >
+                          <Activity size={13} strokeWidth={2.3} />
+                          <span className="tab-label">Runtime</span>
+                          <span className="tab-active-indicator" data-tab="runtime" aria-hidden="true" />
+                        </button>
+                        <button
+                          id="main-tab-services"
+                          className="header-tab-discrete"
+                          data-active={activeMainTab === 'services'}
+                          data-panel-focus-target={activeMainTab === 'services' ? 'true' : undefined}
+                          type="button"
+                          role="tab"
+                          aria-label="Services"
+                          aria-selected={activeMainTab === 'services'}
+                          aria-controls="main-panel-services"
+                          tabIndex={activeMainTab === 'services' ? 0 : -1}
+                          onKeyDown={(event) => handleMainTabKeyDown(event, 'services')}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            activateMainTab('services')
+                          }}
+                          data-tauri-drag-region="false"
+                          title="Services"
+                        >
+                          <Server size={13} strokeWidth={2.3} />
+                          <span className="tab-label">Services</span>
+                          <span className="tab-active-indicator" data-tab="services" aria-hidden="true" />
+                        </button>
+                      </div>
+                    </div>
+                    <button
+                      className="gear-btn header-setup-btn"
+                      type="button"
+                      aria-label="Setup"
+                      title="Setup"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        openSetup()
+                      }}
+                      data-tauri-drag-region="false"
+                    >
+                      <Settings size={13} strokeWidth={2.3} />
+                    </button>
+                    <button
+                      className="header-close-btn"
+                      type="button"
+                      aria-label="Close"
+                      title="Close"
+                      onClick={() => closePanel({ suppressHover: true })}
+                      data-tauri-drag-region="false"
+                    >
+                      <X size={14} strokeWidth={2.2} />
+                    </button>
+                  </div>
+                </div>
+              )}
+              <div
+                className="sheet-body"
+                data-view={panelWidthView}
+                id={!setupOpen && !selectedSession ? `main-panel-${activeMainTab}` : undefined}
+                role={!setupOpen && !selectedSession ? 'tabpanel' : undefined}
+                aria-labelledby={!setupOpen && !selectedSession ? `main-tab-${activeMainTab}` : undefined}
+                onScroll={(event) => {
+                  if (event.currentTarget.scrollLeft !== 0) {
+                    event.currentTarget.scrollLeft = 0
+                  }
+                }}
+              >
+                {setupOpen ? (
+                  <Suspense fallback={null}>
+                    <SetupPanel
+                      capabilities={capabilities}
+                      canUseNativeControls={canUseNativeControls}
+                      connectionTitle={connectionTitle}
+                      displayError={displayError}
+                      displayLoading={displayLoading}
+                      displayState={displayState}
+                      guidance={setupGuidance}
+                      haloBotLoadout={haloBotLoadout}
+                      isConnected={isConnected}
+                      keepAwakeActive={keepAwakeActive}
+                      keepAwakeEnabled={keepAwakeEnabled}
+                      keepAwakeError={keepAwakeError}
+                      pet={pet}
+                      petMotionMapping={petMotionMapping}
+                      completionPetEnabled={completionPetEnabled}
+                      completionPetSize={completionPetSize}
+                      movementBreakEnabled={movementBreakEnabled}
+                      petPreviewStatus={petPreviewStatus}
+                      petPreviewState={petPreviewState}
+                      modStatus={modStatus}
+                      agyHookStatus={agyHookStatus}
+                      nativeAction={nativeAction}
+                      onCheckBridge={() => void checkBridge()}
+                      onDisplayChange={updateDisplay}
+                      onDisplayRefresh={loadDisplayState}
+                      onInstallMod={() => void installMod()}
+                      onInstallAgyHooks={() => void installAgyHooks()}
+                      onHaloBotLoadoutChange={updateHaloBotLoadout}
+                      onKeepAwakeChange={updateKeepAwakeEnabled}
+                      onPetChange={updatePet}
+                      onPetMotionChange={updatePetMotion}
+                      onPetMotionReset={resetPetMotionMapping}
+                      onCompletionPetEnabledChange={updateCompletionPetEnabled}
+                      onCompletionPetSizeChange={updateCompletionPetSize}
+                      onMovementBreakEnabledChange={updateMovementBreakEnabled}
+                      onShowPetPreview={showPetPreview}
+                    />
+                  </Suspense>
+                ) : selectedSession ? (
+                  <div
+                    className="session-detail-tray"
+                    data-testid="session-detail-board"
+                    ref={sessionDetailLayout.trayRef}
+                  >
+                    <BoardSurface
+                      className="session-detail-card session-detail-overview-card"
+                      tone="mint"
+                      style={sessionDetailLayout.cardStyle(0)}
+                    >
+                      <BoardScroll
+                        className="session-detail-overview-scroll session-context-view"
+                        data-session-detail-card="overview"
+                        data-status={selectedSession.status}
+                      >
+                        <div className="session-detail-overview-content">
+                          <SessionContextSummary
+                            loadout={haloBotLoadout}
+                            motionMapping={petMotionMapping}
+                            pet={pet}
+                            session={selectedSession}
+                          />
+                          <div className="detail-path" title={selectedSession.cwd}>
+                            {shortenPath(selectedSession.cwd)}
+                          </div>
+                          {canUseNativeControls ? (
+                            <div className="capability-note">
+                              Focus matches Ghostty terminal cwd/title and selects its tab
+                            </div>
+                          ) : (
+                            <div className="capability-note">Focus needs the desktop runtime</div>
+                          )}
+                          {sessionAction.message ? (
+                            <div
+                              className="notice-row compact"
+                              data-online={sessionAction.ok === true}
+                              role="status"
+                              aria-live="polite"
+                            >
+                              {sessionAction.message}
+                            </div>
+                          ) : null}
+                        </div>
+                        <div className="session-detail-controls">
+                          <div className="session-context-actions">
+                            <SurfaceControl
+                              surfaceControlVariant="primary"
+                              type="button"
+                              onClick={() => void focusSelectedSession(selectedSession)}
+                              data-tauri-drag-region="false"
+                            >
+                              <Focus size={12} strokeWidth={2.3} />
+                              Focus
+                            </SurfaceControl>
+                            {selectedSession.status === 'done' ? (
+                              <SurfaceControl
+                                type="button"
+                                onClick={() => dismissSession(selectedSession.conversationId)}
+                                data-tauri-drag-region="false"
+                                title="Hide until fresh activity arrives"
+                              >
+                                <X size={12} strokeWidth={2.4} />
+                                Clear
+                              </SurfaceControl>
+                            ) : null}
+                            <SurfaceControl
+                              className="session-history-action"
+                              surfaceControlSize={
+                                pendingRemoveHistoryId === selectedSession.conversationId ? 'compact' : 'icon'
+                              }
+                              surfaceControlVariant={
+                                pendingRemoveHistoryId === selectedSession.conversationId ? 'armed-danger' : 'default'
+                              }
+                              type="button"
+                              onClick={() => requestRemoveSessionHistory(selectedSession.conversationId)}
+                              data-tauri-drag-region="false"
+                              title="Remove this session's locally stored activity"
+                              aria-label={
+                                pendingRemoveHistoryId === selectedSession.conversationId
+                                  ? 'Confirm remove'
+                                  : 'Remove history'
+                              }
+                            >
+                              <Trash2 size={12} strokeWidth={2.3} />
+                              {pendingRemoveHistoryId === selectedSession.conversationId ? 'Confirm remove' : null}
+                            </SurfaceControl>
+                          </div>
+                          <SurfaceControl
+                            className="session-context-return"
+                            type="button"
+                            onClick={backToSessions}
+                            data-tauri-drag-region="false"
+                            aria-label={`Back to all ${sessions.length} ${sessions.length === 1 ? 'session' : 'sessions'}`}
+                          >
+                            <ChevronLeft size={12} strokeWidth={2.3} />
+                            <span>Back to sessions</span>
+                            <span className="session-context-return-count">{sessions.length}</span>
+                          </SurfaceControl>
+                        </div>
+                      </BoardScroll>
+                    </BoardSurface>
+                    <ResizableCardDivider
+                      layout={sessionDetailLayout}
+                      index={0}
+                      label="Resize session overview and activity log"
+                    />
+                    <BoardSurface
+                      className="session-detail-card session-detail-activity-card"
+                      tone="parchment"
+                      style={sessionDetailLayout.cardStyle(1)}
+                    >
+                      <div className="session-detail-activity-heading">
+                        <span className="session-detail-activity-kicker">Session log</span>
+                        <h2>Recent activity</h2>
+                      </div>
+                      <BoardScroll className="session-detail-activity-scroll" data-session-detail-card="activity">
+                        {selectedSessionActivityEvents.length === 0 ? (
+                          <div className="empty-text small">No events captured yet</div>
+                        ) : (
+                          <div className="action-list">
+                            {selectedSessionActivityEvents.map((event) => {
+                              const activity = getEventActivity(event)
+
+                              return (
+                                <div className="action-row" data-kind={activity.kind} key={event.id}>
+                                  <span className="action-mark" aria-hidden="true" />
+                                  <span className="action-tool">{activity.label}</span>
+                                  <span className="action-detail">{activity.detail}</span>
+                                  <span className="session-time">{formatTime(event.timestamp)}</span>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </BoardScroll>
+                    </BoardSurface>
+                  </div>
+                ) : activeMainTab === 'pomodoro' ? (
+                  <FocusToolsPanel
+                    nativeAvailable={canUseNativeControls}
+                    onResetAllPomodoro={resetAllPomodoroCycle}
+                    onShowCompanion={() => showManualCompanion()}
+                    onStartMovement={(exerciseId) => showManualCompanion(exerciseId)}
+                    pomodoro={pomodoro}
+                    stopwatch={stopwatch}
+                  />
+                ) : activeMainTab === 'usage' ? (
+                  <AgentUsageList
+                    usages={agentUsages}
+                    onRefresh={refreshAgentUsage}
+                    settings={usageSettings}
+                    onSettingsChange={updateUsageSettings}
+                  />
+                ) : activeMainTab === 'runtime' ? (
+                  <Suspense fallback={<div className="empty-text small">Loading Runtime…</div>}>
+                    <RuntimeProcessesPanel detailScrollTop={runtimeScrollTopRef.current} monitor={runtimeMonitor} />
+                  </Suspense>
+                ) : activeMainTab === 'services' ? (
+                  <Suspense fallback={<div className="empty-text small">Loading Services…</div>}>
+                    <LocalServicesPanel detailScrollTop={servicesScrollTopRef.current} monitor={runtimeMonitor} />
+                  </Suspense>
+                ) : sessions.length === 0 ? (
                   <div className="sessions-card halo-tab-surface halo-surface-mint" data-testid="sessions-board">
                     <div className="halo-inner-scroll" data-scroll-owner="inner">
                       <div className="empty-state">
                         <div className="empty-glyph">◌</div>
                         <div className="empty-text">Waiting for Letta Code</div>
-                        <button className="btn accent" type="button" onClick={(event) => { event.stopPropagation(); openSetup(); }} data-tauri-drag-region="false">
+                        <button
+                          className="btn accent"
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            openSetup()
+                          }}
+                          data-tauri-drag-region="false"
+                        >
                           <Settings size={13} strokeWidth={2.3} />
                           Open setup
                         </button>
@@ -2156,16 +2540,27 @@ const App = () => {
                     >
                       <div className="halo-inner-scroll" data-scroll-owner="inner" data-scroll-card="active">
                         <div className="sessions-card-head">
-                          <span id="active-session-heading" className="sessions-card-title">Active</span>
-                          <span className="session-section-count">{activeSessionGroups.reduce((count, group) => count + group.sessions.length, 0)}</span>
+                          <span id="active-session-heading" className="sessions-card-title">
+                            Active
+                          </span>
+                          <span className="session-section-count">
+                            {activeSessionGroups.reduce((count, group) => count + group.sessions.length, 0)}
+                          </span>
                         </div>
                         {sessionAction.message ? (
-                          <div className="notice-row compact session-focus-notice" data-online={sessionAction.ok === true} role="status" aria-live="polite">{sessionAction.message}</div>
+                          <div
+                            className="notice-row compact session-focus-notice"
+                            data-online={sessionAction.ok === true}
+                            role="status"
+                            aria-live="polite"
+                          >
+                            {sessionAction.message}
+                          </div>
                         ) : null}
                         {activeSessionGroups.length > 0 ? (
                           <ul className="session-list">
                             {activeSessionGroups.map((group) => {
-                              const groupKey = `active:${group.key}`;
+                              const groupKey = `active:${group.key}`
                               return (
                                 <WorkspaceSessionGroupItem
                                   expanded={expandedSessionGroupKeys.has(groupKey)}
@@ -2182,7 +2577,7 @@ const App = () => {
                                   onToggle={toggleSessionGroup}
                                   key={groupKey}
                                 />
-                              );
+                              )
                             })}
                           </ul>
                         ) : (
@@ -2198,8 +2593,18 @@ const App = () => {
                       aria-orientation="vertical"
                       aria-label="Resize Active and Completed sections"
                       aria-valuemin={Math.round(SESSIONS_CARD_MIN_WIDTH)}
-                      aria-valuemax={Math.round(Math.max(SESSIONS_CARD_MIN_WIDTH, (sessionsRatios[0] + sessionsRatios[1]) * Math.max(0, (sessionsTrayRef.current?.getBoundingClientRect().width ?? 960) - 24) - SESSIONS_CARD_MIN_WIDTH))}
-                      aria-valuenow={Math.round(sessionsRatios[0] * Math.max(0, (sessionsTrayRef.current?.getBoundingClientRect().width ?? 960) - 24))}
+                      aria-valuemax={Math.round(
+                        Math.max(
+                          SESSIONS_CARD_MIN_WIDTH,
+                          (sessionsRatios[0] + sessionsRatios[1]) *
+                            Math.max(0, (sessionsTrayRef.current?.getBoundingClientRect().width ?? 960) - 24) -
+                            SESSIONS_CARD_MIN_WIDTH,
+                        ),
+                      )}
+                      aria-valuenow={Math.round(
+                        sessionsRatios[0] *
+                          Math.max(0, (sessionsTrayRef.current?.getBoundingClientRect().width ?? 960) - 24),
+                      )}
                       onPointerDown={(e) => handleDividerPointerDown(0, e)}
                       onPointerMove={handleDividerPointerMove}
                       onPointerUp={handleDividerPointerUp}
@@ -2210,7 +2615,7 @@ const App = () => {
                     </div>
 
                     <section
-                      className={`sessions-card sessions-card-completed session-section ${completedSessionGroups.length > 0 ? "completed-section" : ""} halo-tab-surface halo-surface-lavender`}
+                      className={`sessions-card sessions-card-completed session-section ${completedSessionGroups.length > 0 ? 'completed-section' : ''} halo-tab-surface halo-surface-lavender`}
                       data-testid="sessions-card-completed"
                       data-card="completed"
                       style={{ flex: `${sessionsRatios[1]} 0 0px`, minWidth: `${SESSIONS_CARD_MIN_WIDTH}px` }}
@@ -2218,7 +2623,9 @@ const App = () => {
                     >
                       <div className="halo-inner-scroll" data-scroll-owner="inner" data-scroll-card="completed">
                         <div className="sessions-card-head">
-                          <span id="completed-session-heading" className="sessions-card-title">Completed</span>
+                          <span id="completed-session-heading" className="sessions-card-title">
+                            Completed
+                          </span>
                           <span className="session-section-count">{completedSessions.length}</span>
                           <span className="spacer" />
                           {completedSessions.length > 0 ? (
@@ -2229,14 +2636,14 @@ const App = () => {
                               onClick={clearCompletedSessions}
                               data-tauri-drag-region="false"
                             >
-                              {clearCompletedArmed ? `Confirm clear ${completedSessions.length}` : "Clear completed"}
+                              {clearCompletedArmed ? `Confirm clear ${completedSessions.length}` : 'Clear completed'}
                             </button>
                           ) : null}
                         </div>
                         {completedSessionGroups.length > 0 ? (
                           <ul className="session-list">
                             {completedSessionGroups.map((group) => {
-                              const groupKey = `completed:${group.key}`;
+                              const groupKey = `completed:${group.key}`
                               return (
                                 <WorkspaceSessionGroupItem
                                   expanded={expandedSessionGroupKeys.has(groupKey)}
@@ -2253,7 +2660,7 @@ const App = () => {
                                   onToggle={toggleSessionGroup}
                                   key={groupKey}
                                 />
-                              );
+                              )
                             })}
                           </ul>
                         ) : (
@@ -2269,8 +2676,18 @@ const App = () => {
                       aria-orientation="vertical"
                       aria-label="Resize Completed and Recent activity sections"
                       aria-valuemin={Math.round(SESSIONS_CARD_MIN_WIDTH)}
-                      aria-valuemax={Math.round(Math.max(SESSIONS_CARD_MIN_WIDTH, (sessionsRatios[1] + sessionsRatios[2]) * Math.max(0, (sessionsTrayRef.current?.getBoundingClientRect().width ?? 960) - 24) - SESSIONS_CARD_MIN_WIDTH))}
-                      aria-valuenow={Math.round(sessionsRatios[1] * Math.max(0, (sessionsTrayRef.current?.getBoundingClientRect().width ?? 960) - 24))}
+                      aria-valuemax={Math.round(
+                        Math.max(
+                          SESSIONS_CARD_MIN_WIDTH,
+                          (sessionsRatios[1] + sessionsRatios[2]) *
+                            Math.max(0, (sessionsTrayRef.current?.getBoundingClientRect().width ?? 960) - 24) -
+                            SESSIONS_CARD_MIN_WIDTH,
+                        ),
+                      )}
+                      aria-valuenow={Math.round(
+                        sessionsRatios[1] *
+                          Math.max(0, (sessionsTrayRef.current?.getBoundingClientRect().width ?? 960) - 24),
+                      )}
                       onPointerDown={(e) => handleDividerPointerDown(1, e)}
                       onPointerMove={handleDividerPointerMove}
                       onPointerUp={handleDividerPointerUp}
@@ -2289,7 +2706,9 @@ const App = () => {
                     >
                       <div className="halo-inner-scroll" data-scroll-owner="inner" data-scroll-card="recent">
                         <div className="sessions-card-head">
-                          <span id="recent-activity-heading" className="sessions-card-title">Recent activity</span>
+                          <span id="recent-activity-heading" className="sessions-card-title">
+                            Recent activity
+                          </span>
                           <span className="session-section-count">{recentEvents.slice(0, 4).length}</span>
                         </div>
                         {recentEvents.length > 0 ? (
@@ -2308,32 +2727,50 @@ const App = () => {
                       </div>
                     </section>
                   </div>
-                )
-              )}
-            </div>
-
-            {(!setupOpen && !selectedSession && activeMainTab === "sessions" && activitySession?.status === "done") ? (
-              <div className="sheet-footer">
-                <span className="footer-meta">{workspace} · {model}</span>
-                <span className="spacer" />
-                <button className="pill-btn accent" type="button" onClick={(event) => { event.stopPropagation(); acknowledgeDone(); }} data-tauri-drag-region="false">
-                  <Check size={12} strokeWidth={2.4} />
-                  Close
-                </button>
+                )}
               </div>
-            ) : null}
-          </div> : null}
+
+              {!setupOpen && !selectedSession && activeMainTab === 'sessions' && activitySession?.status === 'done' ? (
+                <div className="sheet-footer">
+                  <span className="footer-meta">
+                    {workspace} · {model}
+                  </span>
+                  <span className="spacer" />
+                  <button
+                    className="pill-btn accent"
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      acknowledgeDone()
+                    }}
+                    data-tauri-drag-region="false"
+                  >
+                    <Check size={12} strokeWidth={2.4} />
+                    Close
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </section>
     </main>
-  );
-};
+  )
+}
 
 declare global {
   interface Window {
-    __AGENT_HALO_HOME__?: string;
-    __TAURI_INTERNALS__?: unknown;
+    __AGENT_HALO_HOME__?: string
+    __TAURI_INTERNALS__?: unknown
   }
 }
 
-createRoot(document.getElementById("root")!).render(PET_SURFACE ? <Suspense fallback={null}><PetApp /></Suspense> : <App />);
+createRoot(document.getElementById('root')!).render(
+  PET_SURFACE ? (
+    <Suspense fallback={null}>
+      <PetApp />
+    </Suspense>
+  ) : (
+    <App />
+  ),
+)

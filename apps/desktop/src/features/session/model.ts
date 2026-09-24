@@ -1,5 +1,5 @@
-export * from "./activity";
-export * from "./constants";
+export * from './activity'
+export * from './constants'
 export {
   appendRecentEvent,
   getUniqueSortedEvents,
@@ -7,6 +7,6 @@ export {
   normalizeSessionEventIdentity,
   normalizeSessionEventRegistry,
   sortEventsNewestFirst,
-} from "./eventRegistry";
-export * from "./persistence";
-export * from "./selectors";
+} from './event-registry'
+export * from './persistence'
+export * from './selectors'

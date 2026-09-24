@@ -105,14 +105,20 @@ export const getHaloBotLoadout = (value?: string | null): HaloBotLoadout =>
 
 export const getHaloBotParts = (loadout: HaloBotLoadout): HaloBotParts => {
   const normalized = getHaloBotLoadout(loadout)
-  return Object.fromEntries(HALO_BOT_PART_CATEGORIES.map((category, index) => {
-    const partIndex = Number.parseInt(normalized[index] ?? '0', 36)
-    const part = HALO_BOT_PART_CATALOG[category][partIndex] ?? HALO_BOT_PART_CATALOG[category][0]
-    return [category, { index: partIndex, ...part }]
-  })) as HaloBotParts
+  return Object.fromEntries(
+    HALO_BOT_PART_CATEGORIES.map((category, index) => {
+      const partIndex = Number.parseInt(normalized[index] ?? '0', 36)
+      const part = HALO_BOT_PART_CATALOG[category][partIndex] ?? HALO_BOT_PART_CATALOG[category][0]
+      return [category, { index: partIndex, ...part }]
+    }),
+  ) as HaloBotParts
 }
 
-export const setHaloBotPart = (loadout: HaloBotLoadout, category: HaloBotPartCategory, partIndex: number): HaloBotLoadout => {
+export const setHaloBotPart = (
+  loadout: HaloBotLoadout,
+  category: HaloBotPartCategory,
+  partIndex: number,
+): HaloBotLoadout => {
   const normalized = getHaloBotLoadout(loadout)
   const categoryIndex = HALO_BOT_PART_CATEGORIES.indexOf(category)
   const boundedIndex = Math.min(Math.max(0, partIndex), HALO_BOT_PART_CATALOG[category].length - 1)

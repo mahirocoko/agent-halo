@@ -1,8 +1,5 @@
-import {
-  getUsageMetricGroupLabel,
-  getUsageMetricGroupModels,
-} from "./providers";
-import { formatResetLabel } from "./settings";
+import { getUsageMetricGroupLabel, getUsageMetricGroupModels } from './providers'
+import { formatResetLabel } from './settings'
 import type {
   IAgentUsageSnapshot,
   IAgentUsageState,
@@ -11,105 +8,92 @@ import type {
   IUsageProviderConfig,
   IUsageSettings,
   UsageProviderId,
-} from "./types";
+} from './types'
 
-const SNAPSHOT_CACHE_KEY = "agent-halo.usage-snapshots.v1";
+const SNAPSHOT_CACHE_KEY = 'agent-halo.usage-snapshots.v1'
 
 export {
   formatAbsoluteTime,
   formatResetLabel,
   readUsageSettings,
   writeUsageSettings,
-} from "./settings";
+} from './settings'
 
 const clampPercent = (value: number | null): number | null => {
   if (value === null || !Number.isFinite(value)) {
-    return null;
+    return null
   }
 
-  return Math.max(0, Math.min(100, Math.round(value)));
-};
+  return Math.max(0, Math.min(100, Math.round(value)))
+}
 
-const findMetricLine = (
-  lines: IUsageMetricLine[],
-  label: string,
-): IUsageMetricLine | null =>
-  lines.find((line) => line.label.toLowerCase() === label.toLowerCase()) ?? null;
+const findMetricLine = (lines: IUsageMetricLine[], label: string): IUsageMetricLine | null =>
+  lines.find((line) => line.label.toLowerCase() === label.toLowerCase()) ?? null
 
 const getProgressPercent = (line: IUsageMetricLine | null): number | null => {
-  if (!line || line.type !== "progress" || typeof line.used !== "number") {
-    return null;
+  if (!line || line.type !== 'progress' || typeof line.used !== 'number') {
+    return null
   }
 
   const progress =
-    typeof line.limit === "number" && line.limit > 0 && line.limit !== 100
-      ? (line.used / line.limit) * 100
-      : line.used;
+    typeof line.limit === 'number' && line.limit > 0 && line.limit !== 100 ? (line.used / line.limit) * 100 : line.used
 
-  return clampPercent(progress);
-};
+  return clampPercent(progress)
+}
 
 const getTextValue = (line: IUsageMetricLine | null): string | null => {
-  if (typeof line?.value === "string" && line.value.trim()) {
-    return line.value.trim();
+  if (typeof line?.value === 'string' && line.value.trim()) {
+    return line.value.trim()
   }
 
-  if (typeof line?.text === "string" && line.text.trim()) {
-    return line.text.trim();
+  if (typeof line?.text === 'string' && line.text.trim()) {
+    return line.text.trim()
   }
 
-  return null;
-};
+  return null
+}
 
-const getStatusLevel = (
-  left: number | null,
-): IUsageMetric["statusLevel"] => {
+const getStatusLevel = (left: number | null): IUsageMetric['statusLevel'] => {
   if (left === null) {
-    return "unavailable";
+    return 'unavailable'
   }
 
   if (left <= 20) {
-    return "danger";
+    return 'danger'
   }
 
-  return left <= 45 ? "warning" : "ok";
-};
+  return left <= 45 ? 'warning' : 'ok'
+}
 
-const getStatusLabel = (left: number | null): IUsageMetric["statusLabel"] => {
+const getStatusLabel = (left: number | null): IUsageMetric['statusLabel'] => {
   if (left === null) {
-    return "Unavailable";
+    return 'Unavailable'
   }
 
   if (left === 0) {
-    return "Exhausted";
+    return 'Exhausted'
   }
 
   if (left <= 20) {
-    return "Nearly exhausted";
+    return 'Nearly exhausted'
   }
 
-  return left <= 45 ? "Running low" : "Available";
-};
+  return left <= 45 ? 'Running low' : 'Available'
+}
 
-const normalizeMetric = (
-  line: IUsageMetricLine,
-  settings: IUsageSettings,
-): IUsageMetric => {
-  const used = getProgressPercent(line);
-  const left = used === null ? null : Math.max(0, 100 - used);
-  const value = settings.usageMode === "used" ? used : left;
-  const groupLabel = getUsageMetricGroupLabel(line.label);
-  const normalizedLabel = line.label.toLowerCase();
+const normalizeMetric = (line: IUsageMetricLine, settings: IUsageSettings): IUsageMetric => {
+  const used = getProgressPercent(line)
+  const left = used === null ? null : Math.max(0, 100 - used)
+  const value = settings.usageMode === 'used' ? used : left
+  const groupLabel = getUsageMetricGroupLabel(line.label)
+  const normalizedLabel = line.label.toLowerCase()
   const limitLabel = groupLabel
-    ? normalizedLabel.includes("five") || normalizedLabel.includes("5h")
-      ? "Five Hour Limit"
-      : "Weekly Limit"
-    : null;
+    ? normalizedLabel.includes('five') || normalizedLabel.includes('5h')
+      ? 'Five Hour Limit'
+      : 'Weekly Limit'
+    : null
   const hasAvailableQuota =
-    groupLabel !== null &&
-    limitLabel === "Five Hour Limit" &&
-    settings.usageMode === "left" &&
-    left === 100;
+    groupLabel !== null && limitLabel === 'Five Hour Limit' && settings.usageMode === 'left' && left === 100
 
   return {
     label: line.label,
@@ -120,25 +104,19 @@ const normalizeMetric = (
     statusLevel: getStatusLevel(left),
     statusLabel: getStatusLabel(left),
     remainingLabel: hasAvailableQuota
-      ? "Quota available"
+      ? 'Quota available'
       : value === null
         ? null
-        : `${value}% ${
-            groupLabel && settings.usageMode === "left"
-              ? "remaining"
-              : settings.usageMode
-          }`,
-    resetLabel: hasAvailableQuota
-      ? null
-      : formatResetLabel(line.resetsAt, settings),
-  };
-};
+        : `${value}% ${groupLabel && settings.usageMode === 'left' ? 'remaining' : settings.usageMode}`,
+    resetLabel: hasAvailableQuota ? null : formatResetLabel(line.resetsAt, settings),
+  }
+}
 
 export const createAgentUsageState = (
   providerId: UsageProviderId,
   partial: Partial<IAgentUsageState> = {},
 ): IAgentUsageState => ({
-  status: "loading",
+  status: 'loading',
   providerId,
   message: null,
   stale: false,
@@ -158,138 +136,120 @@ export const createAgentUsageState = (
   dailyTokenRows: [],
   modelShares: [],
   ...partial,
-});
+})
 
 export const parseAgentUsageSnapshot = (
   providerId: UsageProviderId,
   snapshot: IAgentUsageSnapshot,
   settings: IUsageSettings,
 ): IAgentUsageState => {
-  const lines = Array.isArray(snapshot.lines) ? snapshot.lines : [];
-  const message = getTextValue(findMetricLine(lines, "Status"));
-  const metrics = lines
-    .filter((line) => line.type === "progress")
-    .map((line) => normalizeMetric(line, settings));
+  const lines = Array.isArray(snapshot.lines) ? snapshot.lines : []
+  const message = getTextValue(findMetricLine(lines, 'Status'))
+  const metrics = lines.filter((line) => line.type === 'progress').map((line) => normalizeMetric(line, settings))
   const knownTextLabels = new Set([
-    "rate limit resets",
-    "credits",
-    "today",
-    "yesterday",
-    "latest token log",
-    "last 30 days",
-  ]);
+    'rate limit resets',
+    'credits',
+    'today',
+    'yesterday',
+    'latest token log',
+    'last 30 days',
+  ])
 
   return createAgentUsageState(providerId, {
-    status: message ? "error" : "online",
+    status: message ? 'error' : 'online',
     message,
     stale: Boolean(message) && metrics.length > 0,
     fetchedAt: snapshot.fetchedAt ?? new Date().toISOString(),
     plan: snapshot.plan ?? null,
     metrics,
-    sessionPercent: getProgressPercent(findMetricLine(lines, "Session")),
-    weeklyPercent: getProgressPercent(findMetricLine(lines, "Weekly")),
-    reviewsPercent: getProgressPercent(findMetricLine(lines, "Reviews")),
-    rateLimitResets: getTextValue(findMetricLine(lines, "Rate Limit Resets")),
-    credits: getTextValue(findMetricLine(lines, "Credits")),
-    today: getTextValue(findMetricLine(lines, "Today")),
-    yesterday: getTextValue(findMetricLine(lines, "Yesterday")),
-    latestTokenLog: getTextValue(findMetricLine(lines, "Latest Token Log")),
-    last30Days: getTextValue(findMetricLine(lines, "Last 30 Days")),
-    usageTrend:
-      lines.find(
-        (line) =>
-          line.type === "barChart" && line.label.toLowerCase() === "usage trend",
-      ) ?? null,
+    sessionPercent: getProgressPercent(findMetricLine(lines, 'Session')),
+    weeklyPercent: getProgressPercent(findMetricLine(lines, 'Weekly')),
+    reviewsPercent: getProgressPercent(findMetricLine(lines, 'Reviews')),
+    rateLimitResets: getTextValue(findMetricLine(lines, 'Rate Limit Resets')),
+    credits: getTextValue(findMetricLine(lines, 'Credits')),
+    today: getTextValue(findMetricLine(lines, 'Today')),
+    yesterday: getTextValue(findMetricLine(lines, 'Yesterday')),
+    latestTokenLog: getTextValue(findMetricLine(lines, 'Latest Token Log')),
+    last30Days: getTextValue(findMetricLine(lines, 'Last 30 Days')),
+    usageTrend: lines.find((line) => line.type === 'barChart' && line.label.toLowerCase() === 'usage trend') ?? null,
     dailyTokenRows:
-      providerId === "codex" || providerId === "cursor"
+      providerId === 'codex' || providerId === 'cursor'
         ? lines
-            .filter(
-              (line) =>
-                line.type === "text" &&
-                line.label.toLowerCase().startsWith("daily "),
-            )
+            .filter((line) => line.type === 'text' && line.label.toLowerCase().startsWith('daily '))
             .map((line) => ({
-              label: line.label.replace(/^Daily\s+/i, ""),
-              value: getTextValue(line) ?? "",
+              label: line.label.replace(/^Daily\s+/i, ''),
+              value: getTextValue(line) ?? '',
             }))
             .filter((line) => line.value)
         : [],
     modelShares:
-      providerId === "codex" || providerId === "cursor"
+      providerId === 'codex' || providerId === 'cursor'
         ? lines
             .filter(
               (line) =>
-                line.type === "text" &&
+                line.type === 'text' &&
                 !knownTextLabels.has(line.label.toLowerCase()) &&
-                !line.label.toLowerCase().startsWith("daily "),
+                !line.label.toLowerCase().startsWith('daily '),
             )
             .map((line) => ({
               label: line.label,
-              value: getTextValue(line) ?? "",
+              value: getTextValue(line) ?? '',
             }))
             .filter((line) => /%$/.test(line.value))
         : [],
-  });
-};
+  })
+}
 
 export const createCachedAgentUsageState = (
   providerId: UsageProviderId,
   snapshot: IAgentUsageSnapshot,
   settings: IUsageSettings,
 ): IAgentUsageState => {
-  const parsed = parseAgentUsageSnapshot(providerId, snapshot, settings);
+  const parsed = parseAgentUsageSnapshot(providerId, snapshot, settings)
 
   return parsed.metrics.length
     ? createAgentUsageState(providerId, {
         ...parsed,
-        status: "error",
+        status: 'error',
         message: null,
         stale: true,
       })
-    : createAgentUsageState(providerId);
-};
+    : createAgentUsageState(providerId)
+}
 
-export const readCachedUsageSnapshots = (): Partial<
-  Record<UsageProviderId, IAgentUsageSnapshot>
-> => {
+export const readCachedUsageSnapshots = (): Partial<Record<UsageProviderId, IAgentUsageSnapshot>> => {
   try {
-    const parsed = JSON.parse(
-      window.localStorage.getItem(SNAPSHOT_CACHE_KEY) ?? "null",
-    ) as Partial<Record<UsageProviderId, IAgentUsageSnapshot>> | null;
+    const parsed = JSON.parse(window.localStorage.getItem(SNAPSHOT_CACHE_KEY) ?? 'null') as Partial<
+      Record<UsageProviderId, IAgentUsageSnapshot>
+    > | null
 
-    if (!parsed || typeof parsed !== "object") {
-      return {};
+    if (!parsed || typeof parsed !== 'object') {
+      return {}
     }
 
     return Object.fromEntries(
       Object.entries(parsed).filter(
         ([providerId, snapshot]) =>
-          ["codex", "agy", "claude", "cursor"].includes(providerId) &&
+          ['codex', 'agy', 'claude', 'cursor'].includes(providerId) &&
           snapshot &&
-          typeof snapshot === "object" &&
+          typeof snapshot === 'object' &&
           Array.isArray(snapshot.lines) &&
-          typeof snapshot.fetchedAt === "string",
+          typeof snapshot.fetchedAt === 'string',
       ),
-    ) as Partial<Record<UsageProviderId, IAgentUsageSnapshot>>;
+    ) as Partial<Record<UsageProviderId, IAgentUsageSnapshot>>
   } catch {
-    return {};
+    return {}
   }
-};
+}
 
-export const writeCachedUsageSnapshot = (
-  providerId: UsageProviderId,
-  snapshot: IAgentUsageSnapshot,
-): void => {
+export const writeCachedUsageSnapshot = (providerId: UsageProviderId, snapshot: IAgentUsageSnapshot): void => {
   try {
-    const current = readCachedUsageSnapshots();
-    window.localStorage.setItem(
-      SNAPSHOT_CACHE_KEY,
-      JSON.stringify({ ...current, [providerId]: snapshot }),
-    );
+    const current = readCachedUsageSnapshots()
+    window.localStorage.setItem(SNAPSHOT_CACHE_KEY, JSON.stringify({ ...current, [providerId]: snapshot }))
   } catch {
     // Current usage remains usable when local storage is unavailable.
   }
-};
+}
 
 export const retainLastGoodUsage = (
   previous: IAgentUsageState,
@@ -297,73 +257,60 @@ export const retainLastGoodUsage = (
   error: string,
   fallback?: IAgentUsageState,
 ): IAgentUsageState => {
-  const previousHasData = previous.metrics.length > 0;
-  const source = previousHasData ? previous : fallback ?? previous;
-  const hasLastGoodData = source.metrics.length > 0;
+  const previousHasData = previous.metrics.length > 0
+  const source = previousHasData ? previous : (fallback ?? previous)
+  const hasLastGoodData = source.metrics.length > 0
   return createAgentUsageState(providerId, {
     ...source,
     providerId,
-    status: "error",
+    status: 'error',
     message: error,
     stale: hasLastGoodData,
-  });
-};
+  })
+}
 
-export const createDemoAgentUsage = (
-  provider: IUsageProviderConfig,
-): IAgentUsageState => {
+export const createDemoAgentUsage = (provider: IUsageProviderConfig): IAgentUsageState => {
   const createMetric = (
     label: string,
     value: number,
     remainingLabel: string,
     resetLabel: string | null,
-    statusLevel: IUsageMetric["statusLevel"] = "ok",
+    statusLevel: IUsageMetric['statusLevel'] = 'ok',
   ): IUsageMetric => {
-    const groupLabel = getUsageMetricGroupLabel(label);
+    const groupLabel = getUsageMetricGroupLabel(label)
 
     return {
       label,
       groupLabel,
       groupModels: getUsageMetricGroupModels(groupLabel),
-      limitLabel: groupLabel ? "Weekly Limit" : null,
+      limitLabel: groupLabel ? 'Weekly Limit' : null,
       value,
       statusLevel,
       statusLabel: getStatusLabel(value),
       remainingLabel,
       resetLabel,
-    };
-  };
+    }
+  }
 
   return createAgentUsageState(provider.id, {
-    status: "online",
+    status: 'online',
     fetchedAt: new Date().toISOString(),
-    plan: provider.id === "codex" ? "Pro" : "Max",
+    plan: provider.id === 'codex' ? 'Pro' : 'Max',
     metrics:
-      provider.id === "codex"
+      provider.id === 'codex'
         ? [
-            createMetric("Session", 73, "73% left", "Resets in 2h 18m"),
-            createMetric("Weekly", 91, "91% left", "Resets in 4d 7h"),
-            createMetric("Reviews", 96, "96% left", null),
+            createMetric('Session', 73, '73% left', 'Resets in 2h 18m'),
+            createMetric('Weekly', 91, '91% left', 'Resets in 4d 7h'),
+            createMetric('Reviews', 96, '96% left', null),
           ]
         : [
-            createMetric(
-              "Gemini models",
-              82,
-              "82% left",
-              "Resets in 4h 31m",
-            ),
-            createMetric(
-              "Claude and GPT models",
-              42,
-              "42% left",
-              "Resets in 1d 19h",
-              "warning",
-            ),
+            createMetric('Gemini models', 82, '82% left', 'Resets in 4h 31m'),
+            createMetric('Claude and GPT models', 42, '42% left', 'Resets in 1d 19h', 'warning'),
           ],
-    sessionPercent: provider.id === "codex" ? 27 : null,
-    weeklyPercent: provider.id === "codex" ? 9 : null,
-    reviewsPercent: provider.id === "codex" ? 4 : null,
-    rateLimitResets: provider.id === "codex" ? "1 available" : null,
-    credits: provider.id === "codex" ? "$0.00 · 0 credits" : null,
-  });
-};
+    sessionPercent: provider.id === 'codex' ? 27 : null,
+    weeklyPercent: provider.id === 'codex' ? 9 : null,
+    reviewsPercent: provider.id === 'codex' ? 4 : null,
+    rateLimitResets: provider.id === 'codex' ? '1 available' : null,
+    credits: provider.id === 'codex' ? '$0.00 · 0 credits' : null,
+  })
+}

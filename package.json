@@ -7,6 +7,15 @@
   "packageManager": "pnpm@10.33.0",
   "scripts": {
     "check": "tsc -p tsconfig.json --noEmit && pnpm --filter @agent-halo/desktop check",
+    "format": "biome check --write --linter-enabled=false biome.json package.json apps/desktop/src",
+    "format:all": "biome check --write --linter-enabled=false .",
+    "format:check": "biome check --linter-enabled=false biome.json package.json apps/desktop/src",
+    "format:check:all": "biome check --linter-enabled=false .",
+    "lint": "biome lint apps/desktop/src/components/resizable-card-tray.tsx apps/desktop/src/features/usage/components.tsx apps/desktop/src/features/usage/model.ts",
+    "lint:desktop": "biome lint apps/desktop/src",
+    "lint:surface": "biome lint apps/desktop/src/components/*.tsx apps/desktop/src/features/focus/components.tsx apps/desktop/src/features/runtime/components.tsx apps/desktop/src/features/setup/SetupPanel.tsx apps/desktop/src/features/usage/*.ts* apps/desktop/tests/usage-last-good.spec.ts apps/desktop/tests/demo-accessibility.spec.ts apps/desktop/tests/demo-panel-geometry.spec.ts",
+    "lint:all": "biome lint .",
+    "quality": "pnpm format:check && pnpm lint && pnpm check",
     "mod:install": "node scripts/install-mod.mjs",
     "mod:tail": "tail -f ~/.letta/mods/agent-halo.events.ndjson",
     "viewer": "node apps/viewer/index.mjs",
@@ -22,6 +31,7 @@
     "test:hooks": "node --test tests/hook-integration.test.mjs"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.14",
     "@playwright/test": "1.61.0",
     "@types/node": "25.0.0",
     "typescript": "5.9.3"

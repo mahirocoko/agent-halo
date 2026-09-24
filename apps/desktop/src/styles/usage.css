@@ -459,7 +459,9 @@
   color: #fff;
   background: #111;
   font-weight: 850;
-  box-shadow: 0 0 0 1px #fff, 0 0 0 2px #111;
+  box-shadow:
+    0 0 0 1px #fff,
+    0 0 0 2px #111;
 }
 
 .usage-provider-note {
@@ -767,39 +769,10 @@
   min-inline-size: 0;
 }
 
-.usage-divider {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 12px;
-  min-block-size: 48px;
-  border-radius: 6px;
-  cursor: col-resize;
-  touch-action: none;
-}
-
-.usage-divider:hover,
-.usage-divider:focus-visible {
-  background: var(--surface-fill-2);
-  outline: none;
-}
-
-.usage-grip {
-  inline-size: 3px;
-  block-size: 34px;
-  border-radius: 999px;
-  background: var(--surface-ink-3);
-  opacity: 0.5;
-}
-
-.usage-divider:hover .usage-grip,
-.usage-divider:focus-visible .usage-grip {
-  background: var(--surface-ink);
-  opacity: 1;
-}
-
 @keyframes usage-loading-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @container halo-panel (max-width: 640px) {
@@ -857,6 +830,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .usage-meter-fill { transition: none; }
-  .usage-provider-card[data-status="loading"] .usage-provider-message svg { animation: none; }
+  .usage-meter-fill {
+    transition: none;
+  }
+  .usage-provider-card[data-status="loading"] .usage-provider-message svg {
+    animation: none;
+  }
 }

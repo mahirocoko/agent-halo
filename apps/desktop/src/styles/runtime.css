@@ -260,7 +260,9 @@
 .runtime-row[data-pressure="critical"] .runtime-pressure-mark {
   border-radius: 1px;
   background: #111;
-  box-shadow: 0 0 0 1px #fff, 0 0 0 2px #111;
+  box-shadow:
+    0 0 0 1px #fff,
+    0 0 0 2px #111;
   transform: rotate(45deg);
 }
 
@@ -551,5 +553,7 @@
 }
 
 @keyframes runtime-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
