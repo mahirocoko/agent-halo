@@ -1,4 +1,7 @@
 .usage-tray {
+  --scrollbar-track: rgba(17, 17, 17, 0.08);
+  --scrollbar-thumb: rgba(17, 17, 17, 0.28);
+  --scrollbar-thumb-hover: rgba(17, 17, 17, 0.42);
   display: flex;
   align-items: stretch;
   gap: 12px;
@@ -6,6 +9,27 @@
   min-block-size: 0;
   flex: 1 1 auto;
   overflow: hidden;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+.usage-tray::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.usage-tray::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.usage-tray::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border-radius: 3px;
+}
+
+.usage-tray::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
 }
 
 .usage-tray .usage-card {

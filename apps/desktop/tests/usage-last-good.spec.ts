@@ -37,6 +37,36 @@ test('Usage keeps provider cards on one board and persists accessible resizing',
   ).toEqual([0.25, 0.25, 0.25, 0.25])
 })
 
+test('Usage keeps the stacked tray scrollbar styled when it owns narrow overflow', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 700 })
+  await page.goto('/?demo=1&demoScenario=multi')
+  await openUsage(page)
+
+  const scrollbar = await page.getByTestId('usage-tray').evaluate((tray) => {
+    const style = getComputedStyle(tray)
+    const webkit = getComputedStyle(tray, '::-webkit-scrollbar')
+    const thumb = getComputedStyle(tray, '::-webkit-scrollbar-thumb')
+    return {
+      overflowY: style.overflowY,
+      scrollHeight: tray.scrollHeight,
+      clientHeight: tray.clientHeight,
+      scrollbarWidth: style.scrollbarWidth,
+      scrollbarColor: style.scrollbarColor,
+      scrollbarGutter: style.scrollbarGutter,
+      webkitWidth: webkit.width,
+      webkitThumb: thumb.backgroundColor,
+    }
+  })
+
+  expect(scrollbar.overflowY).toBe('auto')
+  expect(scrollbar.scrollHeight).toBeGreaterThan(scrollbar.clientHeight)
+  expect(scrollbar.scrollbarWidth).toBe('thin')
+  expect(scrollbar.scrollbarColor).toContain('rgba(17, 17, 17, 0.28)')
+  expect(scrollbar.scrollbarGutter).toBe('stable')
+  expect(scrollbar.webkitWidth).toBe('6px')
+  expect(scrollbar.webkitThumb).toBe('rgba(17, 17, 17, 0.28)')
+})
+
 test('Usage settings can hide and restore provider cards', async ({ page }) => {
   await page.goto('/?demo=1&demoScenario=multi')
   await openUsage(page)
