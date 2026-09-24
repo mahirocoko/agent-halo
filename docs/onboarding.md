@@ -36,7 +36,7 @@ Do not start a long-running dev server as part of a routine inspection. When bro
 ## 2) Architecture Snapshot
 
 - **Runtime**: React 19 + TypeScript in a Vite frontend embedded by Tauri 2 on macOS.
-- **Bridge**: local `127.0.0.1:47621` SSE/snapshot/NDJSON bridge fed by the Letta mod and AGY hook adapter.
+- **Bridge**: local `127.0.0.1:47621` SSE/snapshot/NDJSON bridge fed by the Letta mod and AGY, Cursor, and Codex hook adapters.
 - **Data access**: local bridge fetches, Tauri `invoke` commands, and provider-specific local adapters; no hosted API client.
 - **State**: React local state/hooks plus explicit localStorage and native persistence; no shared client-state library is established.
 - **Styling**: CSS-first custom properties and ordered stylesheets, with small local React primitives in `apps/desktop/src/components/`.
@@ -50,7 +50,7 @@ Do not start a long-running dev server as part of a routine inspection. When bro
 - CSS cascade owners: `apps/desktop/src/styles/`
 - Shared event/presence types: `packages/protocol/src/`
 - Letta mod and bridge: `mods/` and `adapters/bridge/`
-- AGY hook adapter: `adapters/agy/`
+- Provider hook adapters: `adapters/agy/`, `adapters/cursor/`, and `adapters/codex/`
 - Native Tauri implementation: `apps/desktop/src-tauri/`
 
 ## 4) Docs Map

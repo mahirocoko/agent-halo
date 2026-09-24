@@ -126,6 +126,8 @@ export interface ISetupPanelProps {
   displayState: IDisplayStateSnapshot | null
   modStatus: { path: string | null; installed: boolean | null }
   agyHookStatus: { path: string | null; installed: boolean | null }
+  cursorHookStatus: { path: string | null; installed: boolean | null }
+  codexHookStatus: { path: string | null; installed: boolean | null }
   nativeAction: { bridgeOnline: boolean | null; message: string | null }
   pet: HaloPetName
   haloBotLoadout: HaloBotLoadout
@@ -138,6 +140,8 @@ export interface ISetupPanelProps {
   onCheckBridge: () => void
   onInstallMod: () => void
   onInstallAgyHooks: () => void
+  onInstallCursorHooks: () => void
+  onInstallCodexHooks: () => void
   onDisplayChange: (displayId: string) => Promise<void>
   onDisplayRefresh: () => Promise<void>
   onKeepAwakeChange: (enabled: boolean) => void
@@ -173,6 +177,8 @@ export const SetupPanel = ({
   petPreviewStatus,
   modStatus,
   agyHookStatus,
+  cursorHookStatus,
+  codexHookStatus,
   nativeAction,
   onCheckBridge,
   onCompletionPetEnabledChange,
@@ -182,6 +188,8 @@ export const SetupPanel = ({
   onHaloBotLoadoutChange,
   onInstallMod,
   onInstallAgyHooks,
+  onInstallCursorHooks,
+  onInstallCodexHooks,
   onKeepAwakeChange,
   onMovementBreakEnabledChange,
   onPetChange,
@@ -521,6 +529,58 @@ export const SetupPanel = ({
                   >
                     <Download size={12} strokeWidth={2.3} />
                     {agyHookStatus.installed ? 'Reinstall' : 'Install'}
+                  </button>
+                </div>
+                <div className="setup-row">
+                  <span className="status-slot">
+                    <Download className="setup-icon" size={14} strokeWidth={2.3} />
+                  </span>
+                  <span className="setup-copy">
+                    <span className="setup-title">Cursor hooks</span>
+                    <span className="setup-detail">
+                      {cursorHookStatus.installed === true
+                        ? `Installed · ${shortenPath(cursorHookStatus.path)}`
+                        : cursorHookStatus.installed === false
+                          ? `Not installed · ${shortenPath(cursorHookStatus.path)}`
+                          : canUseNativeControls
+                            ? 'Checking install state'
+                            : 'Tauri runtime needed'}
+                    </span>
+                  </span>
+                  <button
+                    className="pill-btn accent"
+                    type="button"
+                    onClick={onInstallCursorHooks}
+                    data-tauri-drag-region="false"
+                  >
+                    <Download size={12} strokeWidth={2.3} />
+                    {cursorHookStatus.installed ? 'Reinstall' : 'Install'}
+                  </button>
+                </div>
+                <div className="setup-row">
+                  <span className="status-slot">
+                    <Download className="setup-icon" size={14} strokeWidth={2.3} />
+                  </span>
+                  <span className="setup-copy">
+                    <span className="setup-title">Codex hooks</span>
+                    <span className="setup-detail">
+                      {codexHookStatus.installed === true
+                        ? `Installed · ${shortenPath(codexHookStatus.path)}`
+                        : codexHookStatus.installed === false
+                          ? `Not installed · ${shortenPath(codexHookStatus.path)}`
+                          : canUseNativeControls
+                            ? 'Checking install state'
+                            : 'Tauri runtime needed'}
+                    </span>
+                  </span>
+                  <button
+                    className="pill-btn accent"
+                    type="button"
+                    onClick={onInstallCodexHooks}
+                    data-tauri-drag-region="false"
+                  >
+                    <Download size={12} strokeWidth={2.3} />
+                    {codexHookStatus.installed ? 'Reinstall' : 'Install'}
                   </button>
                 </div>
                 <div className="setup-row passive">

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -144,6 +144,105 @@ test("AGY hook normalizes bridge host and preserves allow semantics", async () =
     await new Promise((resolve) => server.close(resolve));
     await rm(home, { recursive: true, force: true });
   }
+});
+
+const runStandaloneAdapter = async ({ homePrefix, script, input, event }) => {
+  const home = await mkdtemp(join(tmpdir(), homePrefix));
+  await mkdir(join(home, ".letta", "mods"), { recursive: true });
+  let received;
+  const server = createServer((request, response) => {
+    let body = "";
+    request.setEncoding("utf8");
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => {
+      received = { path: request.url, payload: JSON.parse(body) };
+      response.writeHead(202);
+      response.end();
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  assert(address && typeof address === "object");
+  await writeFile(
+    join(home, ".letta", "mods", "agent-halo.config.json"),
+    JSON.stringify({ host: "127.0.0.1", port: address.port }),
+  );
+
+  try {
+    const scriptPath = typeof script === "function" ? await script(home) : join(repoRoot, script)
+    const child = spawn(process.execPath, [scriptPath, '--event', event], {
+      cwd: repoRoot,
+      env: { ...process.env, HOME: home },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => { stdout += chunk; });
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    child.stdin.end(JSON.stringify(input));
+    const exitCode = await new Promise((resolve) => child.on("close", resolve));
+    assert.equal(exitCode, 0, stderr);
+    return { output: JSON.parse(stdout), received };
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    await rm(home, { recursive: true, force: true });
+  }
+};
+
+test("Cursor hook adapter emits provider-scoped session events without blocking", async () => {
+  const result = await runStandaloneAdapter({
+    homePrefix: "agent-halo-cursor-relay-",
+    script: async (home) => {
+      const root = join(home, ".cursor")
+      await mkdir(join(root, "hooks"), { recursive: true })
+      await mkdir(join(root, "shared"), { recursive: true })
+      await copyFile(join(repoRoot, "adapters/cursor/agent-halo-cursor-hook.mjs"), join(root, "hooks", "agent-halo-cursor-hook.mjs"))
+      await copyFile(join(repoRoot, "adapters/shared/agent-halo-hook-utils.mjs"), join(root, "shared", "agent-halo-hook-utils.mjs"))
+      return join(root, "hooks", "agent-halo-cursor-hook.mjs")
+    },
+    event: 'sessionStart',
+    input: {
+      session_id: "cursor-session",
+      workspace_roots: ["/tmp/cursor-project"],
+      model: "claude-sonnet",
+    },
+  });
+  assert.deepEqual(result.output, {});
+  assert.equal(result.received.path, "/ingest");
+  assert.equal(result.received.payload.type, "conversation_open");
+  assert.equal(result.received.payload.agentName, "Cursor");
+  assert.equal(result.received.payload.runtime, null);
+  assert.equal(result.received.payload.conversationId, "cursor:cursor-session");
+  assert.equal(result.received.payload.cwd, "/tmp/cursor-project");
+});
+
+test("Codex hook adapter emits tool events with stable session identity", async () => {
+  const result = await runStandaloneAdapter({
+    homePrefix: "agent-halo-codex-relay-",
+    script: async (home) => {
+      const root = join(home, ".codex")
+      await mkdir(join(root, "hooks"), { recursive: true })
+      await mkdir(join(root, "shared"), { recursive: true })
+      await copyFile(join(repoRoot, "adapters/codex/agent-halo-codex-hook.mjs"), join(root, "hooks", "agent-halo-codex-hook.mjs"))
+      await copyFile(join(repoRoot, "adapters/shared/agent-halo-hook-utils.mjs"), join(root, "shared", "agent-halo-hook-utils.mjs"))
+      return join(root, "hooks", "agent-halo-codex-hook.mjs")
+    },
+    event: 'PreToolUse',
+    input: {
+      hook_event_name: "PreToolUse",
+      session_id: "codex-session",
+      cwd: "/tmp/codex-project",
+      tool_name: "Bash",
+      tool_input: { command: "pwd" },
+    },
+  });
+  assert.deepEqual(result.output, {});
+  assert.equal(result.received.path, "/ingest");
+  assert.equal(result.received.payload.type, "tool_start");
+  assert.equal(result.received.payload.agentName, "Codex");
+  assert.equal(result.received.payload.runtime, null);
+  assert.equal(result.received.payload.conversationId, "codex:codex-session");
+  assert.deepEqual(result.received.payload.data.argKeys, ["command"]);
 });
 
 test("standalone bridge serves AGY without Letta and exits with its parent stdio lease", async () => {

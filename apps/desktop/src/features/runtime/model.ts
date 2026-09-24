@@ -32,7 +32,10 @@ const PRESSURE_PRIORITY: Record<RuntimePressureLevel, number> = {
 }
 
 const isHostRuntime = (runtime: IAgentHaloEventRuntime | null | undefined): runtime is IAgentHaloEventRuntime =>
-  (runtime?.sourceKind === 'lettaHost' || runtime?.sourceKind === 'agyHost') &&
+  (runtime?.sourceKind === 'lettaHost' ||
+    runtime?.sourceKind === 'agyHost' ||
+    runtime?.sourceKind === 'cursorHost' ||
+    runtime?.sourceKind === 'codexHost') &&
   Number.isInteger(runtime.sourcePid) &&
   runtime.sourcePid > 1 &&
   Number.isFinite(runtime.sourceStartedAtMs)

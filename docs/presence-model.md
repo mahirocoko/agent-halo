@@ -31,13 +31,13 @@ The current reducer lives in `packages/protocol/src/presence.ts`.
 | `llm_start` | `thinking` | A provider request started; records model, message count, and context window. |
 | `llm_end` | `closed` / `thinking` / `error` | Records stop reason, duration, token usage, and provider-error summaries; terminal stop reasons close the turn, provider errors enter error state. |
 | `attention_requested` | `attention` | An optional PermissionRequest/filtered Notification relay or direct `AskUserQuestion` lifecycle needs user input. It stays until later tool/turn/completion activity resolves it. |
-| `turn_complete` / legacy `turn_stop` | `closed` | Local Letta `Stop` hook signal; means the assistant turn finished and should show as done/sticky. |
+| `turn_complete` / legacy `turn_stop` | `closed` | Provider stop-hook signal; means the assistant turn finished and should show as done/sticky. |
 | `conversation_close` | `closed` | Captures message/tool counts when available. |
 | `bridge_error` | `error` | Reserved for bridge/runtime errors. |
 
 ## Completion and stale fallback
 
-Letta Code mods now expose `tool_end`, `compact_start` / `compact_end`, and local-backend `llm_start` / `llm_end`; Letta Code 0.27.20 also emits `llm_end` for provider errors with nullable usage and an error summary. Agent Halo still keeps Mahiro's local Letta `Stop` hook via `POST /hook/stop` as a reliable turn-finished fallback because not every backend/surface emits every event. Viewers should still treat long-running `thinking` / `tool-running` states as potentially stale after a local timeout when terminal events are unavailable.
+Letta Code mods now expose `tool_end`, `compact_start` / `compact_end`, and local-backend `llm_start` / `llm_end`; Letta Code 0.27.20 also emits `llm_end` for provider errors with nullable usage and an error summary. Agent Halo still keeps the local Letta `Stop` hook via `POST /hook/stop`, while provider adapters emit equivalent normalized stop events, because not every backend/surface emits every event. Viewers should still treat long-running `thinking` / `tool-running` states as potentially stale after a local timeout when terminal events are unavailable.
 
 The terminal viewer defaults to `staleAfterMs = 30000`. The desktop uses event-aware missing-terminal fallbacks instead of one universal 30-second timeout: in-flight model work may remain active for up to 10 minutes, tool work for up to 30 minutes, compaction for up to 10 minutes, and transitional events for up to 2 minutes. A paired terminal event still resolves immediately. Once a fallback expires, the desktop maps the quiet event to `inactive`, not `waiting`: only `attention_requested` means the agent actually needs user input. Inactive sessions remain in history but have lower priority than done/idle sessions and do not occupy the notch activity wing.
 

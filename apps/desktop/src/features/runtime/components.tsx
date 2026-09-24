@@ -431,8 +431,16 @@ const RuntimeRow = ({ onHide, row }: { onHide: (row: IRuntimeSessionView) => voi
       </div>
       <div className="runtime-metrics">
         <span>
-          <b>{row.sourceKind === 'agyHost' ? 'AGY' : 'Letta'}</b> {formatRuntimeBytes(host?.physicalFootprintBytes)} ·{' '}
-          {formatRuntimeCpu(host?.cpuPercent)}
+          <b>
+            {row.sourceKind === 'agyHost'
+              ? 'AGY'
+              : row.sourceKind === 'cursorHost'
+                ? 'Cursor'
+                : row.sourceKind === 'codexHost'
+                  ? 'Codex'
+                  : 'Letta'}
+          </b>{' '}
+          {formatRuntimeBytes(host?.physicalFootprintBytes)} · {formatRuntimeCpu(host?.cpuPercent)}
         </span>
         <span>
           <b>Subprocesses</b> {formatRuntimeBytes(children?.physicalFootprintBytes)} ·{' '}

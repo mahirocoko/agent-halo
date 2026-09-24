@@ -492,6 +492,48 @@ fn agy_hooks_json_path() -> Result<PathBuf, String> {
         .join("hooks.json"))
 }
 
+fn cursor_hook_path() -> Result<PathBuf, String> {
+    let home = std::env::var("HOME").map_err(|_| "HOME is not set".to_string())?;
+    Ok(PathBuf::from(home)
+        .join(".cursor")
+        .join("hooks")
+        .join("agent-halo-cursor-hook.mjs"))
+}
+
+fn cursor_hooks_json_path() -> Result<PathBuf, String> {
+    let home = std::env::var("HOME").map_err(|_| "HOME is not set".to_string())?;
+    Ok(PathBuf::from(home).join(".cursor").join("hooks.json"))
+}
+
+fn cursor_hook_utils_path() -> Result<PathBuf, String> {
+    let home = std::env::var("HOME").map_err(|_| "HOME is not set".to_string())?;
+    Ok(PathBuf::from(home)
+        .join(".cursor")
+        .join("shared")
+        .join("agent-halo-hook-utils.mjs"))
+}
+
+fn codex_hook_path() -> Result<PathBuf, String> {
+    let home = std::env::var("HOME").map_err(|_| "HOME is not set".to_string())?;
+    Ok(PathBuf::from(home)
+        .join(".codex")
+        .join("hooks")
+        .join("agent-halo-codex-hook.mjs"))
+}
+
+fn codex_hooks_json_path() -> Result<PathBuf, String> {
+    let home = std::env::var("HOME").map_err(|_| "HOME is not set".to_string())?;
+    Ok(PathBuf::from(home).join(".codex").join("hooks.json"))
+}
+
+fn codex_hook_utils_path() -> Result<PathBuf, String> {
+    let home = std::env::var("HOME").map_err(|_| "HOME is not set".to_string())?;
+    Ok(PathBuf::from(home)
+        .join(".codex")
+        .join("shared")
+        .join("agent-halo-hook-utils.mjs"))
+}
+
 #[tauri::command]
 fn bridge_health() -> bool {
     standalone_bridge::bridge_health()
@@ -4334,6 +4376,248 @@ fn agent_halo_agy_hook_status() -> Result<(String, bool), String> {
     Ok((hook_path.to_string_lossy().to_string(), installed))
 }
 
+fn write_hook_resource(
+    app: &tauri::AppHandle,
+    resource_name: &str,
+    destination: &Path,
+) -> Result<(), String> {
+    let resource_path = app
+        .path()
+        .resolve(resource_name, tauri::path::BaseDirectory::Resource)
+        .map_err(|e| format!("Failed to resolve {resource_name}: {e}"))?;
+    let Some(parent) = destination.parent() else {
+        return Err(format!("Failed to resolve destination for {resource_name}"));
+    };
+    fs::create_dir_all(parent)
+        .map_err(|error| format!("Failed to create hook directory: {error}"))?;
+    fs::copy(&resource_path, destination)
+        .map_err(|error| format!("Failed to install {resource_name}: {error}"))?;
+    Ok(())
+}
+
+fn remove_agent_halo_commands(entries: &mut Vec<serde_json::Value>, marker: &str) {
+    entries.retain(|entry| {
+        !entry
+            .get("command")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|command| command.contains(marker))
+    });
+}
+
+#[tauri::command]
+fn install_agent_halo_cursor_hooks(app: tauri::AppHandle) -> Result<String, String> {
+    let hook_path = cursor_hook_path()?;
+    let hook_utils_path = cursor_hook_utils_path()?;
+    write_hook_resource(&app, "agent-halo-cursor-hook.mjs", &hook_path)?;
+    write_hook_resource(&app, "agent-halo-hook-utils.mjs", &hook_utils_path)?;
+
+    let hooks_json_path = cursor_hooks_json_path()?;
+    let mut config: serde_json::Value = if hooks_json_path.exists() {
+        serde_json::from_str(
+            &fs::read_to_string(&hooks_json_path)
+                .map_err(|e| format!("Failed to read Cursor hooks.json: {e}"))?,
+        )
+        .map_err(|e| format!("Failed to parse Cursor hooks.json: {e}"))?
+    } else {
+        serde_json::json!({ "version": 1, "hooks": {} })
+    };
+    let hooks = config
+        .as_object_mut()
+        .ok_or_else(|| "Cursor hooks.json must contain an object".to_string())?
+        .entry("hooks")
+        .or_insert_with(|| serde_json::json!({}))
+        .as_object_mut()
+        .ok_or_else(|| "Cursor hooks.json hooks must contain an object".to_string())?;
+
+    let installed_path = hook_path.to_string_lossy().to_string();
+    for event in [
+        "sessionStart",
+        "sessionEnd",
+        "beforeSubmitPrompt",
+        "preToolUse",
+        "postToolUse",
+        "postToolUseFailure",
+        "stop",
+        "afterAgentResponse",
+    ] {
+        let entries = hooks
+            .entry(event)
+            .or_insert_with(|| serde_json::json!([]))
+            .as_array_mut()
+            .ok_or_else(|| format!("Cursor hook {event} must be an array"))?;
+        remove_agent_halo_commands(entries, "agent-halo-cursor-hook.mjs");
+        entries.push(
+            serde_json::json!({ "command": format!("node '{installed_path}' --event {event}") }),
+        );
+    }
+
+    let Some(parent) = hooks_json_path.parent() else {
+        return Err("Failed to resolve Cursor config directory".to_string());
+    };
+    fs::create_dir_all(parent)
+        .map_err(|error| format!("Failed to create Cursor config directory: {error}"))?;
+    fs::write(
+        &hooks_json_path,
+        serde_json::to_string_pretty(&config)
+            .map_err(|e| format!("Failed to stringify Cursor hooks.json: {e}"))?,
+    )
+    .map_err(|error| format!("Failed to write Cursor hooks.json: {error}"))?;
+
+    Ok(hook_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn agent_halo_cursor_hook_status() -> Result<(String, bool), String> {
+    let hook_path = cursor_hook_path()?;
+    let hooks_json_path = cursor_hooks_json_path()?;
+    let installed = if hooks_json_path.exists() {
+        fs::read_to_string(&hooks_json_path)
+            .ok()
+            .and_then(|content| serde_json::from_str::<serde_json::Value>(&content).ok())
+            .and_then(|config| config.get("hooks").cloned())
+            .and_then(|hooks| hooks.as_object().cloned())
+            .is_some_and(|hooks| {
+                hooks.values().any(|entries| {
+                    entries.as_array().is_some_and(|entries| {
+                        entries.iter().any(|entry| {
+                            entry
+                                .get("command")
+                                .and_then(serde_json::Value::as_str)
+                                .is_some_and(|command| {
+                                    command.contains("agent-halo-cursor-hook.mjs")
+                                })
+                        })
+                    })
+                })
+            })
+    } else {
+        false
+    };
+    Ok((
+        hook_path.to_string_lossy().to_string(),
+        hook_path.exists() && installed,
+    ))
+}
+
+#[tauri::command]
+fn install_agent_halo_codex_hooks(app: tauri::AppHandle) -> Result<String, String> {
+    let hook_path = codex_hook_path()?;
+    let hook_utils_path = codex_hook_utils_path()?;
+    write_hook_resource(&app, "agent-halo-codex-hook.mjs", &hook_path)?;
+    write_hook_resource(&app, "agent-halo-hook-utils.mjs", &hook_utils_path)?;
+
+    let hooks_json_path = codex_hooks_json_path()?;
+    let mut config: serde_json::Value = if hooks_json_path.exists() {
+        serde_json::from_str(
+            &fs::read_to_string(&hooks_json_path)
+                .map_err(|e| format!("Failed to read Codex hooks.json: {e}"))?,
+        )
+        .map_err(|e| format!("Failed to parse Codex hooks.json: {e}"))?
+    } else {
+        serde_json::json!({ "hooks": {} })
+    };
+    let hooks = config
+        .as_object_mut()
+        .ok_or_else(|| "Codex hooks.json must contain an object".to_string())?
+        .entry("hooks")
+        .or_insert_with(|| serde_json::json!({}))
+        .as_object_mut()
+        .ok_or_else(|| "Codex hooks.json hooks must contain an object".to_string())?;
+
+    let installed_path = hook_path.to_string_lossy().to_string();
+    for event in [
+        "SessionStart",
+        "SessionEnd",
+        "UserPromptSubmit",
+        "PreToolUse",
+        "PostToolUse",
+        "Stop",
+        "Interrupt",
+        "PreCompact",
+        "PostCompact",
+    ] {
+        let entries = hooks
+            .entry(event)
+            .or_insert_with(|| serde_json::json!([]))
+            .as_array_mut()
+            .ok_or_else(|| format!("Codex hook {event} must be an array"))?;
+        entries.retain(|group| {
+            !group
+                .get("hooks")
+                .and_then(serde_json::Value::as_array)
+                .is_some_and(|handlers| {
+                    handlers.iter().any(|handler| {
+                        handler
+                            .get("command")
+                            .and_then(serde_json::Value::as_str)
+                            .is_some_and(|command| command.contains("agent-halo-codex-hook.mjs"))
+                    })
+                })
+        });
+        entries.push(serde_json::json!({
+            "hooks": [{
+                "type": "command",
+                "command": format!("node '{installed_path}' --event {event}"),
+                "timeout": 1
+            }]
+        }));
+    }
+
+    let Some(parent) = hooks_json_path.parent() else {
+        return Err("Failed to resolve Codex config directory".to_string());
+    };
+    fs::create_dir_all(parent)
+        .map_err(|error| format!("Failed to create Codex config directory: {error}"))?;
+    fs::write(
+        &hooks_json_path,
+        serde_json::to_string_pretty(&config)
+            .map_err(|e| format!("Failed to stringify Codex hooks.json: {e}"))?,
+    )
+    .map_err(|error| format!("Failed to write Codex hooks.json: {error}"))?;
+
+    Ok(hook_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn agent_halo_codex_hook_status() -> Result<(String, bool), String> {
+    let hook_path = codex_hook_path()?;
+    let hooks_json_path = codex_hooks_json_path()?;
+    let installed = if hooks_json_path.exists() {
+        fs::read_to_string(&hooks_json_path)
+            .ok()
+            .and_then(|content| serde_json::from_str::<serde_json::Value>(&content).ok())
+            .and_then(|config| config.get("hooks").cloned())
+            .and_then(|hooks| hooks.as_object().cloned())
+            .is_some_and(|hooks| {
+                hooks.values().any(|entries| {
+                    entries.as_array().is_some_and(|entries| {
+                        entries.iter().any(|group| {
+                            group
+                                .get("hooks")
+                                .and_then(serde_json::Value::as_array)
+                                .is_some_and(|handlers| {
+                                    handlers.iter().any(|handler| {
+                                        handler
+                                            .get("command")
+                                            .and_then(serde_json::Value::as_str)
+                                            .is_some_and(|command| {
+                                                command.contains("agent-halo-codex-hook.mjs")
+                                            })
+                                    })
+                                })
+                        })
+                    })
+                })
+            })
+    } else {
+        false
+    };
+    Ok((
+        hook_path.to_string_lossy().to_string(),
+        hook_path.exists() && installed,
+    ))
+}
+
 #[tauri::command]
 fn focus_terminal(
     conversation_id: String,
@@ -5487,6 +5771,10 @@ pub fn run() {
             install_agent_halo_mod,
             install_agent_halo_agy_hooks,
             agent_halo_agy_hook_status,
+            install_agent_halo_cursor_hooks,
+            agent_halo_cursor_hook_status,
+            install_agent_halo_codex_hooks,
+            agent_halo_codex_hook_status,
             hide_completion_pet,
             control_local_service,
             local_services,
@@ -5805,6 +6093,10 @@ mod display_selection_tests {
             "install_agent_halo_mod",
             "install_agent_halo_agy_hooks",
             "agent_halo_agy_hook_status",
+            "install_agent_halo_cursor_hooks",
+            "agent_halo_cursor_hook_status",
+            "install_agent_halo_codex_hooks",
+            "agent_halo_codex_hook_status",
             "schedule_pomodoro_notification",
             "set_keep_awake",
             "show_completion_pet",

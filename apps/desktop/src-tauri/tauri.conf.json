@@ -62,6 +62,9 @@
     ],
     "resources": {
       "../../../adapters/agy/agent-halo-agy-hook.mjs": "agent-halo-agy-hook.mjs",
+      "../../../adapters/cursor/agent-halo-cursor-hook.mjs": "agent-halo-cursor-hook.mjs",
+      "../../../adapters/codex/agent-halo-codex-hook.mjs": "agent-halo-codex-hook.mjs",
+      "../../../adapters/shared/agent-halo-hook-utils.mjs": "agent-halo-hook-utils.mjs",
       "../../../adapters/bridge/agent-halo-bridge.mjs": "agent-halo-bridge.mjs"
     }
   }

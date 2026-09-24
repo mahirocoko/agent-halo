@@ -28,11 +28,11 @@
 
 ## Repository Shape
 
-Agent Halo is a pnpm workspace with a protocol package and a desktop app. The repository also contains the local Letta mod, AGY and bridge adapters, a terminal viewer, native Tauri code, and domain documentation.
+Agent Halo is a pnpm workspace with a protocol package and a desktop app. The repository also contains the local Letta mod, provider and bridge adapters, a terminal viewer, native Tauri code, and domain documentation.
 
 ## Runtime Boundaries
 
-The Letta mod and AGY adapter normalize provider events into the local Agent Halo bridge. The bridge serves local health/snapshot/SSE endpoints and writes a local NDJSON diagnostic log. The desktop renderer consumes the protocol and owns the visible Sessions, Focus, Usage, Runtime, Services, Setup, and Pet projections. Tauri owns native windows, macOS integration, local process/display/camera/notification boundaries, and the bundled bridge supervision path.
+The Letta mod and provider adapters normalize events into the local Agent Halo bridge. The bridge serves local health/snapshot/SSE endpoints and writes a local NDJSON diagnostic log. The desktop renderer consumes the protocol and owns the visible Sessions, Focus, Usage, Runtime, Services, Setup, and Pet projections. Tauri owns native windows, macOS integration, local process/display/camera/notification boundaries, and the bundled bridge supervision path.
 
 See `docs/architecture.md`, `docs/event-protocol.md`, and `docs/presence-model.md` for the active contracts.
 

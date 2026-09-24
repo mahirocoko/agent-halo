@@ -2,18 +2,18 @@
 
 ## Goal
 
-Agent Halo is a native presence layer for AI coding agents. It should show what the current agent is doing — conversation lifecycle, model turns, tool usage, and eventually memory/subagent state — without parsing terminal output as the primary source of truth. It currently supports Letta Code (via mod API) and AGY / Antigravity (via hook adapter).
+Agent Halo is a native presence layer for AI coding agents. It should show what the current agent is doing — conversation lifecycle, model turns, tool usage, and eventually memory/subagent state — without parsing terminal output as the primary source of truth. It currently supports Letta Code (via mod API) and AGY / Antigravity, Cursor, and Codex (via hook adapters).
 
 ## Current architecture
 
 ```text
-Letta Code Mod API                AGY (Antigravity) Hooks API
-  conversation_open / tool_start    PreToolUse / PostToolUse / Stop
+Letta Code Mod API                AGY / Cursor / Codex Hooks APIs
+  conversation_open / tool_start    lifecycle / tool hooks
         |                                    |
         v                                    v
-mods/agent-halo.js              adapters/agy/agent-halo-agy-hook.mjs
-  - normalizes event payloads     - translates AGY hooks → AgentHaloEvent
-  - writes NDJSON audit log       - posts to /ingest with sourceKind: agyHost
+mods/agent-halo.js              adapters/*/agent-halo-*-hook.mjs
+  - normalizes event payloads     - translates hooks → AgentHaloEvent
+  - writes NDJSON audit log       - posts to /ingest with provider identity
   - serves SSE on localhost                  |
         |                                    |
         +------ POST /ingest ←───────────────+
@@ -32,20 +32,20 @@ Desktop renderer (Tauri)
 
 ## Why a mod-first bridge
 
-Letta Code has richer runtime state than Claude/Codex hook-only flows: persistent agent identity, conversation identity, scoped cwd/model, tool events, memory, skills, and subagents. A transcript watcher would see some of this late and indirectly. A mod sees public runtime events as they happen.
+Letta Code has richer runtime state than external CLI hook-only flows: persistent agent identity, conversation identity, scoped cwd/model, tool events, memory, skills, and subagents. A transcript watcher would see some of this late and indirectly. A mod sees public runtime events as they happen.
 
-AGY (Antigravity) uses a different extension model — lifecycle hooks (`PreToolUse`, `PostToolUse`, `PreInvocation`, `PostInvocation`, `Stop`) invoked as shell commands with JSON on stdin/stdout. The AGY adapter translates these hook events into the same `AgentHaloEvent` envelope and posts them to the bridge via `/ingest`, so the desktop UI and presence model work identically regardless of which agent runtime produced the events.
+AGY (Antigravity), Cursor, and Codex use different extension models — lifecycle hooks invoked as shell commands with JSON on stdin/stdout. Each adapter translates its provider's hook events into the same `AgentHaloEvent` envelope and posts them to the bridge via `/ingest`, so the desktop UI and presence model work identically regardless of which agent runtime produced the events.
 
 The desktop owns bridge availability, not every bridge process. Every bridge owner and relay normalizes to the canonical IPv4 loopback host `127.0.0.1`, matching the renderer endpoint. At startup it probes the full local `/health` identity. A healthy Letta or standalone owner is reused; an unrelated listener, timeout, or ambiguous connection failure causes a fail-closed occupied state; only an explicitly refused loopback connection starts the bundled standalone bridge. The supervisor retries after an owned crash or external-owner shutdown, while a parent stdio lease and native exit cleanup prevent the desktop-owned child from becoming a permanent daemon. The renderer hydrates `/snapshot` again after SSE reconnect so a bridge that starts after the WebView does not lose capability or recent-event state.
 
 ## Boundaries
 
-- Do not import Letta Code internals from the mod, or AGY internals from the adapter.
+- Do not import Letta Code internals from the mod, or provider internals from an adapter.
 - Keep bridge state local and explicit.
 - Avoid capturing raw user text by default.
 - Treat the NDJSON log as local diagnostics, not canonical telemetry.
 - Desktop UI should consume the protocol package, not infer fields from mod or adapter implementation details.
-- The adapter layer is the only place that knows about AGY-specific hook payloads; the bridge and UI stay provider-agnostic.
+- The adapter layer is the only place that knows about provider-specific hook payloads; the bridge and UI stay provider-agnostic.
 
 ## Planned phases
 

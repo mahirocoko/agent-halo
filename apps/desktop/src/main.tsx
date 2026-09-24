@@ -169,6 +169,8 @@ interface IModStatus {
   installed: boolean | null
 }
 
+type IHookStatus = IModStatus
+
 interface INotchMetrics {
   cameraWidth: number
   closedHeight: number
@@ -346,6 +348,8 @@ const App = () => {
     path: null,
     installed: null,
   })
+  const [cursorHookStatus, setCursorHookStatus] = useState<IHookStatus>({ path: null, installed: null })
+  const [codexHookStatus, setCodexHookStatus] = useState<IHookStatus>({ path: null, installed: null })
   const [notchMetrics, setNotchMetrics] = useState<INotchMetrics>({
     cameraWidth: DEFAULT_CAMERA_NOTCH_WIDTH,
     closedHeight: DEFAULT_CLOSED_NOTCH_HEIGHT,
@@ -1822,6 +1826,32 @@ const App = () => {
     }
   }
 
+  const loadCursorHookStatus = async () => {
+    if (!canUseNativeControls) {
+      setCursorHookStatus({ path: null, installed: null })
+      return
+    }
+    try {
+      const [path, installed] = await invoke<[string, boolean]>('agent_halo_cursor_hook_status')
+      setCursorHookStatus({ path, installed })
+    } catch {
+      setCursorHookStatus({ path: null, installed: null })
+    }
+  }
+
+  const loadCodexHookStatus = async () => {
+    if (!canUseNativeControls) {
+      setCodexHookStatus({ path: null, installed: null })
+      return
+    }
+    try {
+      const [path, installed] = await invoke<[string, boolean]>('agent_halo_codex_hook_status')
+      setCodexHookStatus({ path, installed })
+    } catch {
+      setCodexHookStatus({ path: null, installed: null })
+    }
+  }
+
   const loadDisplayState = async () => {
     if (!canUseNativeControls) {
       applyDisplayState(null)
@@ -1933,6 +1963,40 @@ const App = () => {
     }
   }
 
+  const installCursorHooks = async () => {
+    if (!canUseNativeControls) {
+      setNativeAction({ bridgeOnline: nativeAction.bridgeOnline, message: 'Open with pnpm desktop:dev' })
+      return
+    }
+    try {
+      const path = await invoke<string>('install_agent_halo_cursor_hooks')
+      setCursorHookStatus({ path, installed: true })
+      setNativeAction({ bridgeOnline: nativeAction.bridgeOnline, message: `Installed → ${shortenPath(path)}` })
+    } catch (error) {
+      setNativeAction({
+        bridgeOnline: nativeAction.bridgeOnline,
+        message: error instanceof Error ? error.message : 'Cursor hooks install failed',
+      })
+    }
+  }
+
+  const installCodexHooks = async () => {
+    if (!canUseNativeControls) {
+      setNativeAction({ bridgeOnline: nativeAction.bridgeOnline, message: 'Open with pnpm desktop:dev' })
+      return
+    }
+    try {
+      const path = await invoke<string>('install_agent_halo_codex_hooks')
+      setCodexHookStatus({ path, installed: true })
+      setNativeAction({ bridgeOnline: nativeAction.bridgeOnline, message: `Installed → ${shortenPath(path)}` })
+    } catch (error) {
+      setNativeAction({
+        bridgeOnline: nativeAction.bridgeOnline,
+        message: error instanceof Error ? error.message : 'Codex hooks install failed',
+      })
+    }
+  }
+
   const focusSelectedSession = async (session: ISessionDetail | ISessionSummary) => {
     if (!canUseNativeControls) {
       setSessionAction({ ok: false, message: 'Focus needs the desktop runtime' })
@@ -1960,6 +2024,8 @@ const App = () => {
     if (setupOpen) {
       void loadModStatus()
       void loadAgyHookStatus()
+      void loadCursorHookStatus()
+      void loadCodexHookStatus()
       void loadDisplayState()
       void checkBridge()
     }
@@ -2329,12 +2395,16 @@ const App = () => {
                       petPreviewState={petPreviewState}
                       modStatus={modStatus}
                       agyHookStatus={agyHookStatus}
+                      cursorHookStatus={cursorHookStatus}
+                      codexHookStatus={codexHookStatus}
                       nativeAction={nativeAction}
                       onCheckBridge={() => void checkBridge()}
                       onDisplayChange={updateDisplay}
                       onDisplayRefresh={loadDisplayState}
                       onInstallMod={() => void installMod()}
                       onInstallAgyHooks={() => void installAgyHooks()}
+                      onInstallCursorHooks={() => void installCursorHooks()}
+                      onInstallCodexHooks={() => void installCodexHooks()}
                       onHaloBotLoadoutChange={updateHaloBotLoadout}
                       onKeepAwakeChange={updateKeepAwakeEnabled}
                       onPetChange={updatePet}

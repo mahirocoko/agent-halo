@@ -5,7 +5,7 @@ Runtime Monitor is a read-only local view of CPU and memory pressure for open Le
 ## Contract
 
 ```text
-Agent event runtime.sourcePid (Letta mod or AGY hook)
+Agent event runtime.sourcePid (Letta mod or provider hook)
   -> desktop session registry
   -> native macOS libproc sampler
   -> Agent + Subprocesses rows in the Runtime tab

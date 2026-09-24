@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  A local macOS companion for AI coding agents — live presence, workspace sessions, focus rituals, and private local tooling around the notch. Supports Letta Code and AGY (Antigravity).
+  A local macOS companion for AI coding agents — live presence, workspace sessions, focus rituals, and private local tooling around the notch. Supports Letta Code, AGY (Antigravity), Cursor, and Codex.
 </p>
 
 <p align="center">
@@ -16,7 +16,7 @@
 
 ## Overview
 
-Agent Halo is a native desktop companion for AI coding agents, currently supporting [Letta Code](https://docs.letta.com/letta-code/index.md) and [AGY (Antigravity)](https://antigravity.google). It runs around the macOS camera notch, listens to trusted agent events, and turns agent activity into a compact live presence surface.
+Agent Halo is a native desktop companion for AI coding agents, currently supporting [Letta Code](https://docs.letta.com/letta-code/index.md), [AGY (Antigravity)](https://antigravity.google), Cursor, and Codex. It runs around the macOS camera notch, listens to trusted agent events, and turns agent activity into a compact live presence surface.
 
 The desktop companion uses a view-owned panel width (Sessions 560, Focus 540, Usage 700, Runtime 660, Services 620, Setup 640, session detail 520; max height 440px; min/screen-capped) with Agent Halo-owned discrete tabs and a material board system per view:
 - **Collapsed Hardware Notch**: Preserves Notchcode / boring.notch hardware-notch integration at rest (SVG path, collapsed pill, activity status glyphs, and Pomodoro countdown).
@@ -44,7 +44,7 @@ The desktop companion uses a view-owned panel width (Sessions 560, Focus 540, Us
 
 ## What Agent Halo does
 
-- Projects live Letta Code lifecycle, turn, model, tool, compaction, completion, and needs-input activity into a compact notch surface.
+- Projects live Letta Code, AGY, Cursor, and Codex lifecycle, turn, model, tool, compaction, completion, and needs-input activity into a compact notch surface.
 - Keeps recent conversations in workspace groups, including distinct subagent/default lanes, sticky completed rows, per-session context, and guarded clear/dismiss behavior.
 - Focuses the exact Herdr pane when trusted runtime identity is present, then falls back to native Ghostty cwd/title/session matching.
 - Tracks local AI usage and read-only Letta/subprocess pressure without hiding known providers or adding Runtime process controls.
@@ -53,9 +53,9 @@ The desktop companion uses a view-owned panel width (Sessions 560, Focus 540, Us
 - Offers Squat and Overhead Reach Movement Breaks only after a specific exercise click, either from Focus Move or the Pet chooser; preview and pose tracking share one local stream and bundled offline assets, and manual movement never mutates Pomodoro.
 - Keeps the display awake only while genuine visible Letta work is active.
 - Remembers the selected display for the notch and Pet, with safe Primary fallback when that display disconnects.
-- Installs, verifies, and diagnoses the local Letta Code mod without rewriting global Letta settings.
+- Installs, verifies, and diagnoses the local Letta Code mod plus optional AGY, Cursor, and Codex hooks without replacing unrelated user hook entries.
 
-Agent Halo intentionally stays local. It uses the public Letta Code mod surface and AGY hooks API, a local bridge, local credentials, and local logs. The desktop app supervises a bundled standalone bridge whenever no existing Agent Halo bridge is reachable, so AGY presence does not require Letta Code to be open. It does not depend on a hosted dashboard and does not use transcript parsing as its primary source of truth.
+Agent Halo intentionally stays local. It uses the public Letta Code mod surface, AGY/Cursor/Codex hooks APIs, a local bridge, local credentials, and local logs. The desktop app supervises a bundled standalone bridge whenever no existing Agent Halo bridge is reachable, so non-Letta presence does not require Letta Code to be open. It does not depend on a hosted dashboard and does not use transcript parsing as its primary source of truth.
 
 ## Current status
 
@@ -66,9 +66,9 @@ The project still moves quickly. Session controls remain intentionally conservat
 ## Architecture
 
 ```text
-Letta Code public mod events / AGY lifecycle hooks
+Letta Code public mod events / AGY, Cursor, and Codex lifecycle hooks
   -> ~/.letta/mods/agent-halo.js (Letta)
-  -> adapters/agy/agent-halo-agy-hook.mjs (AGY)
+  -> adapters/*/agent-halo-*-hook.mjs (AGY / Cursor / Codex)
   -> local bridge on 127.0.0.1:47621
   -> SSE / snapshot / NDJSON log
   -> Tauri desktop notch overlay + terminal viewer
@@ -103,7 +103,7 @@ The bridge exposes local-only endpoints:
 | `GET /events` | Live Server-Sent Events stream |
 | `POST /hook/stop` | Optional local Stop-hook bridge for turn completion fallback |
 | `POST /hook/attention` | Local PermissionRequest-hook bridge for needs-input activity |
-| `POST /ingest` | Multi-provider fan-in: secondary Letta instances, AGY adapters, and other event sources post here |
+| `POST /ingest` | Multi-provider fan-in: secondary Letta instances, AGY, Cursor, Codex, and other event sources post here |
 
 The bridge also writes a local NDJSON event log:
 

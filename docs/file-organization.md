@@ -4,7 +4,7 @@
 
 ```text
 agent-halo/
-├── adapters/                 # AGY and bridge-side provider adapters
+├── adapters/                 # Provider hook and bridge-side adapters
 ├── apps/
 │   ├── desktop/              # Tauri desktop app and browser demo
 │   └── viewer/               # Terminal SSE viewer

@@ -4,7 +4,7 @@
 
 Agent Halo is local-first and does not use a hosted application API or frontend query library. Its data boundaries are:
 
-1. Letta Code mod and AGY hook adapters emit normalized events.
+1. Letta Code mod and AGY, Cursor, and Codex hook adapters emit normalized events.
 2. The local bridge owns `/health`, `/snapshot`, `/events`, `/ingest`, and hook endpoints on `127.0.0.1:47621`.
 3. The React desktop shell subscribes to the bridge and derives session/presence views.
 4. Tauri `invoke` commands own native operations such as display placement, process inspection/control, notifications, provider commands, and external URL opening.
