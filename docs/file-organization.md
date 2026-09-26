@@ -42,6 +42,7 @@ There is no router package or route directory. `apps/desktop/src/main.tsx` selec
 - Bridge events and snapshots belong to the local bridge/mod/adapters boundary.
 - Protocol normalization and presence derivation belong in `packages/protocol/` or the established session/presence feature owners.
 - Provider-specific usage reads belong in `apps/desktop/src/features/usage/` and native/provider adapters, not in presentational cards.
+- The sanitized Cursor quota cache for Mahiro Herdr Sidebar is published only from the native Cursor period-usage owner in `apps/desktop/src-tauri/`. Sidebar does not write it.
 - Tauri commands and native process/display/camera/notification work belong in `apps/desktop/src-tauri/`.
 - There is no general `services/` layer; do not create one for a single local data path.
 

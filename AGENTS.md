@@ -3,6 +3,7 @@
 ## Project Reality
 
 - Agent Halo is a local-first Letta Code presence companion and Tauri desktop app. Start with `README.md` and `docs/` for product, architecture, event protocol, and presence-model context.
+- Agent Halo is the trusted producer for Mahiro Herdr Sidebar's normalized Cursor quota cache. After a successful direct `GetCurrentPeriodUsage` read, it may publish only the sanitized `cursor.json` snapshot. Sidebar stays read-only. Cursor hooks and the Cursor statusline do not carry account usage.
 - Use `pnpm` only (`packageManager: pnpm@10.33.0`). Do not add npm/yarn lockfiles.
 - Preserve local/generated state. `.agent-state/`, `.letta/`, `.cocoindex_code/`, `node_modules/`, build output, and test reports are ignored local state.
 - Use kebab-case for filenames under `apps/desktop/src`; when renaming a file, update every static import, dynamic import, and test path while keeping exported component/type symbols in their semantic casing.

@@ -46,6 +46,7 @@ The desktop owns bridge availability, not every bridge process. Every bridge own
 - Treat the NDJSON log as local diagnostics, not canonical telemetry.
 - Desktop UI should consume the protocol package, not infer fields from mod or adapter implementation details.
 - The adapter layer is the only place that knows about provider-specific hook payloads; the bridge and UI stay provider-agnostic.
+- Cursor hooks project lifecycle events only. Account quota stays in the desktop's direct Cursor provider fetch. Agent Halo is the trusted producer of the sanitized Sidebar `cursor.json` cache; Mahiro Herdr Sidebar reads that file and does not collect Cursor usage.
 
 ## Planned phases
 

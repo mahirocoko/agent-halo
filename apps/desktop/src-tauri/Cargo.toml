@@ -1,6 +1,6 @@
 [package]
 name = "agent-halo-desktop"
-version = "0.1.14"
+version = "0.1.15"
 description = "Agent Halo desktop presence overlay"
 authors = ["Mahiro"]
 edition = "2021"

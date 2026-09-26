@@ -30,6 +30,7 @@ use std::os::unix::{
     net::UnixStream,
 };
 
+mod cursor_usage_cache;
 mod keep_awake;
 mod local_services;
 mod notification;
@@ -777,6 +778,7 @@ fn cursor_usage_blocking() -> Result<CodexUsageSnapshot, String> {
         }
         Err(CodexUsageFetchError::Other(message)) => return Err(message),
     };
+    cursor_usage_cache::publish_after_successful_period_usage(&usage);
     let plan = fetch_cursor_json(&client, CURSOR_PLAN_URL, &auth)
         .ok()
         .and_then(|value| {
@@ -6536,5 +6538,40 @@ mod display_selection_tests {
             Some(CodexMetricLine::Progress { label, used, .. })
                 if label == "Gemini 5h" && *used == 25.0
         ));
+    }
+
+    #[test]
+    fn cursor_usage_cache_failure_keeps_usage_result() {
+        let usage = serde_json::json!({
+            "billingCycleEnd": 1_900_000_000_000_i64,
+            "planUsage": {
+                "autoPercentUsed": 10,
+                "apiPercentUsed": 20,
+                "remaining": 500
+            }
+        });
+        let root = std::env::temp_dir()
+            .canonicalize()
+            .expect("temp")
+            .join(format!("agent-halo-cursor-iso-{}", std::process::id()));
+        std::fs::create_dir_all(&root).expect("sandbox");
+        let blocker = root.join("blocker");
+        std::fs::write(&blocker, b"x").expect("blocker");
+        let context = cursor_usage_cache::CursorCachePublishContext {
+            env_override: Some(blocker.join("cache").to_string_lossy().into_owned()),
+            home: root.clone(),
+            now_ms: 1_789_110_000_000,
+        };
+        let before = build_cursor_usage_snapshot(usage.clone(), Some("Pro".into())).expect("usage");
+        assert!(cursor_usage_cache::publish_cursor_period_cache(&usage, &context).is_err());
+        let after = build_cursor_usage_snapshot(usage, Some("Pro".into())).expect("usage");
+        assert_eq!(before.provider_id, after.provider_id);
+        assert_eq!(before.plan, after.plan);
+        assert_eq!(
+            serde_json::to_value(&before.lines).expect("lines"),
+            serde_json::to_value(&after.lines).expect("lines")
+        );
+        assert!(!root.join(".letta").exists());
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

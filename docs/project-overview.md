@@ -32,7 +32,7 @@ Agent Halo is a pnpm workspace with a protocol package and a desktop app. The re
 
 ## Runtime Boundaries
 
-The Letta mod and provider adapters normalize events into the local Agent Halo bridge. The bridge serves local health/snapshot/SSE endpoints and writes a local NDJSON diagnostic log. The desktop renderer consumes the protocol and owns the visible Sessions, Focus, Usage, Runtime, Services, Setup, and Pet projections. Tauri owns native windows, macOS integration, local process/display/camera/notification boundaries, and the bundled bridge supervision path.
+The Letta mod and provider adapters normalize events into the local Agent Halo bridge. The bridge serves local health/snapshot/SSE endpoints and writes a local NDJSON diagnostic log. The desktop renderer consumes the protocol and owns the visible Sessions, Focus, Usage, Runtime, Services, Setup, and Pet projections. Tauri owns native windows, macOS integration, local process/display/camera/notification boundaries, and the bundled bridge supervision path. The native Cursor usage command is also the trusted producer of Mahiro Herdr Sidebar's read-only `cursor.json` quota cache; Cursor hooks and the Cursor statusline do not carry that usage.
 
 See `docs/architecture.md`, `docs/event-protocol.md`, and `docs/presence-model.md` for the active contracts.
 

@@ -13,6 +13,8 @@ Agent Halo is local-first and does not use a hosted application API or frontend 
 ## Ownership Rules
 
 - Keep provider command/credential parsing in the provider adapter or native command boundary, not in a card component.
+- Cursor account quota is owned by the native `GetCurrentPeriodUsage` fetch. That same success path is the only publisher of Mahiro Herdr Sidebar's normalized `cursor.json` cache. Sidebar is read-only. Cursor hooks and the Cursor statusline are not usage sources, and the cache never receives credentials, raw provider payloads, plan name, credits, tokens, or history.
+- Cursor cache publication reuses the renderer-owned Usage refresh cadence while Agent Halo is running; it does not create a separate provider poller. Sidebar owns bounded expiry when the desktop app is absent.
 - Keep bridge event normalization provider-agnostic after the adapter boundary.
 - Keep feature-local snapshots and preferences with their feature persistence owner.
 - Treat local NDJSON as diagnostics/audit evidence, not as a remote server-state cache.
