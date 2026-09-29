@@ -39,7 +39,9 @@ mod runtime_usage;
 mod standalone_bridge;
 
 use keep_awake::KeepAwakeState;
-use local_services::{control_local_service, local_services, LocalServicesControlState};
+use local_services::{
+    control_local_service, local_service_http_evidence, local_services, LocalServicesControlState,
+};
 use notification::{
     cancel_pomodoro_notification, notification_permission_state, request_notification_permission,
     schedule_pomodoro_notification, PomodoroNotificationState,
@@ -5779,6 +5781,7 @@ pub fn run() {
             agent_halo_codex_hook_status,
             hide_completion_pet,
             control_local_service,
+            local_service_http_evidence,
             local_services,
             notch_metrics,
             notification_permission_state,

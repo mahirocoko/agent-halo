@@ -110,6 +110,27 @@ pub struct LocalServicesSnapshot {
     pub services: Vec<LocalService>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalServiceHttpEvidence {
+    pub process_id: i32,
+    pub bind_address: String,
+    pub port: u16,
+    pub kind: String,
+    pub web_frontend: bool,
+    pub http_title: Option<String>,
+    pub url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalServiceHttpSnapshot {
+    pub sampled_at_ms: u64,
+    pub status: String,
+    pub error: Option<String>,
+    pub evidence: Vec<LocalServiceHttpEvidence>,
+}
+
 fn unix_time_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -124,6 +145,16 @@ fn unsupported_snapshot() -> LocalServicesSnapshot {
         status: "unsupported".to_string(),
         error: Some("Local service discovery currently supports macOS only".to_string()),
         services: Vec::new(),
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn unsupported_http_snapshot() -> LocalServiceHttpSnapshot {
+    LocalServiceHttpSnapshot {
+        sampled_at_ms: unix_time_ms(),
+        status: "unsupported".to_string(),
+        error: Some("Local service discovery currently supports macOS only".to_string()),
+        evidence: Vec::new(),
     }
 }
 
@@ -293,9 +324,10 @@ mod macos {
         parse_frontend_registry, parse_lsof_listeners, registry_entry_matches, unix_time_ms,
         FrontendRegistryEntry, Listener, LocalService, LocalServiceControlKey,
         LocalServiceControlMode, LocalServiceControlRequest, LocalServiceControlResult,
-        LocalServiceOwner, LocalServiceOwnerTarget, LocalServicesControlState,
-        LocalServicesSnapshot, LOCAL_SERVICE_CONTROL_TTL_MS, LOCAL_SERVICE_FORCE_TTL_MS,
-        MAX_FRONTEND_REGISTRY_BYTES, MAX_LOCAL_SERVICE_OWNER_TARGETS,
+        LocalServiceHttpEvidence, LocalServiceHttpSnapshot, LocalServiceOwner,
+        LocalServiceOwnerTarget, LocalServicesControlState, LocalServicesSnapshot,
+        LOCAL_SERVICE_CONTROL_TTL_MS, LOCAL_SERVICE_FORCE_TTL_MS, MAX_FRONTEND_REGISTRY_BYTES,
+        MAX_LOCAL_SERVICE_OWNER_TARGETS,
     };
     use crate::standalone_bridge::BRIDGE_PORT;
     use std::{
@@ -310,14 +342,15 @@ mod macos {
         path::{Path, PathBuf},
         process::{Command, Stdio},
         sync::{
-            atomic::{AtomicBool, Ordering},
-            Arc,
+            atomic::{AtomicBool, AtomicUsize, Ordering},
+            mpsc, Arc,
         },
         thread,
         time::{Duration, Instant},
     };
 
     const DISCOVERY_BUDGET: Duration = Duration::from_millis(1_500);
+    const HTTP_PROBE_CONCURRENCY: usize = 8;
     const HTTP_PROBE_TIMEOUT: Duration = Duration::from_millis(120);
     const MAX_HTTP_PROBE_BYTES: usize = 8 * 1024;
     const MAX_LSOF_OUTPUT_BYTES: u64 = 256 * 1024;
@@ -1232,6 +1265,37 @@ mod macos {
         }
     }
 
+    fn inspect_http_parallel(listeners: &[Listener], deadline: Instant) -> Vec<HttpEvidence> {
+        let mut evidence = vec![HttpEvidence::default(); listeners.len()];
+        if listeners.is_empty() {
+            return evidence;
+        }
+
+        let next = &AtomicUsize::new(0);
+        let (sender, receiver) = mpsc::channel();
+        let workers = HTTP_PROBE_CONCURRENCY.min(listeners.len());
+        thread::scope(|scope| {
+            for _ in 0..workers {
+                let sender = sender.clone();
+                scope.spawn(move || loop {
+                    let index = next.fetch_add(1, Ordering::Relaxed);
+                    if index >= listeners.len() {
+                        break;
+                    }
+                    let http = inspect_http(&listeners[index], deadline);
+                    if sender.send((index, http)).is_err() {
+                        break;
+                    }
+                });
+            }
+            drop(sender);
+            while let Ok((index, http)) = receiver.recv() {
+                evidence[index] = http;
+            }
+        });
+        evidence
+    }
+
     fn browser_url(listener: &Listener) -> String {
         let host = match listener.bind_address.as_str() {
             "*" | "0.0.0.0" => "127.0.0.1".to_string(),
@@ -1240,6 +1304,29 @@ mod macos {
             value => value.to_string(),
         };
         format!("http://{host}:{}", listener.port)
+    }
+
+    fn discover_listeners(deadline: Instant) -> Result<Vec<Listener>, String> {
+        let output = run_lsof(deadline)?;
+        Ok(parse_lsof_listeners(&String::from_utf8_lossy(&output)))
+    }
+
+    fn http_evidence_for_listener(
+        listener: &Listener,
+        http: &HttpEvidence,
+        registry_entries: &[FrontendRegistryEntry],
+        sampled_at_ms: u64,
+    ) -> LocalServiceHttpEvidence {
+        LocalServiceHttpEvidence {
+            process_id: listener.process_id,
+            bind_address: listener.bind_address.clone(),
+            port: listener.port,
+            kind: if http.http { "http" } else { "tcp" }.to_string(),
+            web_frontend: http.web_frontend
+                || is_registered_frontend(listener, registry_entries, sampled_at_ms),
+            http_title: http.title.clone(),
+            url: http.http.then(|| browser_url(listener)),
+        }
     }
 
     pub(super) fn sample(
@@ -1282,9 +1369,8 @@ mod macos {
             Ok(entries) => (entries, None),
             Err(error) => (Vec::new(), Some(error)),
         };
-        let deadline = Instant::now() + DISCOVERY_BUDGET;
-        let output = match run_lsof(deadline) {
-            Ok(output) => output,
+        let listeners = match discover_listeners(Instant::now() + DISCOVERY_BUDGET) {
+            Ok(listeners) => listeners,
             Err(error) => {
                 return LocalServicesSnapshot {
                     sampled_at_ms,
@@ -1294,12 +1380,9 @@ mod macos {
                 };
             }
         };
-
-        let listeners = parse_lsof_listeners(&String::from_utf8_lossy(&output));
         let services = listeners
             .iter()
             .map(|listener| {
-                let http = inspect_http(listener, deadline);
                 let process = basic_process(listener.process_id);
                 let parent = process
                     .as_ref()
@@ -1332,11 +1415,14 @@ mod macos {
                     resident_size_bytes,
                     bind_address: listener.bind_address.clone(),
                     port: listener.port,
-                    kind: if http.http { "http" } else { "tcp" }.to_string(),
-                    web_frontend: http.web_frontend
-                        || is_registered_frontend(listener, &registry_entries, sampled_at_ms),
-                    http_title: http.title,
-                    url: http.http.then(|| browser_url(listener)),
+                    kind: "tcp".to_string(),
+                    web_frontend: is_registered_frontend(
+                        listener,
+                        &registry_entries,
+                        sampled_at_ms,
+                    ),
+                    http_title: None,
+                    url: None,
                     cwd: process_cwd(listener.process_id),
                     owner: match_service_owner(&ancestry, &owner_targets),
                     control_available: control_unavailable_reason.is_none(),
@@ -1388,11 +1474,46 @@ mod macos {
         }
     }
 
+    pub(super) fn sample_http() -> LocalServiceHttpSnapshot {
+        let sampled_at_ms = unix_time_ms();
+        let (registry_entries, registry_error) = match read_frontend_registry(sampled_at_ms) {
+            Ok(entries) => (entries, None),
+            Err(error) => (Vec::new(), Some(error)),
+        };
+        let deadline = Instant::now() + DISCOVERY_BUDGET;
+        let listeners = match discover_listeners(deadline) {
+            Ok(listeners) => listeners,
+            Err(error) => {
+                return LocalServiceHttpSnapshot {
+                    sampled_at_ms,
+                    status: "error".to_string(),
+                    error: Some(error),
+                    evidence: Vec::new(),
+                };
+            }
+        };
+        let probed = inspect_http_parallel(&listeners, deadline);
+        let evidence = listeners
+            .iter()
+            .zip(probed)
+            .map(|(listener, http)| {
+                http_evidence_for_listener(listener, &http, &registry_entries, sampled_at_ms)
+            })
+            .collect::<Vec<_>>();
+
+        LocalServiceHttpSnapshot {
+            sampled_at_ms,
+            status: "ok".to_string(),
+            error: registry_error,
+            evidence,
+        }
+    }
+
     #[cfg(test)]
     mod tests {
         use super::{
             control, control_unavailable_reason, endpoint_is_listening, inspect_http,
-            is_next_dev_manifest_response, is_vite_dev_client_response,
+            inspect_http_parallel, is_next_dev_manifest_response, is_vite_dev_client_response,
             is_web_app_document_response, match_service_owner, process_is_protected_host,
             read_frontend_registry_path, request_http, response_html_title, response_status,
             run_bounded_output, HttpEvidence, ProcessIdentity,
@@ -1630,6 +1751,37 @@ mod macos {
                 Some(401)
             );
             assert_eq!(response_status(b"not-http"), None);
+        }
+
+        #[test]
+        fn classifies_listeners_in_parallel_without_reordering() {
+            let (web_listener, web_handle) = fixture_listener(FixtureKind::WebApp, "node");
+            let (plain_listener, plain_handle) =
+                fixture_listener(FixtureKind::GenericHtml, "Python");
+            let evidence = inspect_http_parallel(
+                &[web_listener, plain_listener],
+                Instant::now() + Duration::from_secs(2),
+            );
+
+            assert_eq!(evidence.len(), 2);
+            assert_eq!(
+                evidence[0],
+                HttpEvidence {
+                    http: true,
+                    web_frontend: true,
+                    title: None,
+                }
+            );
+            assert_eq!(
+                evidence[1],
+                HttpEvidence {
+                    http: true,
+                    web_frontend: false,
+                    title: Some("App".to_string()),
+                }
+            );
+            web_handle.join().expect("join web fixture server");
+            plain_handle.join().expect("join plain fixture server");
         }
 
         #[test]
@@ -2001,6 +2153,18 @@ mod macos {
             );
             handle.join().expect("join slow fixture server");
         }
+    }
+}
+
+#[tauri::command]
+pub fn local_service_http_evidence() -> LocalServiceHttpSnapshot {
+    #[cfg(target_os = "macos")]
+    {
+        return macos::sample_http();
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        unsupported_http_snapshot()
     }
 }
 

@@ -726,7 +726,7 @@ export const LocalServicesPanel = ({
           </div>
           {monitor.servicesLoading ? (
             <span className="runtime-ended-count" role="status">
-              Checking…
+              {monitor.services.length === 0 ? 'Checking local listeners…' : 'Checking web apps…'}
             </span>
           ) : null}
           <p className="runtime-footnote">Web evidence first · exact Letta ancestry · Stop requires confirmation</p>
@@ -760,7 +760,9 @@ export const LocalServicesPanel = ({
             {controlAnnouncement}
           </span>
           {monitor.services.length === 0 ? (
-            <div className="empty-text small">No listening TCP services detected</div>
+            <div className="empty-text small">
+              {monitor.servicesLoading ? 'Checking local listeners…' : 'No listening TCP services detected'}
+            </div>
           ) : (
             <div className="runtime-service-groups">
               <LocalServiceGroup

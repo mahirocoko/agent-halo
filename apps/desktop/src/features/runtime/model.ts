@@ -2,6 +2,7 @@ import type { IAgentHaloEventRuntime } from '@agent-halo/protocol'
 import type { ISessionSummary } from '../session/types'
 import type {
   ILocalService,
+  ILocalServiceHttpEvidence,
   ILocalServiceOwnerTarget,
   IRuntimeSessionView,
   IRuntimeTargetSource,
@@ -242,6 +243,45 @@ export const localServiceProcessKey = (service: Pick<ILocalService, 'processId' 
 export const localServiceListenerKey = (
   service: Pick<ILocalService, 'processId' | 'processStartTimeMs' | 'bindAddress' | 'port'>,
 ): string => `${localServiceProcessKey(service)}:${service.bindAddress}:${service.port}`
+
+const localServiceEndpointKey = (service: Pick<ILocalService, 'processId' | 'bindAddress' | 'port'>): string =>
+  `${service.processId}:${service.bindAddress}:${service.port}`
+
+export const preserveLocalServiceHttp = (
+  services: ILocalService[],
+  previous: readonly ILocalService[],
+): ILocalService[] => {
+  const previousByListener = new Map(previous.map((service) => [localServiceListenerKey(service), service]))
+  return services.map((service) => {
+    const prior = previousByListener.get(localServiceListenerKey(service))
+    if (!prior) return service
+    return {
+      ...service,
+      kind: prior.kind,
+      webFrontend: service.webFrontend || prior.webFrontend,
+      httpTitle: prior.httpTitle,
+      url: prior.url,
+    }
+  })
+}
+
+export const applyLocalServiceHttpEvidence = (
+  services: ILocalService[],
+  evidence: readonly ILocalServiceHttpEvidence[],
+): ILocalService[] => {
+  const evidenceByEndpoint = new Map(evidence.map((item) => [localServiceEndpointKey(item), item]))
+  return services.map((service) => {
+    const next = evidenceByEndpoint.get(localServiceEndpointKey(service))
+    if (!next) return service
+    return {
+      ...service,
+      kind: next.kind,
+      webFrontend: next.webFrontend,
+      httpTitle: next.httpTitle,
+      url: next.url,
+    }
+  })
+}
 
 export const formatLocalServiceUptime = (startedAtMs: number | null, nowMs = Date.now()): string => {
   if (startedAtMs == null || !Number.isFinite(startedAtMs) || startedAtMs <= 0 || startedAtMs > nowMs) return '—'

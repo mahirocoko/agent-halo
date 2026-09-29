@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  applyLocalServiceHttpEvidence,
   buildLocalServiceOwnerTargets,
   buildRuntimeLivenessTargets,
   buildRuntimeSessionViews,
@@ -9,6 +10,7 @@ import {
   createDemoRuntimeSnapshots,
   isTerminalRuntimeStatus,
   localServiceProcessKey,
+  preserveLocalServiceHttp,
   runtimeTargetKey,
   selectRuntimeMonitorTargets,
   selectRuntimeSamplingTargets,
@@ -23,6 +25,7 @@ import type {
   ILocalService,
   ILocalServiceControlRequest,
   ILocalServiceControlResult,
+  ILocalServiceHttpSnapshot,
   ILocalServiceOwnerTarget,
   ILocalServicesSnapshot,
   IRuntimeMonitorView,
@@ -189,11 +192,21 @@ export const useRuntimeMonitor = ({
       const ownerTargets: ILocalServiceOwnerTarget[] = serviceOwnerTargetsRef.current
       const snapshot = await invoke<ILocalServicesSnapshot>('local_services', { ownerTargets })
       if (servicesRequestVersionRef.current !== requestVersion) return
-      setServices(snapshot.services)
+      const discoveryFailed = snapshot.services.length === 0 && snapshot.error != null
+      if (!discoveryFailed) {
+        setServices((current) => preserveLocalServiceHttp(snapshot.services, current))
+      }
       setServicesError(snapshot.error)
+      if (snapshot.status !== 'ok' || snapshot.services.length === 0) return
+
+      const httpSnapshot = await invoke<ILocalServiceHttpSnapshot>('local_service_http_evidence')
+      if (servicesRequestVersionRef.current !== requestVersion) return
+      if (httpSnapshot.evidence.length > 0) {
+        setServices((current) => applyLocalServiceHttpEvidence(current, httpSnapshot.evidence))
+      }
+      if (httpSnapshot.error) setServicesError(httpSnapshot.error)
     } catch (reason) {
       if (servicesRequestVersionRef.current === requestVersion) {
-        setServices([])
         setServicesError(reason instanceof Error ? reason.message : 'Could not inspect local services')
       }
     } finally {

@@ -124,6 +124,23 @@ export interface ILocalServicesSnapshot {
   services: ILocalService[]
 }
 
+export interface ILocalServiceHttpEvidence {
+  processId: number
+  bindAddress: string
+  port: number
+  kind: LocalServiceKind
+  webFrontend: boolean
+  httpTitle: string | null
+  url: string | null
+}
+
+export interface ILocalServiceHttpSnapshot {
+  sampledAtMs: number
+  status: 'ok' | 'unsupported' | 'error' | string
+  error: string | null
+  evidence: ILocalServiceHttpEvidence[]
+}
+
 export interface IRuntimeUsageSnapshot {
   conversationId: string
   processId: number
