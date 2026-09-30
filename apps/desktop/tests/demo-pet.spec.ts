@@ -263,17 +263,17 @@ test("invalid motion mapping values normalize independently to truthful defaults
   await expect.poll(() => page.evaluate(() => window.localStorage.getItem("agent-halo.pet-motion-map"))).toContain('"schemaVersion":1');
 });
 
-test("Setup labels Completion Pet after Focus and keeps manual Pet available when automatic offers are Off", async ({ page }) => {
+test("Setup labels Completion Pet and keeps manual Pet available when automatic offers are Off", async ({ page }) => {
   await page.goto("/?demo=1&demoScenario=idle");
   await openPetSettings(page);
-  const row = page.locator(".setup-row").filter({ has: page.locator(".setup-title", { hasText: /^Completion Pet after Focus$/ }) });
-  await expect(row).toContainText("Shows automatically after a completed Focus");
-  const toggle = row.getByRole("switch", { name: "Disable completion pet after Focus" });
+  const row = page.locator(".setup-row").filter({ has: page.locator(".setup-title", { hasText: /^Completion Pet$/ }) });
+  await expect(row).toContainText("Shows after a completed Focus or break");
+  const toggle = row.getByRole("switch", { name: "Disable completion pet" });
   await expect(toggle).toHaveAttribute("aria-checked", "true");
   await toggle.click();
   await expect(row).toContainText("Off · manual Pet remains available");
-  await expect(row.getByRole("switch", { name: "Enable completion pet after Focus" })).toHaveText("Off");
-  await expect(row.getByRole("switch", { name: "Enable completion pet after Focus" })).toHaveAttribute("aria-checked", "false");
+  await expect(row.getByRole("switch", { name: "Enable completion pet" })).toHaveText("Off");
+  await expect(row.getByRole("switch", { name: "Enable completion pet" })).toHaveAttribute("aria-checked", "false");
   expect(await page.evaluate(() => window.localStorage.getItem("agent-halo.completion-pet-enabled"))).toBe("false");
 });
 

@@ -1,5 +1,5 @@
 import { Camera, CameraOff, Dumbbell, Play, RotateCcw, X } from 'lucide-react'
-import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef, useState } from 'react'
+import { type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from 'react'
 import { getMovementExercise } from './exercises'
 import { createLocalPoseLandmarker } from './runtime'
 import type { IMovementPoseSnapshot } from './types'
@@ -18,6 +18,8 @@ export interface IMovementChallengeProps {
   onRetry: () => void
   onSnapshot: (snapshot: IMovementPoseSnapshot) => void
   onStartBreak: () => void
+  onDragWindow?: () => void
+  onNudgeWindow?: (dx: number, dy: number) => void
 }
 
 export const MovementChallenge = ({
@@ -29,6 +31,8 @@ export const MovementChallenge = ({
   onRetry,
   onSnapshot,
   onStartBreak,
+  onDragWindow,
+  onNudgeWindow,
   snapshot,
 }: IMovementChallengeProps) => {
   const exercise = getMovementExercise(snapshot.exerciseId)
@@ -213,9 +217,35 @@ export const MovementChallenge = ({
   }, [cameraPreviewEnabled, demoPoseEnabled, exercise.id, snapshot.sessionId])
 
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLElement>): void => {
-    if (event.key !== 'Escape' || busy) return
+    if (event.key === 'Escape' && !busy) {
+      event.preventDefault()
+      onCancel()
+      return
+    }
+    if (!onNudgeWindow) return
+    const step = event.shiftKey ? 48 : 16
+    const delta =
+      event.key === 'ArrowLeft'
+        ? [-step, 0]
+        : event.key === 'ArrowRight'
+          ? [step, 0]
+          : event.key === 'ArrowUp'
+            ? [0, -step]
+            : event.key === 'ArrowDown'
+              ? [0, step]
+              : null
+    if (!delta) return
+    const target = event.target
+    if (target instanceof Element && target.closest('input, textarea, select')) return
     event.preventDefault()
-    onCancel()
+    onNudgeWindow(delta[0], delta[1])
+  }
+
+  const beginWindowDrag = (event: ReactPointerEvent<HTMLElement>): void => {
+    if (!onDragWindow || event.button !== 0) return
+    const target = event.target
+    if (!(target instanceof Element) || target.closest('button, a, input, textarea, select')) return
+    onDragWindow()
   }
 
   return (
@@ -225,11 +255,14 @@ export const MovementChallenge = ({
       aria-label={exercise.dialogLabel}
       data-exercise={exercise.id}
       data-status={snapshot.status}
+      data-draggable={onDragWindow ? 'true' : 'false'}
+      aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight"
       onKeyDown={handleKeyDown}
+      onPointerDown={beginWindowDrag}
     >
       <header className="movement-header">
         <span className="movement-title">
-          <Dumbbell size={15} strokeWidth={2.4} />
+          <Dumbbell size={15} strokeWidth={2} />
           {exercise.title}
         </span>
         <span className="movement-local">
@@ -355,7 +388,7 @@ export const MovementChallenge = ({
           </button>
         ) : null}
         {!terminalFailure && !complete ? (
-          <button className="is-danger" type="button" onClick={onCancel} disabled={busy}>
+          <button type="button" onClick={onCancel} disabled={busy}>
             Cancel
           </button>
         ) : null}

@@ -1,3 +1,4 @@
+import { BoardScroll } from '../../components/board-surface'
 import {
   type IResizableCardSpec,
   ResizableCardDivider,
@@ -43,9 +44,9 @@ export const FocusToolsPanel = ({
           aria-label="Pomodoro"
           style={layout.cardStyle(0)}
         >
-          <div className="halo-inner-scroll" data-scroll-owner="inner" data-focus-card="pomodoro">
+          <BoardScroll data-scroll-owner="inner" data-focus-card="pomodoro">
             <PomodoroPanel pomodoro={pomodoro} onResetAll={onResetAllPomodoro} />
-          </div>
+          </BoardScroll>
         </section>
         <ResizableCardDivider layout={layout} index={0} label="Resize Pomodoro and Stopwatch" />
         <section
@@ -53,9 +54,9 @@ export const FocusToolsPanel = ({
           aria-label="Stopwatch"
           style={layout.cardStyle(1)}
         >
-          <div className="halo-inner-scroll" data-scroll-owner="inner" data-focus-card="stopwatch">
+          <BoardScroll data-scroll-owner="inner" data-focus-card="stopwatch">
             <StopwatchPanel stopwatch={stopwatch} />
-          </div>
+          </BoardScroll>
         </section>
         <ResizableCardDivider layout={layout} index={1} label="Resize Stopwatch and Move" />
         <section
@@ -63,13 +64,13 @@ export const FocusToolsPanel = ({
           aria-label="Move"
           style={layout.cardStyle(2)}
         >
-          <div className="halo-inner-scroll" data-scroll-owner="inner" data-focus-card="move">
+          <BoardScroll data-scroll-owner="inner" data-focus-card="move">
             <MovementLauncher
               nativeAvailable={nativeAvailable}
               onShowCompanion={onShowCompanion}
               onStartMovement={onStartMovement}
             />
-          </div>
+          </BoardScroll>
         </section>
       </div>
     </div>

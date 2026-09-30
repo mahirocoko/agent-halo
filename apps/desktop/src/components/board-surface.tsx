@@ -1,4 +1,5 @@
 import type { ComponentPropsWithRef } from 'react'
+import { ScrollArea } from './scroll-area'
 
 type BoardSurfaceTone = 'mint' | 'lavender' | 'sand' | 'parchment' | 'slate' | 'navy' | 'teal'
 
@@ -15,11 +16,12 @@ const BoardSurface = ({ className, tone, ...sectionProps }: IBoardSurfaceProps) 
   />
 )
 
-const BoardScroll = ({ className, ...scrollProps }: IBoardScrollProps) => (
-  <div
+const BoardScroll = ({ className, ref, ...scrollProps }: IBoardScrollProps) => (
+  <ScrollArea
+    {...scrollProps}
     className={['halo-inner-scroll', className].filter(Boolean).join(' ')}
     data-scroll-owner="inner"
-    {...scrollProps}
+    viewportRef={ref}
   />
 )
 

@@ -1,8 +1,8 @@
 :root {
   --surface: #000000;
   --text: #e8eaed;
-  --text-2: #a8adb8;
-  --text-3: #7c8290;
+  --text-2: #c5ccd6;
+  --text-3: #b7bfc9;
   --hair: rgba(255, 255, 255, 0.1);
   --fill: rgba(255, 255, 255, 0.07);
   --fill-2: rgba(255, 255, 255, 0.12);
@@ -10,7 +10,7 @@
   --accent-ink: #0c1620;
   --waiting: #e0b04a;
   --done: #4ade80;
-  --danger: #f0716a;
+  --danger: #ff9d96;
   --focus-ring: #9ad0ea;
   --scrollbar-track: rgba(255, 255, 255, 0.04);
   --scrollbar-thumb: rgba(255, 255, 255, 0.18);

@@ -61,8 +61,8 @@ export const usePomodoro = (canUseNativeNotifications: boolean, preferCompletion
   const settingsRef = useRef(settings)
   const previousPetPreferenceRef = useRef(preferCompletionPet)
 
-  const notificationDeadline = (deadlineMs: number, phase: IPomodoroState['phase']): number =>
-    deadlineMs + (preferCompletionPet && phase === 'focus' ? POMODORO_PET_FALLBACK_DELAY_MS : 0)
+  const notificationDeadline = (deadlineMs: number, _phase: IPomodoroState['phase']): number =>
+    deadlineMs + (preferCompletionPet ? POMODORO_PET_FALLBACK_DELAY_MS : 0)
 
   const commitState = (next: IPomodoroState): void => {
     stateRef.current = next
@@ -114,7 +114,10 @@ export const usePomodoro = (canUseNativeNotifications: boolean, preferCompletion
           const completion = restored.lastCompletion
           const keepPendingPetFallback =
             preferCompletionPet &&
-            completion?.completedPhase === 'focus' &&
+            completion !== null &&
+            (completion.completedPhase === 'focus' ||
+              completion.completedPhase === 'short-break' ||
+              completion.completedPhase === 'long-break') &&
             completion.notificationScheduled &&
             Date.now() < completion.completedAt + POMODORO_PET_FALLBACK_DELAY_MS
           if (keepPendingPetFallback) return

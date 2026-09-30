@@ -799,10 +799,10 @@ export const SetupPanel = ({
                     <Bot className="setup-icon" size={14} strokeWidth={2.3} />
                   </span>
                   <span className="setup-copy">
-                    <span className="setup-title">Completion Pet after Focus</span>
+                    <span className="setup-title">Completion Pet</span>
                     <span className="setup-detail">
                       {completionPetEnabled
-                        ? 'Shows automatically after a completed Focus'
+                        ? 'Shows after a completed Focus or break'
                         : 'Off · manual Pet remains available'}
                     </span>
                   </span>
@@ -813,7 +813,7 @@ export const SetupPanel = ({
                     aria-checked={completionPetEnabled}
                     onClick={() => onCompletionPetEnabledChange(!completionPetEnabled)}
                     data-tauri-drag-region="false"
-                    aria-label={`${completionPetEnabled ? 'Disable' : 'Enable'} completion pet after Focus`}
+                    aria-label={`${completionPetEnabled ? 'Disable' : 'Enable'} completion pet`}
                   >
                     {completionPetEnabled ? 'On' : 'Off'}
                   </button>

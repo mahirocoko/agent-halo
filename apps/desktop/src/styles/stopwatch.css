@@ -47,17 +47,17 @@
 }
 
 .stopwatch-status {
-  min-height: 20px;
+  min-height: 24px;
   display: inline-flex;
   align-items: center;
-  margin-left: auto;
-  padding: 2px 7px;
+  margin-inline-start: auto;
+  padding: 2px 8px;
   border: 1px solid #111;
   border-radius: 999px;
   color: #111;
   background: transparent;
-  font-size: 9px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 650;
 }
 .stopwatch-status[data-status="running"] {
   color: #fff;
@@ -92,7 +92,7 @@
   margin-top: 16px;
   border-block: 1px solid var(--hair);
   color: var(--text-2);
-  font-size: 9px;
+  font-size: 12px;
 }
 .stopwatch-history-heading > span {
   gap: 5px;
@@ -104,7 +104,8 @@
 .stopwatch-history-empty {
   padding: 16px 1px;
   color: var(--text-3);
-  font-size: 10px;
+  font-size: 12px;
+  line-height: 1.4;
 }
 .stopwatch-history-list {
   overflow-y: auto;
@@ -115,8 +116,9 @@
 .stopwatch-history-date {
   justify-content: space-between;
   color: var(--text-2);
-  font-size: 8px;
-  font-weight: 750;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 .stopwatch-history-date span:last-child,
@@ -134,12 +136,12 @@
   gap: 8px;
   border-top: 1px solid var(--hair);
   color: var(--text-3);
-  font-size: 9px;
+  font-size: 12px;
 }
 .stopwatch-history-group strong {
   color: var(--text);
-  font-size: 9px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 650;
 }
 
 @container focus-tools (max-width: 360px) {

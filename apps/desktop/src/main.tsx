@@ -437,6 +437,22 @@ const App = () => {
           setPanelOpen(true)
           return
         }
+        if (action.action === 'start-focus') {
+          if (action.nextPhase !== 'focus') return
+          setActivePetSummon(null)
+          const current = pomodoroRef.current
+          const completedPhase = current.state.lastCompletion?.completedPhase
+          if (
+            current.state.status === 'idle' &&
+            current.state.phase === 'focus' &&
+            (completedPhase === 'short-break' || completedPhase === 'long-break') &&
+            current.state.lastCompletion?.nextPhase === 'focus' &&
+            current.state.lastCompletion.id === action.summonId
+          ) {
+            current.start()
+          }
+          return
+        }
         if (!['movement-complete', 'start-break'].includes(action.action) || action.nextPhase === null) return
         setActivePetSummon(null)
         const current = pomodoroRef.current
@@ -466,24 +482,40 @@ const App = () => {
     const completion = pomodoro.state.lastCompletion
     if (!completion || completion.id === observedCompletionIdRef.current) return
     observedCompletionIdRef.current = completion.id
-    if (!completionPetEnabled || !canUseNativeControls || completion.completedPhase !== 'focus') return
+    const naturalFocus = completion.completedPhase === 'focus'
+    const naturalBreak = completion.completedPhase === 'short-break' || completion.completedPhase === 'long-break'
+    if (!completionPetEnabled || !canUseNativeControls || (!naturalFocus && !naturalBreak)) return
     // An intentionally shown manual companion is pinned until Hide. Keep its
     // delayed macOS notification instead of replacing it with completion UI.
     if (activePetSummon?.purpose === 'manual-companion') return
     if (completion.observedAt - completion.completedAt >= POMODORO_PET_HANDOFF_WINDOW_MS) return
-    if (completion.nextPhase !== 'short-break' && completion.nextPhase !== 'long-break') return
+    const preparedBreak =
+      completion.nextPhase === 'short-break' || completion.nextPhase === 'long-break' ? completion.nextPhase : null
+    if (naturalFocus && preparedBreak === null) return
+    if (naturalBreak && completion.nextPhase !== 'focus') return
     const summonGeneration = completionPetSummonGenerationRef.current + 1
     completionPetSummonGenerationRef.current = summonGeneration
-    const summon: ICompletionPetSummon = {
-      schemaVersion: 2,
-      id: completion.id,
-      purpose: 'focus-completion',
-      pet,
-      loadout: pet === 'halo-bot' ? haloBotLoadout : undefined,
-      petSize: completionPetSize,
-      movementBreakEnabled,
-      nextPhase: completion.nextPhase,
-    }
+    const summon: ICompletionPetSummon =
+      naturalBreak || preparedBreak === null
+        ? {
+            schemaVersion: 2,
+            id: completion.id,
+            purpose: 'break-completion',
+            pet,
+            loadout: pet === 'halo-bot' ? haloBotLoadout : undefined,
+            petSize: completionPetSize,
+            nextPhase: 'focus',
+          }
+        : {
+            schemaVersion: 2,
+            id: completion.id,
+            purpose: 'focus-completion',
+            pet,
+            loadout: pet === 'halo-bot' ? haloBotLoadout : undefined,
+            petSize: completionPetSize,
+            movementBreakEnabled,
+            nextPhase: preparedBreak,
+          }
     void (async () => {
       const handoffDeadlineMs = completion.completedAt + POMODORO_PET_HANDOFF_WINDOW_MS
       const claimed = await pomodoroRef.current.resolveCompletionWithPet(handoffDeadlineMs)
@@ -1652,7 +1684,11 @@ const App = () => {
     completionPetSummonGenerationRef.current += 1
     setCompletionPetEnabled(enabled)
     writeCompletionPetEnabled(enabled)
-    if (!enabled && canUseNativeControls && activePetSummon?.purpose === 'focus-completion') {
+    if (
+      !enabled &&
+      canUseNativeControls &&
+      (activePetSummon?.purpose === 'focus-completion' || activePetSummon?.purpose === 'break-completion')
+    ) {
       setActivePetSummon(null)
       void invoke('hide_completion_pet').catch(() => undefined)
     }
@@ -1674,7 +1710,10 @@ const App = () => {
 
   const resetAllPomodoroCycle = () => {
     completionPetSummonGenerationRef.current += 1
-    if (canUseNativeControls && activePetSummon?.purpose === 'focus-completion') {
+    if (
+      canUseNativeControls &&
+      (activePetSummon?.purpose === 'focus-completion' || activePetSummon?.purpose === 'break-completion')
+    ) {
       setActivePetSummon(null)
       void invoke('hide_completion_pet').catch(() => undefined)
     }
@@ -2616,7 +2655,7 @@ const App = () => {
                   </Suspense>
                 ) : sessions.length === 0 ? (
                   <div className="sessions-card halo-tab-surface halo-surface-mint" data-testid="sessions-board">
-                    <div className="halo-inner-scroll" data-scroll-owner="inner">
+                    <BoardScroll data-scroll-owner="inner">
                       <div className="empty-state">
                         <div className="empty-glyph">◌</div>
                         <div className="empty-text">Waiting for Letta Code</div>
@@ -2633,7 +2672,7 @@ const App = () => {
                           Open setup
                         </button>
                       </div>
-                    </div>
+                    </BoardScroll>
                   </div>
                 ) : (
                   <div className="sessions-tray" data-testid="sessions-tray" ref={sessionsTrayRef}>
@@ -2644,7 +2683,7 @@ const App = () => {
                       style={{ flex: `${sessionsRatios[0]} 0 0px`, minWidth: `${SESSIONS_CARD_MIN_WIDTH}px` }}
                       aria-labelledby="active-session-heading"
                     >
-                      <div className="halo-inner-scroll" data-scroll-owner="inner" data-scroll-card="active">
+                      <BoardScroll data-scroll-owner="inner" data-scroll-card="active">
                         <div className="sessions-card-head">
                           <span id="active-session-heading" className="sessions-card-title">
                             Active
@@ -2689,7 +2728,7 @@ const App = () => {
                         ) : (
                           <div className="empty-text small">No active sessions</div>
                         )}
-                      </div>
+                      </BoardScroll>
                     </section>
 
                     <div
@@ -2727,7 +2766,7 @@ const App = () => {
                       style={{ flex: `${sessionsRatios[1]} 0 0px`, minWidth: `${SESSIONS_CARD_MIN_WIDTH}px` }}
                       aria-labelledby="completed-session-heading"
                     >
-                      <div className="halo-inner-scroll" data-scroll-owner="inner" data-scroll-card="completed">
+                      <BoardScroll data-scroll-owner="inner" data-scroll-card="completed">
                         <div className="sessions-card-head">
                           <span id="completed-session-heading" className="sessions-card-title">
                             Completed
@@ -2772,7 +2811,7 @@ const App = () => {
                         ) : (
                           <div className="empty-text small">No completed sessions</div>
                         )}
-                      </div>
+                      </BoardScroll>
                     </section>
 
                     <div
@@ -2810,7 +2849,7 @@ const App = () => {
                       style={{ flex: `${sessionsRatios[2]} 0 0px`, minWidth: `${SESSIONS_CARD_MIN_WIDTH}px` }}
                       aria-labelledby="recent-activity-heading"
                     >
-                      <div className="halo-inner-scroll" data-scroll-owner="inner" data-scroll-card="recent">
+                      <BoardScroll data-scroll-owner="inner" data-scroll-card="recent">
                         <div className="sessions-card-head">
                           <span id="recent-activity-heading" className="sessions-card-title">
                             Recent activity
@@ -2830,7 +2869,7 @@ const App = () => {
                         ) : (
                           <div className="empty-text small">No recent activity</div>
                         )}
-                      </div>
+                      </BoardScroll>
                     </section>
                   </div>
                 )}

@@ -34,10 +34,14 @@ const setRef = <T,>(ref: Ref<T> | undefined, value: T | null) => {
   else if (ref) ref.current = value
 }
 
+const OVERFLOW_THRESHOLD_PX = 8
+
 const ScrollArea = ({ children, className, onScroll, viewportRef, ...viewportProps }: IScrollAreaProps) => {
   const generatedId = useId()
   const viewportElement = useRef<HTMLDivElement | null>(null)
+  const hideTimer = useRef<number | null>(null)
   const [metrics, setMetrics] = useState(EMPTY_METRICS)
+  const [scrolling, setScrolling] = useState(false)
   const viewportId = viewportProps.id ?? generatedId
 
   const updateMetrics = useCallback(() => {
@@ -48,7 +52,7 @@ const ScrollArea = ({ children, className, onScroll, viewportRef, ...viewportPro
     const trackLength = Math.max(root.clientHeight - 8, 0)
     const scrollHeight = viewport.scrollHeight
     const maxScroll = Math.max(scrollHeight - viewport.clientHeight, 0)
-    const visible = maxScroll > 1 && trackLength > 0
+    const visible = maxScroll > OVERFLOW_THRESHOLD_PX && trackLength > 0
     const thumbSize = visible
       ? Math.max(28, Math.min(trackLength, (viewport.clientHeight / scrollHeight) * trackLength))
       : 0
@@ -88,11 +92,15 @@ const ScrollArea = ({ children, className, onScroll, viewportRef, ...viewportPro
     return () => {
       resizeObserver.disconnect()
       mutationObserver.disconnect()
+      if (hideTimer.current !== null) window.clearTimeout(hideTimer.current)
     }
   }, [updateMetrics])
 
   const handleScroll: UIEventHandler<HTMLDivElement> = (event) => {
     updateMetrics()
+    setScrolling(true)
+    if (hideTimer.current !== null) window.clearTimeout(hideTimer.current)
+    hideTimer.current = window.setTimeout(() => setScrolling(false), 700)
     onScroll?.(event)
   }
 
@@ -138,7 +146,7 @@ const ScrollArea = ({ children, className, onScroll, viewportRef, ...viewportPro
   }
 
   return (
-    <div className="scroll-area" data-scrollable={metrics.visible}>
+    <div className="scroll-area" data-scrollable={metrics.visible} data-scrolling={scrolling}>
       <div
         {...viewportProps}
         className={['scroll-area-viewport', className].filter(Boolean).join(' ')}
@@ -148,25 +156,27 @@ const ScrollArea = ({ children, className, onScroll, viewportRef, ...viewportPro
       >
         {children}
       </div>
-      <div
-        aria-controls={viewportId}
-        aria-hidden={!metrics.visible}
-        aria-label="Scroll content"
-        aria-orientation="vertical"
-        aria-valuemax={metrics.maxScroll}
-        aria-valuemin={0}
-        aria-valuenow={metrics.scrollTop}
-        className="scroll-area-scrollbar"
-        onKeyDown={handleScrollbarKeyDown}
-        role="scrollbar"
-        tabIndex={metrics.visible ? 0 : -1}
-      >
+      {metrics.visible ? (
         <div
-          className="scroll-area-thumb"
-          onPointerDown={handleThumbPointerDown}
-          style={{ height: `${metrics.thumbSize}px`, transform: `translateY(${metrics.offset}px)` }}
-        />
-      </div>
+          aria-controls={viewportId}
+          aria-hidden={false}
+          aria-label="Scroll content"
+          aria-orientation="vertical"
+          aria-valuemax={metrics.maxScroll}
+          aria-valuemin={0}
+          aria-valuenow={metrics.scrollTop}
+          className="scroll-area-scrollbar"
+          onKeyDown={handleScrollbarKeyDown}
+          role="scrollbar"
+          tabIndex={0}
+        >
+          <div
+            className="scroll-area-thumb"
+            onPointerDown={handleThumbPointerDown}
+            style={{ height: `${metrics.thumbSize}px`, transform: `translateY(${metrics.offset}px)` }}
+          />
+        </div>
+      ) : null}
     </div>
   )
 }

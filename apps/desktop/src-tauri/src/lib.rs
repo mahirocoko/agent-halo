@@ -48,9 +48,9 @@ use notification::{
 };
 use pet_window::{
     activate_completion_pet, completion_pet_state, drag_completion_pet, hide_completion_pet,
-    set_completion_pet_expanded, set_completion_pet_movement, show_completion_pet,
-    submit_completion_pet_action, take_completion_pet_action, update_completion_pet_projection,
-    CompletionPetWindowState,
+    nudge_completion_pet, set_completion_pet_expanded, set_completion_pet_movement,
+    show_completion_pet, submit_completion_pet_action, take_completion_pet_action,
+    update_completion_pet_projection, CompletionPetWindowState,
 };
 use runtime_usage::{runtime_usage, RuntimeUsageState};
 use standalone_bridge::StandaloneBridgeState;
@@ -5750,6 +5750,7 @@ fn completion_pet_command_allowed(command: &str) -> bool {
         "activate_completion_pet"
             | "completion_pet_state"
             | "drag_completion_pet"
+            | "nudge_completion_pet"
             | "hide_completion_pet"
             | "set_completion_pet_expanded"
             | "set_completion_pet_movement"
@@ -5771,6 +5772,7 @@ pub fn run() {
             cursor_usage,
             display_state,
             drag_completion_pet,
+            nudge_completion_pet,
             focus_terminal,
             install_agent_halo_mod,
             install_agent_halo_agy_hooks,
@@ -6086,6 +6088,7 @@ mod display_selection_tests {
             "activate_completion_pet",
             "completion_pet_state",
             "drag_completion_pet",
+            "nudge_completion_pet",
             "hide_completion_pet",
             "set_completion_pet_expanded",
             "set_completion_pet_movement",

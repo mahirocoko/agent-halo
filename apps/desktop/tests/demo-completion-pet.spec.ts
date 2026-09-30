@@ -681,6 +681,11 @@ test("Movement attempt remains cancellable and clears its native attempt token",
   await page.getByRole("button", { name: "Start 10 Squats movement break" }).click();
   const close = page.getByRole("button", { name: "Close movement break" });
   await expect(close).toBeEnabled();
+  const challenge = page.getByRole("dialog", { name: "10 Squats movement break" });
+  await expect(challenge).toHaveAttribute("data-draggable", "true");
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("Shift+ArrowUp");
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { __movementCancelCalls: Array<{ command: string; args?: Record<string, unknown> }> }).__movementCancelCalls.filter((call) => call.command === "nudge_completion_pet").map((call) => call.args))).toEqual([{ dx: 16, dy: 0 }, { dx: 0, dy: -48 }]);
   await close.click();
   await expect(page.getByRole("button", { name: "Start 10 Squats movement break" })).toBeVisible();
   await expect.poll(() => page.evaluate(() => (window as typeof window & { __movementCancelCalls: Array<{ command: string; args?: Record<string, unknown> }> }).__movementCancelCalls.filter((call) => call.command === "set_completion_pet_movement" && call.args?.active === false && call.args?.summonId === "movement-permission").length)).toBe(1);

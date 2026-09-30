@@ -45,8 +45,8 @@
 
 .session-row-main:focus-visible {
   border-radius: 8px;
-  outline: 1px solid var(--focus-ring);
-  outline-offset: -1px;
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
 }
 
 .session-group-main {
@@ -203,7 +203,7 @@
 }
 
 .session-context-eyebrow {
-  color: rgba(17, 17, 17, 0.68);
+  color: var(--surface-ink-3);
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.1em;
@@ -222,7 +222,7 @@
 
 .session-context-detail {
   overflow: hidden;
-  color: rgba(17, 17, 17, 0.72);
+  color: var(--surface-ink-2);
   font-size: 10px;
   font-weight: 600;
   text-overflow: ellipsis;
@@ -311,7 +311,7 @@
 
 .status-text-inactive {
   --status-color: rgba(0, 0, 0, 0.05);
-  --status-ink: rgba(17, 17, 17, 0.55);
+  --status-ink: var(--surface-ink-3);
   border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 999px;
   font-weight: 500;
@@ -337,7 +337,7 @@
 .detail-path,
 .capability-note {
   overflow: hidden;
-  color: rgba(17, 17, 17, 0.72);
+  color: var(--surface-ink-2);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -418,7 +418,7 @@
 
 .session-detail-activity-kicker {
   display: block;
-  color: rgba(17, 17, 17, 0.62);
+  color: var(--surface-ink-3);
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.1em;
@@ -517,13 +517,13 @@
 
 .action-detail {
   overflow: hidden;
-  color: rgba(17, 17, 17, 0.7);
+  color: var(--surface-ink-2);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .session-detail-activity-card .session-time {
-  color: rgba(17, 17, 17, 0.68);
+  color: var(--surface-ink-3);
 }
 
 .empty-text.small {

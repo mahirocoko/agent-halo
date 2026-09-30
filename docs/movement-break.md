@@ -86,6 +86,7 @@ The existing 3-second Pet/notification handoff applies only to Focus completion.
 - A deliberate Pet click may focus Pet controls. The Focus Move tab deliberately launches its manual companion without changing Pomodoro.
 - A deliberate **10 Squats** or **10 Overhead Reaches** click may resize that same Pet window into the exercise surface and request camera access. Opening or closing a chooser cannot.
 - The exercise surface is `600 × 420` logical px so the mirrored 4:3 live view, white tracked line, green exercise target, repetition count, and live progress bar remain readable.
+- That surface can be moved around the selected display. Pointer drags start from the camera, progress column, header, or footer, and they skip buttons. Arrow keys nudge it 16px, and Shift plus an arrow nudges 48px. Position persists through the Completion Pet anchor.
 - Pose updates, permission callbacks, repetition completion, and errors must not reactivate Agent Halo or steal focus.
 - Closing a Focus-completion surface leaves the prepared break idle; cancelling or completing a manual surface returns to the companion. Hide removes the transparent hitbox.
 

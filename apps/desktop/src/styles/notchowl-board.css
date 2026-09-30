@@ -261,8 +261,8 @@
 /* Tactile Pastel Surfaces with Local Seamless Noise Grain */
 .halo-tab-surface {
   --surface-ink: #111;
-  --surface-ink-2: rgba(17, 17, 17, 0.72);
-  --surface-ink-3: rgba(17, 17, 17, 0.56);
+  --surface-ink-2: #111;
+  --surface-ink-3: rgba(17, 17, 17, 0.98);
   --surface-line: rgba(17, 17, 17, 0.18);
   --surface-fill: rgba(17, 17, 17, 0.08);
   --surface-fill-2: rgba(255, 255, 255, 0.34);
@@ -316,26 +316,12 @@
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-gutter: stable;
-  scrollbar-width: thin;
-  scrollbar-color: var(--scrollbar-thumb) transparent;
+  scrollbar-width: none;
 }
 
 .halo-inner-scroll::-webkit-scrollbar {
-  width: 6px;
-}
-
-.halo-inner-scroll::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.halo-inner-scroll::-webkit-scrollbar-thumb {
-  background-color: var(--scrollbar-thumb);
-  border-radius: 3px;
-}
-
-.halo-inner-scroll::-webkit-scrollbar-thumb:hover {
-  background-color: var(--scrollbar-thumb-hover);
+  width: 0;
+  height: 0;
 }
 
 /* Texture Grain Overlay — behind content, pointer-events none, 128px tile repeat */
@@ -367,18 +353,26 @@
 /* Surface Themes - Muted Dyed-Paper Palette Family (L* ~ 55%-65%) */
 .halo-surface-mint {
   --surface-base: #8ea594;
+  --surface-ink-2: rgba(17, 17, 17, 0.9);
+  --surface-ink-3: rgba(17, 17, 17, 0.78);
 }
 
 .halo-surface-lavender {
   --surface-base: #8c87a1;
+  --surface-ink-2: rgba(17, 17, 17, 0.96);
+  --surface-ink-3: rgba(17, 17, 17, 0.88);
 }
 
 .halo-surface-sand {
   --surface-base: #a39e6a;
+  --surface-ink-2: rgba(17, 17, 17, 0.9);
+  --surface-ink-3: rgba(17, 17, 17, 0.78);
 }
 
 .halo-surface-parchment {
   --surface-base: #9b9683;
+  --surface-ink-2: rgba(17, 17, 17, 0.92);
+  --surface-ink-3: rgba(17, 17, 17, 0.82);
 }
 
 .halo-surface-slate,
@@ -388,6 +382,7 @@
 
 .halo-surface-teal {
   --surface-base: #6f8888;
+  --surface-ink-3: rgba(17, 17, 17, 0.94);
 }
 
 /* ========================================================= */
@@ -685,8 +680,8 @@
 }
 
 .sessions-card .row-btn {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border-radius: 6px;
   border: 0;
   background: var(--surface-fill-2);

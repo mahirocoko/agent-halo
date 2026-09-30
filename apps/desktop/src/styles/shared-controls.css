@@ -26,19 +26,21 @@
   width: 6px;
   border-radius: 999px;
   opacity: 0;
+  pointer-events: none;
   outline: none;
   transition: opacity 140ms ease;
 }
 
-.scroll-area[data-scrollable="true"] .scroll-area-scrollbar,
+.scroll-area[data-scrollable="true"]:hover .scroll-area-scrollbar,
+.scroll-area[data-scrolling="true"] .scroll-area-scrollbar,
 .scroll-area-scrollbar:focus-visible {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .scroll-area-thumb {
   position: absolute;
   inset-inline: 0;
-  min-height: 28px;
   border-radius: 999px;
   background: var(--scrollbar-thumb, rgba(17, 17, 17, 0.34));
   cursor: grab;
@@ -111,15 +113,15 @@
 }
 
 .row-btn {
-  width: 18px;
-  height: 18px;
+  width: 24px;
+  height: 24px;
   font-size: 13px;
   line-height: 1;
 }
 
 .row-btn.row-focus {
-  width: 18px;
-  min-width: 18px;
+  width: 24px;
+  min-width: 24px;
   padding: 0;
   border-radius: 50%;
   color: var(--accent);
@@ -148,6 +150,7 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  min-height: 28px;
   padding: 4px 11px;
   border: none;
   border-radius: 999px;
@@ -177,6 +180,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  min-height: 32px;
   padding: 6px 12px;
   border: 1px solid var(--hair);
   border-radius: 8px;
@@ -184,6 +188,12 @@
   background: var(--fill);
   font-size: 12px;
   font-weight: 600;
+}
+
+.btn:focus-visible,
+.header-tab:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 
 .notice-row {

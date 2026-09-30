@@ -22,6 +22,28 @@ const PET_MOVEMENT_WIDTH: f64 = 600.0;
 const PET_MOVEMENT_HEIGHT: f64 = 420.0;
 const PET_DEFAULT_INSET: f64 = 20.0;
 const PET_VISIBLE_MARGIN: f64 = 12.0;
+const PET_NUDGE_LIMIT: f64 = 80.0;
+
+fn bounded_nudge(value: f64) -> Result<f64, String> {
+    if value.is_finite() && value.abs() <= PET_NUDGE_LIMIT {
+        Ok(value)
+    } else {
+        Err("Movement window nudge is out of range".to_string())
+    }
+}
+
+fn clamp_window_origin(
+    origin: f64,
+    size: f64,
+    delta: f64,
+    visible_origin: f64,
+    visible_size: f64,
+    margin: f64,
+) -> f64 {
+    let minimum = visible_origin + margin;
+    let maximum = (visible_origin + visible_size - size - margin).max(minimum);
+    (origin + delta).clamp(minimum, maximum)
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum CompletionPetSurfaceMode {
@@ -290,6 +312,17 @@ impl CompletionPetSummon {
                     Some("short-break" | "long-break")
                 ) {
                     return Err("Focus Completion Pet requires a prepared break phase".to_string());
+                }
+            }
+            "break-completion" => {
+                if self.requested_exercise_id.is_some() {
+                    return Err("Break Completion Pet cannot request an exercise".to_string());
+                }
+                if self.movement_break_enabled.is_some() {
+                    return Err("Break Completion Pet cannot offer movement".to_string());
+                }
+                if self.next_phase.as_deref() != Some("focus") {
+                    return Err("Break Completion Pet requires the next Focus phase".to_string());
                 }
             }
             "manual-companion" => {
@@ -601,6 +634,13 @@ fn completion_pet_action_effect(
             }
             _ => Err("Unsupported Completion Pet action for focus completion".to_string()),
         },
+        "break-completion" => {
+            if action == "start-focus" {
+                Ok(CompletionPetActionEffect::QueueAndHide)
+            } else {
+                Err("Unsupported Completion Pet action for break completion".to_string())
+            }
+        }
         "manual-companion" => {
             if action == "open-focus" {
                 Ok(CompletionPetActionEffect::QueueAndKeepVisible)
@@ -847,6 +887,68 @@ mod platform {
         true
     }
 
+    fn nudge_on_main_thread(window: &WebviewWindow, dx: f64, dy: f64) -> bool {
+        let Some(mtm) = MainThreadMarker::new() else {
+            return false;
+        };
+        let Ok(pointer) = window.ns_window() else {
+            return false;
+        };
+        let screens = NSScreen::screens(mtm);
+        // SAFETY: Tauri owns the NSWindow and this function runs on AppKit's main thread.
+        unsafe {
+            let ns_window: &NSWindow = &*pointer.cast();
+            let frame = ns_window.frame();
+            let Some(screen) = screen_for_frame(&screens, frame) else {
+                return false;
+            };
+            let visible = screen.visibleFrame();
+            let x = clamp_window_origin(
+                frame.origin.x,
+                frame.size.width,
+                dx,
+                visible.origin.x,
+                visible.size.width,
+                PET_VISIBLE_MARGIN,
+            );
+            let y = clamp_window_origin(
+                frame.origin.y,
+                frame.size.height,
+                -dy,
+                visible.origin.y,
+                visible.size.height,
+                PET_VISIBLE_MARGIN,
+            );
+            configure_window(ns_window);
+            ns_window.setFrame_display(
+                NSRect::new(NSPoint::new(x, y), NSSize::new(frame.size.width, frame.size.height)),
+                true,
+            );
+        }
+        true
+    }
+
+    pub fn nudge(window: &WebviewWindow, dx: f64, dy: f64) -> Result<(), String> {
+        if nudge_on_main_thread(window, dx, dy) {
+            return Ok(());
+        }
+        let (sender, receiver) = mpsc::channel();
+        let scheduled_window = window.clone();
+        window
+            .run_on_main_thread(move || {
+                let _ = sender.send(nudge_on_main_thread(&scheduled_window, dx, dy));
+            })
+            .map_err(|error| format!("Could not schedule Completion Pet nudge: {error}"))?;
+        if receiver
+            .recv_timeout(Duration::from_millis(500))
+            .unwrap_or(false)
+        {
+            Ok(())
+        } else {
+            Err("Could not nudge Completion Pet".to_string())
+        }
+    }
+
     fn capture_position_on_main_thread(window: &WebviewWindow) -> Option<PetPositionPreference> {
         let mtm = MainThreadMarker::new()?;
         let pointer = window.ns_window().ok()?;
@@ -999,6 +1101,20 @@ mod platform {
             .set_size(Size::Logical(LogicalSize::new(width, height)))
             .map_err(|error| format!("Could not resize Completion Pet: {error}"))?;
         Ok(())
+    }
+
+    pub fn nudge(window: &WebviewWindow, dx: f64, dy: f64) -> Result<(), String> {
+        let scale = window
+            .scale_factor()
+            .map_err(|error| format!("Could not read Completion Pet scale: {error}"))?;
+        let position = window
+            .outer_position()
+            .map_err(|error| format!("Could not read Completion Pet position: {error}"))?;
+        let x = f64::from(position.x) / scale + dx;
+        let y = f64::from(position.y) / scale + dy;
+        window
+            .set_position(Position::Logical(LogicalPosition::new(x, y)))
+            .map_err(|error| format!("Could not nudge Completion Pet: {error}"))
     }
 
     pub fn capture_position(
@@ -1160,6 +1276,23 @@ pub fn drag_completion_pet(window: WebviewWindow) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn nudge_completion_pet(window: WebviewWindow, dx: f64, dy: f64) -> Result<(), String> {
+    validate_window(&window, "pet")?;
+    let dx = bounded_nudge(dx)?;
+    let dy = bounded_nudge(dy)?;
+    let app = window.app_handle().clone();
+    let revision = app.state::<CompletionPetWindowState>().begin_user_drag();
+    let timeout_app = app.clone();
+    thread::spawn(move || {
+        thread::sleep(Duration::from_secs(2));
+        let _ = timeout_app
+            .state::<CompletionPetWindowState>()
+            .finish_user_move(revision);
+    });
+    platform::nudge(&window, dx, dy)
+}
+
+#[tauri::command]
 pub fn hide_completion_pet(
     window: WebviewWindow,
     state: tauri::State<'_, CompletionPetWindowState>,
@@ -1301,6 +1434,17 @@ pub fn dismiss_pet(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn movement_nudge_stays_inside_the_visible_frame() {
+        assert_eq!(clamp_window_origin(100.0, 600.0, 16.0, 0.0, 1400.0, 12.0), 116.0);
+        assert_eq!(clamp_window_origin(20.0, 600.0, -48.0, 0.0, 1400.0, 12.0), 12.0);
+        assert_eq!(clamp_window_origin(700.0, 600.0, 80.0, 0.0, 1400.0, 12.0), 780.0);
+        assert_eq!(clamp_window_origin(760.0, 600.0, 80.0, 0.0, 1400.0, 12.0), 788.0);
+        assert!(bounded_nudge(16.0).is_ok());
+        assert!(bounded_nudge(81.0).is_err());
+        assert!(bounded_nudge(f64::NAN).is_err());
+    }
 
     #[test]
     fn surface_modes_use_generic_roster_geometry() {
@@ -1660,6 +1804,33 @@ mod tests {
         )
         .is_err());
         assert!(completion_pet_action_effect(&focus, "open-focus", false).is_err());
+        assert!(completion_pet_action_effect(&focus, "start-focus", false).is_err());
+    }
+
+    #[test]
+    fn break_completion_can_only_start_the_prepared_focus() {
+        let summon = CompletionPetSummon {
+            schema_version: 2,
+            id: "break-1".to_string(),
+            purpose: "break-completion".to_string(),
+            pet: "haloform".to_string(),
+            loadout: None,
+            pet_size: "large".to_string(),
+            movement_break_enabled: None,
+            requested_exercise_id: None,
+            next_phase: Some("focus".to_string()),
+        }
+        .validate()
+        .expect("break completion summon");
+        assert_eq!(
+            completion_pet_action_effect(&summon, "start-focus", false),
+            Ok(CompletionPetActionEffect::QueueAndHide)
+        );
+        assert!(completion_pet_action_effect(&summon, "start-break", false).is_err());
+        assert!(completion_pet_action_effect(&summon, "movement-complete", true).is_err());
+        let mut offered = summon.clone();
+        offered.movement_break_enabled = Some(true);
+        assert!(offered.validate().is_err());
     }
 
     #[test]

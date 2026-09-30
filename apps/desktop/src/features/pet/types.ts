@@ -6,8 +6,8 @@ import type { ActivityKind, ISessionSummary } from '../session/types'
 import type { CompletionPetSize } from './preferences'
 
 export type CompletionPetBreakPhase = 'short-break' | 'long-break'
-export type CompletionPetPurpose = 'focus-completion' | 'manual-companion' | 'setup-preview'
-export type CompletionPetAction = 'start-break' | 'movement-complete' | 'open-focus' | 'dismiss'
+export type CompletionPetPurpose = 'focus-completion' | 'break-completion' | 'manual-companion' | 'setup-preview'
+export type CompletionPetAction = 'start-break' | 'start-focus' | 'movement-complete' | 'open-focus' | 'dismiss'
 
 interface ICompletionPetSummonBase {
   schemaVersion: 2
@@ -24,6 +24,11 @@ export interface IFocusCompletionPetSummon extends ICompletionPetSummonBase {
   nextPhase: CompletionPetBreakPhase
 }
 
+export interface IBreakCompletionPetSummon extends ICompletionPetSummonBase {
+  purpose: 'break-completion'
+  nextPhase: 'focus'
+}
+
 export interface IManualCompanionPetSummon extends ICompletionPetSummonBase {
   purpose: 'manual-companion'
   nextPhase: null
@@ -35,7 +40,11 @@ export interface ISetupPreviewPetSummon extends ICompletionPetSummonBase {
   nextPhase: null
 }
 
-export type ICompletionPetSummon = IFocusCompletionPetSummon | IManualCompanionPetSummon | ISetupPreviewPetSummon
+export type ICompletionPetSummon =
+  | IFocusCompletionPetSummon
+  | IBreakCompletionPetSummon
+  | IManualCompanionPetSummon
+  | ISetupPreviewPetSummon
 
 export interface ICompletionPetNativeState {
   summon: ICompletionPetSummon | null
@@ -45,7 +54,7 @@ export interface ICompletionPetNativeState {
 export interface ICompletionPetActionRequest {
   action: CompletionPetAction
   summonId: string
-  nextPhase: CompletionPetBreakPhase | null
+  nextPhase: CompletionPetBreakPhase | 'focus' | null
 }
 
 export interface ICompanionProjection {

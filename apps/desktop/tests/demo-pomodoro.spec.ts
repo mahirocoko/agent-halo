@@ -297,6 +297,50 @@ test("natural Focus completion summons Pet once and cancels the delayed notifica
   expect(await page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? "null")?.phase, storageKey)).toBe("short-break");
 });
 
+test("natural break completion summons Pet once with Start Focus and cancels the delayed notification", async ({ page }) => {
+  const endsAt = Date.now() + 350;
+  await page.addInitScript(([key, endsAt]) => {
+    window.localStorage.setItem(key, JSON.stringify({
+      schemaVersion: 2,
+      phase: "short-break",
+      status: "running",
+      completedFocusSessions: 1,
+      phaseDurationMs: 60_000,
+      remainingMs: 60_000,
+      endsAt,
+      runId: "pet-natural-break",
+      notificationScheduled: false,
+      lastCompletion: null,
+    }));
+    const calls: Array<{ command: string; args?: Record<string, unknown> }> = [];
+    (window as typeof window & { __petBreakCalls: typeof calls }).__petBreakCalls = calls;
+    (window as typeof window & { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
+      invoke: async (command: string, args?: Record<string, unknown>) => {
+        calls.push({ command, args });
+        if (command === "notification_permission_state") return "authorized";
+        if (command === "show_completion_pet") return true;
+        if (command === "cancel_pomodoro_notification") return true;
+        if (command === "take_completion_pet_action") return null;
+        if (command === "notch_metrics") return [184, 36];
+        if (command === "set_keep_awake") return args?.active === true;
+        if (command === "agent_halo_mod_status") return ["", false];
+        return null;
+      },
+    };
+  }, [storageKey, endsAt] as const);
+
+  await page.goto("/?demo=1&demoScenario=idle");
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { __petBreakCalls: Array<{ command: string }> }).__petBreakCalls.filter((call) => call.command === "show_completion_pet").length)).toBe(1);
+  const calls = await page.evaluate(() => (window as typeof window & { __petBreakCalls: Array<{ command: string; args?: Record<string, unknown> }> }).__petBreakCalls);
+  const schedule = calls.find((call) => call.command === "schedule_pomodoro_notification");
+  expect(schedule?.args?.deadlineMs).toBe(endsAt + 5_000);
+  const showIndex = calls.findIndex((call) => call.command === "show_completion_pet");
+  expect(calls[showIndex]?.args?.summon).toMatchObject({ schemaVersion: 2, id: "pet-natural-break", purpose: "break-completion", nextPhase: "focus" });
+  expect(calls[showIndex]?.args?.summon).not.toHaveProperty("movementBreakEnabled");
+  expect(await page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? "null")?.phase, storageKey)).toBe("focus");
+  expect(await page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? "null")?.status, storageKey)).toBe("idle");
+});
+
 test("natural Focus completion preserves a pinned manual companion and keeps the notification fallback", async ({ page }) => {
   const endsAt = Date.now() + 1_000;
   await page.addInitScript(([key, endsAt]) => {
@@ -512,6 +556,44 @@ test("completed Movement Break is revalidated by the sole main Pomodoro owner", 
   expect(state.endsAt).toBeGreaterThan(Date.now());
 });
 
+test("main renderer starts Focus only from a matching natural break completion", async ({ page }) => {
+  await page.addInitScript((key) => {
+    window.localStorage.setItem(key, JSON.stringify({
+      schemaVersion: 2,
+      phase: "focus",
+      status: "idle",
+      completedFocusSessions: 1,
+      phaseDurationMs: 25 * 60_000,
+      remainingMs: 25 * 60_000,
+      endsAt: null,
+      runId: null,
+      notificationScheduled: false,
+      lastCompletion: { id: "pet-action-break", completedAt: Date.now() - 1_000, observedAt: Date.now() - 1_000, completedPhase: "short-break", nextPhase: "focus", notificationScheduled: false },
+    }));
+    let pending = true;
+    (window as typeof window & { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
+      invoke: async (command: string, args?: Record<string, unknown>) => {
+        if (command === "take_completion_pet_action") {
+          if (!pending) return null;
+          pending = false;
+          return { action: "start-focus", summonId: "pet-action-break", nextPhase: "focus" };
+        }
+        if (command === "notification_permission_state") return "authorized";
+        if (command === "notch_metrics") return [184, 36];
+        if (command === "set_keep_awake") return args?.active === true;
+        if (command === "agent_halo_mod_status") return ["", false];
+        return null;
+      },
+    };
+  }, storageKey);
+
+  await page.goto("/?demo=1&demoScenario=idle");
+  await expect.poll(() => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? "null")?.status, storageKey)).toBe("running");
+  const state = await page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? "null"), storageKey);
+  expect(state.phase).toBe("focus");
+  expect(state.endsAt).toBeGreaterThan(Date.now());
+});
+
 test("reload inside the delayed fallback window preserves the pending notification without resummoning Pet", async ({ page }) => {
   const now = Date.now();
   await page.addInitScript(([key, now]) => {
@@ -587,7 +669,7 @@ test("turning Pet off after the Focus deadline preserves the delayed fallback", 
   await expect.poll(() => page.evaluate(() => (window as typeof window & { __petToggleRaceCalls: string[] }).__petToggleRaceCalls.includes("schedule_pomodoro_notification"))).toBe(true);
   await page.getByRole("button", { name: "Setup" }).click();
   await page.getByRole("tab", { name: "Pet" }).click();
-  const toggle = page.getByRole("switch", { name: "Disable completion pet after Focus" });
+  const toggle = page.getByRole("switch", { name: "Disable completion pet" });
   await toggle.evaluate((element, deadline) => {
     (window as typeof window & { __setPetRaceNow: (value: number) => void }).__setPetRaceNow(deadline + 100);
     (element as HTMLButtonElement).click();
@@ -641,7 +723,7 @@ test("disabling Pet while native show is pending cannot cancel fallback or resur
   await expect.poll(() => page.evaluate(() => (window as typeof window & { __petShowRaceCalls: string[] }).__petShowRaceCalls.includes("show_completion_pet"))).toBe(true);
   await page.getByRole("button", { name: "Setup" }).click();
   await page.getByRole("tab", { name: "Pet" }).click();
-  await page.getByRole("switch", { name: "Disable completion pet after Focus" }).click();
+  await page.getByRole("switch", { name: "Disable completion pet" }).click();
   await page.evaluate(() => (window as typeof window & { __resolvePetShow: () => void }).__resolvePetShow());
   await page.waitForTimeout(250);
   const calls = await page.evaluate(() => (window as typeof window & { __petShowRaceCalls: string[] }).__petShowRaceCalls);

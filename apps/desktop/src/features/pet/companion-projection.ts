@@ -6,6 +6,7 @@ import type { ActivityKind, ISessionSummary } from '../session/types'
 import type {
   CompletionPetBreakPhase,
   CompletionPetPurpose,
+  IBreakCompletionPetSummon,
   ICompanionProjection,
   ICompletionPetSummon,
   IFocusCompletionPetSummon,
@@ -55,7 +56,10 @@ const isNonEmptyString = (value: unknown): value is string => typeof value === '
 const isBreakPhase = (value: unknown): value is CompletionPetBreakPhase =>
   value === 'short-break' || value === 'long-break'
 const isPurpose = (value: unknown): value is CompletionPetPurpose =>
-  value === 'focus-completion' || value === 'manual-companion' || value === 'setup-preview'
+  value === 'focus-completion' ||
+  value === 'break-completion' ||
+  value === 'manual-companion' ||
+  value === 'setup-preview'
 const isActivityKind = (value: unknown): value is ActivityKind =>
   typeof value === 'string' && (ACTIVITY_KINDS as readonly string[]).includes(value)
 const isSessionStatus = (value: unknown): value is ISessionSummary['status'] =>
@@ -92,6 +96,15 @@ export const normalizeCompletionPetSummon = (value: unknown): ICompletionPetSumm
       nextPhase: value.nextPhase,
       movementBreakEnabled: value.movementBreakEnabled,
     } satisfies IFocusCompletionPetSummon
+  }
+  if (value.purpose === 'break-completion') {
+    if (value.nextPhase !== 'focus' || value.movementBreakEnabled !== undefined || value.requestedExerciseId !== undefined)
+      return null
+    return {
+      ...base,
+      purpose: 'break-completion',
+      nextPhase: 'focus',
+    } satisfies IBreakCompletionPetSummon
   }
   if (value.nextPhase !== null) return null
   return value.purpose === 'manual-companion'

@@ -126,7 +126,9 @@ export const PetApp = () => {
     setMovementSnapshot(INITIAL_MOVEMENT_SNAPSHOT)
     movementCompletionSubmittedRef.current = false
     movementAutoStartSummonIdRef.current = null
-    setDoneIntroSummonId(summon?.purpose === 'focus-completion' ? summon.id : null)
+    setDoneIntroSummonId(
+      summon?.purpose === 'focus-completion' || summon?.purpose === 'break-completion' ? summon.id : null,
+    )
     setManualDoneAcknowledgementId(null)
     setBusy(false)
   }, [summon?.id])
@@ -215,7 +217,7 @@ export const PetApp = () => {
     await invoke('hide_completion_pet').catch(() => undefined)
   }
 
-  const submit = async (action: 'start-break' | 'movement-complete' | 'open-focus'): Promise<void> => {
+  const submit = async (action: 'start-break' | 'start-focus' | 'movement-complete' | 'open-focus'): Promise<void> => {
     if (busy) return
     setBusy(true)
     if (DEMO_PET || !isNative()) {
@@ -454,15 +456,19 @@ export const PetApp = () => {
   const contextCopy =
     summon.purpose === 'focus-completion'
       ? `Focus complete · ${phaseLabel} break ready`
-      : summon.purpose === 'manual-companion'
-        ? 'Manual companion'
-        : 'Setup preview'
+      : summon.purpose === 'break-completion'
+        ? 'Break complete · Focus ready'
+        : summon.purpose === 'manual-companion'
+          ? 'Manual companion'
+          : 'Setup preview'
   const companionAriaLabel =
     summon.purpose === 'focus-completion'
       ? 'Focus complete. Open break actions'
-      : summon.purpose === 'manual-companion'
-        ? 'Manual companion. Open controls'
-        : 'Pet setup preview. Open controls'
+      : summon.purpose === 'break-completion'
+        ? 'Break complete. Open Focus actions'
+        : summon.purpose === 'manual-companion'
+          ? 'Manual companion. Open controls'
+          : 'Pet setup preview. Open controls'
   const movementPickerLabel =
     summon.purpose === 'focus-completion' ? 'Choose movement break exercise' : 'Choose movement exercise'
   const movementBackLabel =
@@ -470,9 +476,11 @@ export const PetApp = () => {
   const statusCopy =
     summon.purpose === 'focus-completion'
       ? `Focus complete. ${phaseLabel} break ready.`
-      : summon.purpose === 'manual-companion'
-        ? 'Manual companion.'
-        : 'Pet setup preview.'
+      : summon.purpose === 'break-completion'
+        ? 'Break complete. Focus ready.'
+        : summon.purpose === 'manual-companion'
+          ? 'Manual companion.'
+          : 'Pet setup preview.'
 
   if (movementActive) {
     return (
@@ -492,6 +500,20 @@ export const PetApp = () => {
             demoPoseEnabled={SEARCH_PARAMS.has('demoPose')}
             onCancel={() => void cancelMovement()}
             onRetry={() => void startMovement(selectedExerciseId ?? movementSnapshot.exerciseId)}
+            onDragWindow={
+              isNative()
+                ? () => {
+                    void invoke('drag_completion_pet').catch(() => undefined)
+                  }
+                : undefined
+            }
+            onNudgeWindow={
+              isNative()
+                ? (dx, dy) => {
+                    void invoke('nudge_completion_pet', { dx, dy }).catch(() => undefined)
+                  }
+                : undefined
+            }
             onSnapshot={setMovementSnapshot}
             onStartBreak={() => {
               // Keep the callback purpose-gated as an extra safety boundary for manual failures.
@@ -584,27 +606,31 @@ export const PetApp = () => {
             aria-label={
               summon.purpose === 'focus-completion'
                 ? 'Focus complete actions'
-                : summon.purpose === 'manual-companion'
-                  ? 'Manual companion controls'
-                  : 'Pet setup preview controls'
+                : summon.purpose === 'break-completion'
+                  ? 'Break complete actions'
+                  : summon.purpose === 'manual-companion'
+                    ? 'Manual companion controls'
+                    : 'Pet setup preview controls'
             }
             id="completion-pet-actions"
           >
             <span className="completion-pet-orbit" aria-hidden="true" />
-            {summon.purpose === 'focus-completion' ? (
+            {summon.purpose === 'focus-completion' || summon.purpose === 'break-completion' ? (
               <>
                 <button
                   ref={startActionRef}
                   className="completion-pet-option completion-pet-start"
                   type="button"
                   disabled={busy}
-                  onClick={() => void submit('start-break')}
-                  aria-label={`Start ${phaseLabel} break`}
+                  onClick={() => void submit(summon.purpose === 'break-completion' ? 'start-focus' : 'start-break')}
+                  aria-label={summon.purpose === 'break-completion' ? 'Start Focus' : `Start ${phaseLabel} break`}
                 >
                   <Play size={21} strokeWidth={2.4} />
                   <span>
                     {busy ? (
                       '…'
+                    ) : summon.purpose === 'break-completion' ? (
+                      'Focus'
                     ) : (
                       <>
                         {phaseLabel}
@@ -614,7 +640,7 @@ export const PetApp = () => {
                     )}
                   </span>
                 </button>
-                {summon.movementBreakEnabled ? (
+                {summon.purpose === 'focus-completion' && summon.movementBreakEnabled ? (
                   <button
                     ref={movementActionRef}
                     className="completion-pet-option completion-pet-movement"
@@ -753,6 +779,6 @@ export const PetApp = () => {
 
 declare global {
   interface Window {
-    __AGENT_HALO_PET_ACTIONS__?: Array<'start-break' | 'movement-complete' | 'open-focus'>
+    __AGENT_HALO_PET_ACTIONS__?: Array<'start-break' | 'start-focus' | 'movement-complete' | 'open-focus'>
   }
 }
