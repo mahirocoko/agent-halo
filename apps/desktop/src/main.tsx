@@ -145,6 +145,7 @@ const SETTLED_PANEL_HEIGHT_BY_VIEW: Partial<Record<PanelWidthView, number>> = {
   setup: TALL_PANEL_HEIGHT,
 }
 const ACTIVITY_COLLAPSE_MS = 220
+const PANEL_HEIGHT_TRANSITION_MS = 320
 const HOVER_OPEN_DELAY_MS = 24
 const HOVER_CLOSE_DELAY_MS = 170
 const DISPLAY_RECONCILE_INTERVAL_MS = 3_000
@@ -334,6 +335,7 @@ const App = () => {
   const [panelOpen, setPanelOpen] = useState(DEMO_MODE && !DEMO_COLLAPSED)
   const [renderPanel, setRenderPanel] = useState(DEMO_MODE && !DEMO_COLLAPSED)
   const [panelHeight, setPanelHeight] = useState(PANEL_MIN_HEIGHT)
+  const nativePanelHeightRef = useRef(PANEL_MIN_HEIGHT)
   const [availablePanelWidth, setAvailablePanelWidth] = useState(getAvailablePanelWidth)
   const [availableTallPanelHeight, setAvailableTallPanelHeight] = useState(getAvailableTallPanelHeight)
   const [panelFocusRequestId, setPanelFocusRequestId] = useState(0)
@@ -1012,6 +1014,20 @@ const App = () => {
     const target = sheetInnerRef.current
     if (!target) return
 
+    const intrinsicScrollHeight = (scroller: HTMLElement) => {
+      const style = window.getComputedStyle(scroller)
+      const padding = (Number.parseFloat(style.paddingTop) || 0) + (Number.parseFloat(style.paddingBottom) || 0)
+      const gap = Number.parseFloat(style.rowGap) || 0
+      const content = Array.from(scroller.children).reduce((sum, child, index) => {
+        const element = child as HTMLElement
+        const childStyle = window.getComputedStyle(element)
+        const margin =
+          (Number.parseFloat(childStyle.marginTop) || 0) + (Number.parseFloat(childStyle.marginBottom) || 0)
+        return sum + element.offsetHeight + margin + (index > 0 ? gap : 0)
+      }, 0)
+      return Math.ceil(padding + content)
+    }
+
     const measureContentHeight = () =>
       Array.from(target.children).reduce((total, child) => {
         const element = child as HTMLElement
@@ -1025,15 +1041,20 @@ const App = () => {
               const second = innerScrolls[1].getBoundingClientRect()
               const isStacked = Math.abs(first.left - second.left) < 10 && Math.abs(first.top - second.top) > 10
               if (isStacked) {
-                const totalScroll = Array.from(innerScrolls).reduce((sum, scroller) => sum + scroller.scrollHeight, 0)
-                return bodyTotal + Math.ceil(totalScroll)
+                const totalScroll = Array.from(innerScrolls).reduce(
+                  (sum, scroller) => sum + intrinsicScrollHeight(scroller),
+                  0,
+                )
+                return bodyTotal + totalScroll
               }
-              const maxScroll = Math.max(...Array.from(innerScrolls).map((scroller) => scroller.scrollHeight))
-              return bodyTotal + Math.ceil(maxScroll)
+              const maxScroll = Math.max(...Array.from(innerScrolls).map((scroller) => intrinsicScrollHeight(scroller)))
+              return bodyTotal + maxScroll
             }
             const innerScroll = (bodyChild as HTMLElement).querySelector<HTMLElement>("[data-scroll-owner='inner']")
-            const childHeight = innerScroll ? innerScroll.scrollHeight : (bodyChild as HTMLElement).scrollHeight
-            return bodyTotal + Math.ceil(childHeight)
+            const childHeight = innerScroll
+              ? intrinsicScrollHeight(innerScroll)
+              : Math.ceil((bodyChild as HTMLElement).scrollHeight)
+            return bodyTotal + childHeight
           }, 0)
           return total + padding + bodyContent
         }
@@ -1111,8 +1132,21 @@ const App = () => {
       panelNativeOperationRef.current = queued.catch(() => undefined)
     }
 
+    const shrinkDelayMs =
+      panelOpen &&
+      renderPanel &&
+      panelHeight + 1 < nativePanelHeightRef.current &&
+      !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        ? PANEL_HEIGHT_TRANSITION_MS
+        : 0
+
     if (panelOpen) {
       enqueueNativePanelOperation(async () => {
+        if (shrinkDelayMs > 0) {
+          await new Promise((resolve) => window.setTimeout(resolve, shrinkDelayMs))
+          if (!isCurrent()) return
+        }
+        nativePanelHeightRef.current = panelHeight
         const opened = await resizeNativePanel(true)
         if (opened === null) return
         if (opened === false) {
@@ -1134,6 +1168,7 @@ const App = () => {
 
     if (!renderPanel) {
       enqueueNativePanelOperation(async () => {
+        nativePanelHeightRef.current = closedSurfaceHeight
         await resizeNativePanel(false)
       })
       return () => {
@@ -1145,6 +1180,7 @@ const App = () => {
       if (!isCurrent()) return
       setRenderPanel(false)
       enqueueNativePanelOperation(async () => {
+        nativePanelHeightRef.current = closedSurfaceHeight
         await resizeNativePanel(false)
       })
     }, 220)
