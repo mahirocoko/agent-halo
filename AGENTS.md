@@ -13,16 +13,9 @@
 
 ## Codebase Search
 
-- Prefer `cocoindex-code` MCP `search` for semantic codebase search, broad repo exploration, fuzzy implementation lookup, and unfamiliar modules when the MCP tool is available.
-- If the MCP tool is unavailable, use `ccc search` for semantic search and `ccc index` or `ccc search --refresh` when the index may be stale. This repo has local CocoIndex state under `.cocoindex_code/`, and the CLI may be available as `ccc`.
-- Use CocoIndex/ccc as a token-saving first pass: avoid broad blind reads by letting semantic search narrow the repo to candidate files and line ranges.
-- Run semantic search from the repo root, or pass `--path`, because `ccc search` defaults to the current working-directory scope.
-- Treat semantic results as candidate locations: read only the returned file/ranges needed for verification with the available file-read tool or `sed -n` before editing or making strong claims.
-- Use `rg` for exact text, regex, symbol, and filename search.
-- Use AST-aware search for syntax-shaped queries when available.
-- Go directly to file reads, `rg`, or AST tools for known files, exact symbols, or tiny lookups; CocoIndex is a locator, not a replacement for source reads.
-- Treat requests like `search the codebase`, `find where X is implemented`, `how does this repo work`, `ดู repo หน่อย`, and `หาโค้ดส่วนนี้` as CocoIndex-first triggers when available.
-- After meaningful code changes, refresh or re-index before relying on semantic search results.
+- Start with a known path, symbol, process, error, or nearby behavior. Use `rg --files` for paths and `rg` for exact strings/imports; read selected source before making behavior claims.
+- When ownership is unclear, search likely module directories and callers, then broaden only if the first hypothesis fails. Exact-string absence does not prove a behavior is absent.
+- Use AST-aware search for syntax-shaped questions when available. Do not open suspected secret contents during discovery.
 
 ## Validation Commands
 
