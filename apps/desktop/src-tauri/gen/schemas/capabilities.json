@@ -1,1 +1,1 @@
-{"default":{"identifier":"default","description":"Default Agent Halo desktop capability set","local":true,"windows":["main","pet"],"permissions":[]}}
+{"battery-sleep":{"identifier":"battery-sleep","description":"Main window may subscribe to native battery sleep status; no renderer event emission.","local":true,"windows":["main"],"permissions":["core:event:allow-listen","core:event:allow-unlisten"]},"default":{"identifier":"default","description":"Default Agent Halo desktop capability set","local":true,"windows":["main","pet"],"permissions":[]}}

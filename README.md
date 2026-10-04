@@ -232,6 +232,8 @@ Then reload Letta Code:
 
 Setup also owns the global Pet, Completion Pet, **Offer movement after Focus**, keep-awake, and target-display preferences. The Focus-completion movement offer is Off by default; manual Move remains available, and no path opens the camera before a specific exercise click.
 
+**Setup → Display → Sleep below 10%** is an opt-in, one-shot native macOS control: while armed, IOKit power notifications trigger sleep only below 10% on battery power, never on AC power. It saves Off before requesting sleep, so waking does not repeat the action; using it again requires manually rearming. It defaults Off and does not poll or prevent idle sleep. See `docs/battery-sleep.md` for persistence, failure handling, and verification boundaries.
+
 You can also install the mod directly from the repository:
 
 ```bash

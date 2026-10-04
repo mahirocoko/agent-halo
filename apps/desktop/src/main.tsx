@@ -29,6 +29,7 @@ import { createRoot } from 'react-dom/client'
 import { BoardScroll, BoardSurface } from './components/board-surface'
 import { type IResizableCardSpec, ResizableCardDivider, useResizableCardLayout } from './components/resizable-card-tray'
 import { SurfaceControl } from './components/surface-control'
+import { useBatterySleep } from './features/battery-sleep/use-battery-sleep'
 import { FocusToolsPanel } from './features/focus/components'
 import { readMovementBreakEnabled, writeMovementBreakEnabled } from './features/movement/preferences'
 import type { MovementExerciseId } from './features/movement/types'
@@ -388,6 +389,12 @@ const App = () => {
       ? ({ ...view, status: 'idle', label: 'idle' } satisfies IStatusView)
       : view
   const canUseNativeControls = typeof window.__TAURI_INTERNALS__ !== 'undefined'
+  const {
+    armed: batterySleepArmed,
+    error: batterySleepError,
+    supported: batterySleepSupported,
+    setArmed: setBatterySleepArmed,
+  } = useBatterySleep(canUseNativeControls)
   const pomodoro = usePomodoro(canUseNativeControls, completionPetEnabled)
   const stopwatch = useStopwatch()
   const pomodoroRef = useRef(pomodoro)
@@ -2461,6 +2468,9 @@ const App = () => {
                       keepAwakeActive={keepAwakeActive}
                       keepAwakeEnabled={keepAwakeEnabled}
                       keepAwakeError={keepAwakeError}
+                      batterySleepArmed={batterySleepArmed}
+                      batterySleepError={batterySleepError}
+                      batterySleepSupported={batterySleepSupported}
                       pet={pet}
                       petMotionMapping={petMotionMapping}
                       completionPetEnabled={completionPetEnabled}
@@ -2482,6 +2492,7 @@ const App = () => {
                       onInstallCodexHooks={() => void installCodexHooks()}
                       onHaloBotLoadoutChange={updateHaloBotLoadout}
                       onKeepAwakeChange={updateKeepAwakeEnabled}
+                      onBatterySleepChange={setBatterySleepArmed}
                       onPetChange={updatePet}
                       onPetMotionChange={updatePetMotion}
                       onPetMotionReset={resetPetMotionMapping}

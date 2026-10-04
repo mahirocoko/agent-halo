@@ -34,6 +34,8 @@ Agent Halo is a pnpm workspace with a protocol package and a desktop app. The re
 
 The Letta mod and provider adapters normalize events into the local Agent Halo bridge. The bridge serves local health/snapshot/SSE endpoints and writes a local NDJSON diagnostic log. The desktop renderer consumes the protocol and owns the visible Sessions, Focus, Usage, Runtime, Services, Setup, and Pet projections. Tauri owns native windows, macOS integration, local process/display/camera/notification boundaries, and the bundled bridge supervision path. The native Cursor usage command is also the trusted producer of Mahiro Herdr Sidebar's read-only `cursor.json` quota cache; Cursor hooks and the Cursor statusline do not carry that usage.
 
+Setup's Display section also exposes a native-owned, one-shot battery sleep control. Explicit activation arms IOKit power-source notifications; battery power below 10% consumes the arm and persists Off before requesting system sleep. It is independent of renderer visibility and has no polling timer or idle-prevention assertion. See `battery-sleep.md` for the current contract and hardware verification boundary.
+
 See `docs/architecture.md`, `docs/event-protocol.md`, and `docs/presence-model.md` for the active contracts.
 
 ## State and Persistence

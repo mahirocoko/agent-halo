@@ -30,6 +30,7 @@ use std::os::unix::{
     net::UnixStream,
 };
 
+mod battery_sleep;
 mod cursor_usage_cache;
 mod keep_awake;
 mod local_services;
@@ -38,6 +39,7 @@ mod pet_window;
 mod runtime_usage;
 mod standalone_bridge;
 
+use battery_sleep::BatterySleepState;
 use keep_awake::KeepAwakeState;
 use local_services::{
     control_local_service, local_service_http_evidence, local_services, LocalServicesControlState,
@@ -545,6 +547,39 @@ fn bridge_health() -> bool {
 #[tauri::command]
 fn set_keep_awake(state: tauri::State<'_, KeepAwakeState>, active: bool) -> Result<bool, String> {
     state.set_active(active)
+}
+
+#[tauri::command]
+async fn get_battery_sleep_status(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, BatterySleepState>,
+) -> Result<battery_sleep::BatterySleepStatus, String> {
+    let state = state.inner().clone();
+    let (tx, rx) = std::sync::mpsc::channel();
+    app.run_on_main_thread(move || {
+        let status = state.get_status();
+        let _ = tx.send(status);
+    })
+    .map_err(|e| format!("Failed to dispatch to main thread: {e}"))?;
+    rx.recv()
+        .map_err(|e| format!("Failed to receive status: {e}"))
+}
+
+#[tauri::command]
+async fn set_battery_sleep_armed(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, BatterySleepState>,
+    armed: bool,
+) -> Result<battery_sleep::BatterySleepStatus, String> {
+    let state = state.inner().clone();
+    let (tx, rx) = std::sync::mpsc::channel();
+    app.run_on_main_thread(move || {
+        let result = state.set_armed(armed);
+        let _ = tx.send(result);
+    })
+    .map_err(|e| format!("Failed to dispatch to main thread: {e}"))?;
+    rx.recv()
+        .map_err(|e| format!("Failed to receive result: {e}"))?
 }
 
 #[tauri::command]
@@ -5793,6 +5828,8 @@ pub fn run() {
             runtime_usage,
             schedule_pomodoro_notification,
             set_keep_awake,
+            get_battery_sleep_status,
+            set_battery_sleep_armed,
             set_completion_pet_expanded,
             set_completion_pet_movement,
             set_panel_open,
@@ -5804,6 +5841,7 @@ pub fn run() {
             completion_pet_state
         ]);
     let app = tauri::Builder::default()
+        .manage(BatterySleepState::default())
         .manage(KeepAwakeState::default())
         .manage(DisplayPreferenceState::default())
         .manage(PomodoroNotificationState::default())
@@ -5825,6 +5863,7 @@ pub fn run() {
         .setup(|app| {
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             notification::initialize();
+            app.state::<BatterySleepState>().initialize(app.handle());
             let preference = read_display_preference(app.handle());
             app.state::<DisplayPreferenceState>().set(preference);
             let pet_position = pet_window::read_pet_position(app.handle());
@@ -5857,6 +5896,7 @@ pub fn run() {
 
     app.run(|app_handle, event| match event {
         tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
+            app_handle.state::<BatterySleepState>().shutdown();
             app_handle.state::<StandaloneBridgeState>().stop();
             let _ = app_handle.state::<KeepAwakeState>().set_active(false);
             pet_window::hide_pet_on_exit(app_handle);
