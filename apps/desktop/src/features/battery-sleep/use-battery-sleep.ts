@@ -5,11 +5,14 @@ import type { BatterySleepStatus } from './types'
 
 export type UseBatterySleepResult = {
   armed: boolean
+  thresholdPercent: number
+  pending: boolean
   error: string | null
   supported: boolean
   batteryLevel: number | null
   isBatteryPowered: boolean | null
   setArmed: (armed: boolean) => void
+  setThreshold: (thresholdPercent: number) => void
 }
 
 const BATTERY_SLEEP_EVENT = 'agent-halo://battery-sleep-status'
@@ -17,6 +20,8 @@ const BATTERY_SLEEP_EVENT = 'agent-halo://battery-sleep-status'
 export const useBatterySleep = (canUseNativeControls: boolean): UseBatterySleepResult => {
   const [supported, setSupported] = useState(false)
   const [armed, setArmedState] = useState(false)
+  const [thresholdPercent, setThresholdPercent] = useState(10)
+  const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [batteryLevel, setBatteryLevel] = useState<number | null>(null)
   const [isBatteryPowered, setIsBatteryPowered] = useState<boolean | null>(null)
@@ -24,6 +29,7 @@ export const useBatterySleep = (canUseNativeControls: boolean): UseBatterySleepR
   const requestRef = useRef<Promise<unknown>>(Promise.resolve())
   const generationRef = useRef(0)
   const lastAppliedGenRef = useRef(0)
+  const pendingRef = useRef(false)
 
   const applyStatus = useCallback((status: BatterySleepStatus, gen: number) => {
     if (gen < lastAppliedGenRef.current) {
@@ -32,6 +38,7 @@ export const useBatterySleep = (canUseNativeControls: boolean): UseBatterySleepR
     lastAppliedGenRef.current = gen
     setSupported(status.supported)
     setArmedState(status.armed)
+    setThresholdPercent(status.thresholdPercent)
     setError(status.error)
     setBatteryLevel(status.batteryLevel)
     setIsBatteryPowered(status.isBatteryPowered)
@@ -91,31 +98,46 @@ export const useBatterySleep = (canUseNativeControls: boolean): UseBatterySleepR
     }
   }, [applyStatus, canUseNativeControls])
 
-  const setArmed = useCallback(
-    (requestedArmed: boolean) => {
-      if (!canUseNativeControls) return
+  const requestChange = useCallback(
+    (command: string, args: Record<string, number | boolean>) => {
+      if (!canUseNativeControls || pendingRef.current) return
+      pendingRef.current = true
+      setPending(true)
 
       const currentGen = ++generationRef.current
       const request = requestRef.current
         .catch(() => undefined)
-        .then(() => invoke<BatterySleepStatus>('set_battery_sleep_armed', { armed: requestedArmed }))
+        .then(() => invoke<BatterySleepStatus>(command, args))
         .then((status) => {
           applyStatus(status, currentGen)
         })
         .catch((err) => {
           setError(err instanceof Error ? err.message : String(err || 'Failed to update battery sleep state'))
         })
+        .finally(() => {
+          pendingRef.current = false
+          setPending(false)
+        })
       requestRef.current = request
     },
     [applyStatus, canUseNativeControls],
   )
 
+  const setArmed = useCallback((armed: boolean) => requestChange('set_battery_sleep_armed', { armed }), [requestChange])
+  const setThreshold = useCallback(
+    (thresholdPercent: number) => requestChange('set_battery_sleep_threshold', { thresholdPercent }),
+    [requestChange],
+  )
+
   return {
     armed,
+    thresholdPercent,
+    pending,
     error,
     supported,
     batteryLevel,
     isBatteryPowered,
     setArmed,
+    setThreshold,
   }
 }

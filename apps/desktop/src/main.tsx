@@ -393,7 +393,10 @@ const App = () => {
     armed: batterySleepArmed,
     error: batterySleepError,
     supported: batterySleepSupported,
+    thresholdPercent: batterySleepThresholdPercent,
+    pending: batterySleepPending,
     setArmed: setBatterySleepArmed,
+    setThreshold: setBatterySleepThreshold,
   } = useBatterySleep(canUseNativeControls)
   const pomodoro = usePomodoro(canUseNativeControls, completionPetEnabled)
   const stopwatch = useStopwatch()
@@ -2471,6 +2474,9 @@ const App = () => {
                       batterySleepArmed={batterySleepArmed}
                       batterySleepError={batterySleepError}
                       batterySleepSupported={batterySleepSupported}
+                      batterySleepThresholdPercent={batterySleepThresholdPercent}
+                      batterySleepPending={batterySleepPending}
+                      onBatterySleepThresholdChange={setBatterySleepThreshold}
                       pet={pet}
                       petMotionMapping={petMotionMapping}
                       completionPetEnabled={completionPetEnabled}

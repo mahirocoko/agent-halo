@@ -264,6 +264,58 @@
   margin-inline-start: auto;
 }
 
+.battery-sleep-controls {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 6px;
+}
+
+.battery-sleep-threshold {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  inline-size: 72px;
+  min-block-size: 28px;
+  padding-inline: 7px;
+  border: 1px solid rgba(0, 0, 0, 0.24);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--surface-ink);
+  font-size: 10px;
+}
+
+.battery-sleep-threshold input {
+  inline-size: 100%;
+  min-inline-size: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.battery-sleep-threshold:focus-within {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.battery-sleep-threshold:has(input:disabled) {
+  opacity: 0.5;
+}
+
+.battery-sleep-threshold:has(input[aria-invalid="true"]) {
+  outline: 2px solid var(--surface-ink);
+}
+
+.battery-sleep-hint {
+  margin: 8px 6px;
+  color: var(--surface-ink-2);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
 .pet-preview-button.is-stale,
 .pet-preview-status[data-state="stale"] {
   color: #fff;

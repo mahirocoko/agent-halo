@@ -20,6 +20,7 @@ import {
   ResizableCardDivider,
   useResizableCardLayout,
 } from '../../components/resizable-card-tray'
+import { BatterySleepControls } from '../battery-sleep/controls'
 import type { CompletionPetSize } from '../pet/preferences'
 import { shortenPath } from '../session/activity'
 import {
@@ -125,6 +126,8 @@ export interface ISetupPanelProps {
   batterySleepArmed: boolean
   batterySleepError: string | null
   batterySleepSupported: boolean
+  batterySleepThresholdPercent: number
+  batterySleepPending: boolean
   displayError: string | null
   displayLoading: boolean
   displayState: IDisplayStateSnapshot | null
@@ -150,6 +153,7 @@ export interface ISetupPanelProps {
   onDisplayRefresh: () => Promise<void>
   onKeepAwakeChange: (enabled: boolean) => void
   onBatterySleepChange: (armed: boolean) => void
+  onBatterySleepThresholdChange: (thresholdPercent: number) => void
   onPetChange: (pet: HaloPetName) => void
   onHaloBotLoadoutChange: (loadout: HaloBotLoadout) => void
   onCompletionPetEnabledChange: (enabled: boolean) => void
@@ -178,6 +182,8 @@ export const SetupPanel = ({
   batterySleepArmed,
   batterySleepError,
   batterySleepSupported,
+  batterySleepThresholdPercent,
+  batterySleepPending,
   movementBreakEnabled,
   pet,
   petMotionMapping,
@@ -189,6 +195,7 @@ export const SetupPanel = ({
   codexHookStatus,
   nativeAction,
   onBatterySleepChange,
+  onBatterySleepThresholdChange,
   onCheckBridge,
   onCompletionPetEnabledChange,
   onCompletionPetSizeChange,
@@ -1032,7 +1039,7 @@ export const SetupPanel = ({
                     <BatteryLow className="setup-icon" size={14} strokeWidth={2.3} />
                   </span>
                   <span className="setup-copy">
-                    <span className="setup-title">Sleep below 10%</span>
+                    <span className="setup-title">Sleep below {batterySleepThresholdPercent}%</span>
                     <span className="setup-detail">
                       {!canUseNativeControls
                         ? 'Desktop macOS with battery required'
@@ -1042,22 +1049,24 @@ export const SetupPanel = ({
                             ? 'Desktop macOS with battery required'
                             : !batterySleepArmed
                               ? 'Off · one-shot sleep disarmed'
-                              : 'Armed · sleeps once below 10% on battery power'}
+                              : `Armed · battery only, below ${batterySleepThresholdPercent}%`}
                     </span>
                   </span>
-                  <button
-                    className={`pill-btn ${batterySleepArmed ? 'accent' : ''}`}
-                    type="button"
-                    onClick={() => onBatterySleepChange(!batterySleepArmed)}
-                    data-tauri-drag-region="false"
-                    role="switch"
-                    aria-checked={batterySleepArmed}
-                    aria-label="Sleep below 10%"
-                    disabled={!canUseNativeControls || (!batterySleepSupported && !batterySleepArmed)}
-                  >
-                    {batterySleepArmed ? 'On' : 'Off'}
-                  </button>
+                  <BatterySleepControls
+                    armed={batterySleepArmed}
+                    pending={batterySleepPending}
+                    error={batterySleepError}
+                    supported={batterySleepSupported}
+                    canUseNativeControls={canUseNativeControls}
+                    thresholdPercent={batterySleepThresholdPercent}
+                    onArmedChange={onBatterySleepChange}
+                    onThresholdChange={onBatterySleepThresholdChange}
+                  />
                 </div>
+                <p className="battery-sleep-hint" id="battery-sleep-threshold-hint">
+                  1–100% · edit while Off, Enter or leave the field to save. On sleeps immediately if already below the
+                  threshold on battery power. Save your work first.
+                </p>
               </>
             ) : null}
           </div>

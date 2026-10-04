@@ -583,6 +583,22 @@ async fn set_battery_sleep_armed(
 }
 
 #[tauri::command]
+async fn set_battery_sleep_threshold(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, BatterySleepState>,
+    threshold_percent: u8,
+) -> Result<battery_sleep::BatterySleepStatus, String> {
+    let state = state.inner().clone();
+    let (tx, rx) = std::sync::mpsc::channel();
+    app.run_on_main_thread(move || {
+        let _ = tx.send(state.set_threshold(threshold_percent));
+    })
+    .map_err(|e| format!("Failed to dispatch to main thread: {e}"))?;
+    rx.recv()
+        .map_err(|e| format!("Failed to receive result: {e}"))?
+}
+
+#[tauri::command]
 async fn codex_usage() -> Result<CodexUsageSnapshot, String> {
     tauri::async_runtime::spawn_blocking(codex_usage_blocking)
         .await
@@ -5830,6 +5846,7 @@ pub fn run() {
             set_keep_awake,
             get_battery_sleep_status,
             set_battery_sleep_armed,
+            set_battery_sleep_threshold,
             set_completion_pet_expanded,
             set_completion_pet_movement,
             set_panel_open,

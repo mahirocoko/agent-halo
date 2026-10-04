@@ -8,8 +8,26 @@ use std::{
 use tauri::Manager;
 
 pub const BATTERY_SLEEP_PREFERENCE_FILE: &str = "battery-sleep-preference.json";
-pub const BATTERY_SLEEP_THRESHOLD_PERCENT: u8 = 10;
+pub const DEFAULT_BATTERY_SLEEP_THRESHOLD_PERCENT: u8 = 10;
 pub const BATTERY_SLEEP_EVENT_NAME: &str = "agent-halo://battery-sleep-status";
+
+fn default_threshold_percent() -> u8 {
+    DEFAULT_BATTERY_SLEEP_THRESHOLD_PERCENT
+}
+
+fn validate_threshold_percent(value: u8) -> Result<u8, String> {
+    if (1..=100).contains(&value) {
+        Ok(value)
+    } else {
+        Err("Sleep threshold must be a whole percentage from 1 to 100".to_string())
+    }
+}
+
+fn deserialize_threshold_percent<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<u8, D::Error> {
+    validate_threshold_percent(u8::deserialize(deserializer)?).map_err(serde::de::Error::custom)
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -23,15 +41,30 @@ pub struct BatteryStatus {
 pub struct BatterySleepStatus {
     pub supported: bool,
     pub armed: bool,
+    pub threshold_percent: u8,
     pub error: Option<String>,
     pub battery_level: Option<u8>,
     pub is_battery_powered: Option<bool>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct BatterySleepPreference {
     pub armed: bool,
+    #[serde(
+        default = "default_threshold_percent",
+        deserialize_with = "deserialize_threshold_percent"
+    )]
+    pub threshold_percent: u8,
+}
+
+impl Default for BatterySleepPreference {
+    fn default() -> Self {
+        Self {
+            armed: false,
+            threshold_percent: default_threshold_percent(),
+        }
+    }
 }
 
 pub trait PowerSourceProvider: Send + Sync {
@@ -45,6 +78,8 @@ pub trait SleepRequester: Send + Sync {
 pub trait PreferenceStore: Send + Sync {
     fn read_armed(&self) -> Result<bool, String>;
     fn write_armed(&self, armed: bool) -> Result<(), String>;
+    fn read_threshold(&self) -> Result<u8, String>;
+    fn write_threshold(&self, threshold_percent: u8) -> Result<(), String>;
 }
 
 pub trait NotificationController: Send + Sync {
@@ -62,29 +97,54 @@ impl DiskPreferenceStore {
             path: config_dir.join(BATTERY_SLEEP_PREFERENCE_FILE),
         }
     }
+
+    fn read_preference(&self) -> Result<BatterySleepPreference, String> {
+        match fs::read_to_string(&self.path) {
+            Ok(contents) => serde_json::from_str(&contents)
+                .map_err(|e| format!("Failed to parse battery sleep preference: {e}")),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                Ok(BatterySleepPreference::default())
+            }
+            Err(e) => Err(format!("Failed to read battery sleep preference: {e}")),
+        }
+    }
 }
 
 impl PreferenceStore for DiskPreferenceStore {
     fn read_armed(&self) -> Result<bool, String> {
-        if !self.path.exists() {
-            return Ok(false);
-        }
-        let contents = fs::read_to_string(&self.path)
-            .map_err(|e| format!("Failed to read battery sleep preference: {e}"))?;
-        let pref: BatterySleepPreference = serde_json::from_str(&contents)
-            .map_err(|e| format!("Failed to parse battery sleep preference: {e}"))?;
-        Ok(pref.armed)
+        Ok(self.read_preference()?.armed)
     }
 
     fn write_armed(&self, armed: bool) -> Result<(), String> {
+        let pref = BatterySleepPreference {
+            armed,
+            ..self.read_preference()?
+        };
+        self.write_preference(&pref)
+    }
+
+    fn read_threshold(&self) -> Result<u8, String> {
+        Ok(self.read_preference()?.threshold_percent)
+    }
+
+    fn write_threshold(&self, threshold_percent: u8) -> Result<(), String> {
+        let pref = BatterySleepPreference {
+            armed: false, // Threshold editing is an explicit Off-only operation.
+            threshold_percent: validate_threshold_percent(threshold_percent)?,
+        };
+        self.write_preference(&pref)
+    }
+}
+
+impl DiskPreferenceStore {
+    fn write_preference(&self, pref: &BatterySleepPreference) -> Result<(), String> {
         let parent = self
             .path
             .parent()
             .ok_or_else(|| "Invalid preference path".to_string())?;
         fs::create_dir_all(parent).map_err(|e| format!("Failed to create config dir: {e}"))?;
         let temp_path = self.path.with_extension("json.tmp");
-        let pref = BatterySleepPreference { armed };
-        let contents = serde_json::to_vec_pretty(&pref)
+        let contents = serde_json::to_vec_pretty(pref)
             .map_err(|e| format!("Failed to serialize preference: {e}"))?;
 
         // 1. Create and write temp file
@@ -98,13 +158,15 @@ impl PreferenceStore for DiskPreferenceStore {
             .map_err(|e| format!("Failed to sync temporary preference: {e}"))?;
         drop(file);
 
+        // Open before mutation so an open failure cannot replace the preference.
+        let parent_dir = fs::File::open(parent)
+            .map_err(|e| format!("Failed to open config dir for sync: {e}"))?;
+
         // 3. Atomically rename
         fs::rename(&temp_path, &self.path)
             .map_err(|e| format!("Failed to save preference: {e}"))?;
 
         // 4. Sync parent directory to persist directory entry
-        let parent_dir = fs::File::open(parent)
-            .map_err(|e| format!("Failed to open config dir for sync: {e}"))?;
         parent_dir
             .sync_all()
             .map_err(|e| format!("Failed to sync config dir: {e}"))?;
@@ -123,10 +185,23 @@ pub struct BatterySleepEngine {
     emitter: Arc<dyn Fn(BatterySleepStatus) + Send + Sync + 'static>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct BatterySleepEngineInner {
     armed: bool,
+    threshold_percent: u8,
+    threshold_save_uncertain: bool,
     error: Option<String>,
+}
+
+impl Default for BatterySleepEngineInner {
+    fn default() -> Self {
+        Self {
+            armed: false,
+            threshold_percent: default_threshold_percent(),
+            threshold_save_uncertain: false,
+            error: None,
+        }
+    }
 }
 
 impl BatterySleepEngine {
@@ -153,6 +228,22 @@ impl BatterySleepEngine {
 
     fn initialize(self: &Arc<Self>) {
         let _op = self.op_mutex.lock().unwrap_or_else(|e| e.into_inner());
+        match self
+            .preference_store
+            .read_threshold()
+            .and_then(validate_threshold_percent)
+        {
+            Ok(threshold) => {
+                self.inner
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .threshold_percent = threshold
+            }
+            Err(error) => {
+                self.inner.lock().unwrap_or_else(|e| e.into_inner()).error = Some(error);
+                return; // Invalid persisted threshold must never silently resume an arm.
+            }
+        }
         let power_res = self.power_provider.query_power_status();
         let is_supported = matches!(power_res, Ok(Some(_)));
 
@@ -184,7 +275,7 @@ impl BatterySleepEngine {
 
             // Handle already low on arm/startup
             if let Ok(Some(power)) = self.power_provider.query_power_status() {
-                if power.is_battery_powered && power.percentage < BATTERY_SLEEP_THRESHOLD_PERCENT {
+                if power.is_battery_powered && power.percentage < self.threshold_percent_locked() {
                     self.consume_and_sleep_locked();
                 }
             }
@@ -192,9 +283,9 @@ impl BatterySleepEngine {
     }
 
     fn get_status_locked(&self) -> BatterySleepStatus {
-        let (armed, error) = {
+        let (armed, threshold_percent, error) = {
             let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-            (inner.armed, inner.error.clone())
+            (inner.armed, inner.threshold_percent, inner.error.clone())
         };
         let power_res = self.power_provider.query_power_status();
         let (supported, battery_level, is_battery_powered) = match power_res {
@@ -210,6 +301,7 @@ impl BatterySleepEngine {
         BatterySleepStatus {
             supported,
             armed,
+            threshold_percent,
             error,
             battery_level,
             is_battery_powered,
@@ -219,6 +311,49 @@ impl BatterySleepEngine {
     pub fn get_status(&self) -> BatterySleepStatus {
         let _op = self.op_mutex.lock().unwrap_or_else(|e| e.into_inner());
         self.get_status_locked()
+    }
+
+    fn threshold_percent_locked(&self) -> u8 {
+        self.inner
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .threshold_percent
+    }
+
+    pub fn set_threshold(&self, threshold_percent: u8) -> Result<BatterySleepStatus, String> {
+        let _op = self.op_mutex.lock().unwrap_or_else(|e| e.into_inner());
+        let threshold_percent = validate_threshold_percent(threshold_percent)?;
+        {
+            let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+            if inner.armed {
+                return Err("Turn sleep monitoring Off before changing its threshold".to_string());
+            }
+        }
+        // Save the same native preference owner first. Editing never arms or sleeps.
+        if let Err(error) = self.preference_store.write_threshold(threshold_percent) {
+            {
+                let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+                // Rename may have succeeded before directory sync failed. Never
+                // arm against the old displayed value while disk may hold a new one.
+                inner.threshold_save_uncertain = true;
+                inner.error = Some(format!(
+                    "Threshold save failed; save again before arming: {error}"
+                ));
+            }
+            (self.emitter)(self.get_status_locked());
+            return Err(format!(
+                "Threshold save failed; save again before arming: {error}"
+            ));
+        }
+        {
+            let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+            inner.threshold_percent = threshold_percent;
+            inner.threshold_save_uncertain = false;
+            inner.error = None;
+        }
+        let status = self.get_status_locked();
+        (self.emitter)(status.clone());
+        Ok(status)
     }
 
     pub fn set_armed(
@@ -240,12 +375,28 @@ impl BatterySleepEngine {
             let status = BatterySleepStatus {
                 supported: power_opt.is_some(),
                 armed: false,
+                threshold_percent: self.threshold_percent_locked(),
                 error: None,
                 battery_level: power_opt.as_ref().map(|p| p.percentage),
                 is_battery_powered: power_opt.as_ref().map(|p| p.is_battery_powered),
             };
             (self.emitter)(status.clone());
             return Ok(status);
+        }
+
+        // Do not allow an ambiguous failed threshold save to be followed by ON.
+        {
+            let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+            if inner.threshold_save_uncertain {
+                return Err(
+                    "Save the threshold successfully before arming sleep monitoring".to_string(),
+                );
+            }
+            if self.preference_store.read_threshold()? != inner.threshold_percent {
+                return Err(
+                    "Saved threshold changed; reload or save it again before arming".to_string(),
+                );
+            }
         }
 
         // Turning ON requires valid power source support
@@ -263,6 +414,7 @@ impl BatterySleepEngine {
             let status = BatterySleepStatus {
                 supported: true,
                 armed: false,
+                threshold_percent: inner.threshold_percent,
                 error: inner.error.clone(),
                 battery_level: Some(power.percentage),
                 is_battery_powered: Some(power.is_battery_powered),
@@ -290,6 +442,7 @@ impl BatterySleepEngine {
             let status = BatterySleepStatus {
                 supported: true,
                 armed: false,
+                threshold_percent: inner.threshold_percent,
                 error: inner.error.clone(),
                 battery_level: Some(power.percentage),
                 is_battery_powered: Some(power.is_battery_powered),
@@ -301,6 +454,7 @@ impl BatterySleepEngine {
         let status = BatterySleepStatus {
             supported: true,
             armed: true,
+            threshold_percent: self.threshold_percent_locked(),
             error: None,
             battery_level: Some(power.percentage),
             is_battery_powered: Some(power.is_battery_powered),
@@ -308,7 +462,7 @@ impl BatterySleepEngine {
         (self.emitter)(status.clone());
 
         // Handle already-low on arm
-        if power.is_battery_powered && power.percentage < BATTERY_SLEEP_THRESHOLD_PERCENT {
+        if power.is_battery_powered && power.percentage < self.threshold_percent_locked() {
             self.consume_and_sleep_locked();
             return Ok(self.get_status_locked());
         }
@@ -341,7 +495,7 @@ impl BatterySleepEngine {
             }
         };
 
-        if power.is_battery_powered && power.percentage < BATTERY_SLEEP_THRESHOLD_PERCENT {
+        if power.is_battery_powered && power.percentage < self.threshold_percent_locked() {
             self.consume_and_sleep_locked();
         }
     }
@@ -359,7 +513,7 @@ impl BatterySleepEngine {
         let live_power = match self.power_provider.query_power_status() {
             Ok(Some(status))
                 if status.is_battery_powered
-                    && status.percentage < BATTERY_SLEEP_THRESHOLD_PERCENT =>
+                    && status.percentage < self.threshold_percent_locked() =>
             {
                 status
             }
@@ -392,6 +546,7 @@ impl BatterySleepEngine {
         let status_before_sleep = BatterySleepStatus {
             supported: true,
             armed: false,
+            threshold_percent: self.threshold_percent_locked(),
             error: None,
             battery_level: Some(live_power.percentage),
             is_battery_powered: Some(live_power.is_battery_powered),
@@ -802,6 +957,7 @@ impl BatterySleepState {
             BatterySleepStatus {
                 supported: false,
                 armed: false,
+                threshold_percent: default_threshold_percent(),
                 error: None,
                 battery_level: None,
                 is_battery_powered: None,
@@ -827,6 +983,16 @@ impl BatterySleepState {
         } else {
             Err("Battery sleep engine is not initialized".to_string())
         }
+    }
+
+    pub fn set_threshold(&self, threshold_percent: u8) -> Result<BatterySleepStatus, String> {
+        let engine = self
+            .engine
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+            .ok_or_else(|| "Battery sleep engine is not initialized".to_string())?;
+        engine.set_threshold(threshold_percent)
     }
 }
 
@@ -864,11 +1030,178 @@ pub(crate) mod tests {
             ));
         let store = DiskPreferenceStore::new(&dir);
         assert!(!store.read_armed().unwrap());
+        assert_eq!(store.read_threshold().unwrap(), 10);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(&store.path, r#"{"armed":false}"#).unwrap();
+        assert_eq!(store.read_threshold().unwrap(), 10); // v0.1.18 migration
+        store.write_threshold(73).unwrap();
         store.write_armed(true).expect("sync armed preference");
         assert!(store.read_armed().unwrap());
         store.write_armed(false).expect("sync disarmed preference");
         assert!(!DiskPreferenceStore::new(&dir).read_armed().unwrap());
+        assert_eq!(DiskPreferenceStore::new(&dir).read_threshold().unwrap(), 73);
         fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn legacy_preferences_default_to_ten_and_invalid_thresholds_fail_closed() {
+        let legacy: BatterySleepPreference = serde_json::from_str(r#"{"armed":true}"#).unwrap();
+        assert_eq!(legacy.threshold_percent, 10);
+        for threshold in ["0", "101", "-1", "1.5", "null"] {
+            let json = format!(r#"{{"armed":true,"thresholdPercent":{threshold}}}"#);
+            assert!(serde_json::from_str::<BatterySleepPreference>(&json).is_err());
+        }
+    }
+
+    #[test]
+    fn editing_threshold_never_sleeps_and_custom_threshold_consumes_once() {
+        let (engine, power, sleep, pref, notifications, _) = setup_test_engine(
+            BatteryStatus {
+                is_battery_powered: true,
+                percentage: 50,
+            },
+            false,
+        );
+        let status = engine.set_threshold(60).unwrap();
+        assert_eq!(status.threshold_percent, 60);
+        assert!(!status.armed);
+        assert_eq!(sleep.sleep_calls(), 0);
+        assert!(!notifications.is_started());
+        engine.set_armed(true).unwrap(); // explicit ON while already below 60
+        assert_eq!(sleep.sleep_calls(), 1);
+        assert!(!engine.get_status().armed);
+        assert_eq!(pref.read_threshold().unwrap(), 60);
+
+        power.set_status(Ok(Some(BatteryStatus {
+            is_battery_powered: true,
+            percentage: 60,
+        })));
+        engine.set_armed(true).unwrap();
+        notifications.trigger_callback(); // equality never sleeps
+        assert_eq!(sleep.sleep_calls(), 1);
+        assert!(engine.get_status().armed);
+        power.set_status(Ok(Some(BatteryStatus {
+            is_battery_powered: true,
+            percentage: 59,
+        })));
+        notifications.trigger_callback();
+        notifications.trigger_callback();
+        assert_eq!(sleep.sleep_calls(), 2);
+        assert_eq!(engine.get_status().threshold_percent, 60);
+    }
+
+    #[test]
+    fn threshold_changes_are_rejected_while_armed_and_ac_never_sleeps() {
+        let (engine, _, sleep, pref, notifications, _) = setup_test_engine(
+            BatteryStatus {
+                is_battery_powered: false,
+                percentage: 5,
+            },
+            false,
+        );
+        engine.set_threshold(100).unwrap();
+        engine.set_armed(true).unwrap();
+        assert!(engine.set_threshold(80).is_err());
+        assert_eq!(engine.get_status().threshold_percent, 100);
+        assert_eq!(pref.read_threshold().unwrap(), 100);
+        notifications.trigger_callback();
+        assert_eq!(sleep.sleep_calls(), 0);
+        engine.set_armed(false).unwrap();
+        engine.set_threshold(1).unwrap();
+        assert_eq!(engine.get_status().threshold_percent, 1);
+    }
+
+    #[test]
+    fn invalid_or_failed_threshold_write_preserves_the_previous_value() {
+        let (engine, _, sleep, pref, _, _) = setup_test_engine(
+            BatteryStatus {
+                is_battery_powered: true,
+                percentage: 50,
+            },
+            false,
+        );
+        for invalid in [0, 101, 255] {
+            assert!(engine.set_threshold(invalid).is_err());
+        }
+        *pref.write_fail_on_threshold.lock().unwrap() = true;
+        assert!(engine.set_threshold(90).is_err());
+        assert_eq!(engine.get_status().threshold_percent, 10);
+        assert_eq!(pref.read_threshold().unwrap(), 10);
+        assert_eq!(sleep.sleep_calls(), 0);
+    }
+
+    #[test]
+    fn post_mutation_save_failure_blocks_arming_until_a_confirmed_save() {
+        let (engine, power, sleep, pref, notifications, _) = setup_test_engine(
+            BatteryStatus {
+                is_battery_powered: true,
+                percentage: 50,
+            },
+            false,
+        );
+        *pref.write_fail_on_threshold.lock().unwrap() = true;
+        *pref.threshold_write_mutates_before_error.lock().unwrap() = true;
+        assert!(engine.set_threshold(90).is_err());
+        assert_eq!(engine.get_status().threshold_percent, 10);
+        assert_eq!(pref.read_threshold().unwrap(), 90); // rename succeeded, sync failed
+        assert!(!pref.read_armed().unwrap());
+        assert!(engine.set_armed(true).is_err());
+        engine.set_armed(false).unwrap();
+        assert!(engine.set_armed(true).is_err()); // OFF does not clear ambiguity
+        assert_eq!(sleep.sleep_calls(), 0);
+
+        // Restart can show the new saved value, but must never silently arm it.
+        let restored = BatterySleepEngine::new(
+            power,
+            sleep.clone(),
+            pref.clone(),
+            notifications,
+            Arc::new(|_| {}),
+        );
+        assert_eq!(restored.get_status().threshold_percent, 90);
+        assert!(!restored.get_status().armed);
+        assert_eq!(sleep.sleep_calls(), 0);
+        drop(restored);
+
+        *pref.write_fail_on_threshold.lock().unwrap() = false;
+        engine.set_threshold(10).unwrap(); // resaving the displayed value is valid recovery
+        engine.set_armed(true).unwrap();
+        assert_eq!(pref.read_threshold().unwrap(), 10);
+        assert_eq!(sleep.sleep_calls(), 0);
+    }
+
+    #[test]
+    fn off_only_threshold_save_repairs_a_stale_disk_arm() {
+        let (engine, _, sleep, pref, _, _) = setup_test_engine(
+            BatteryStatus {
+                is_battery_powered: true,
+                percentage: 50,
+            },
+            false,
+        );
+        *pref.armed.lock().unwrap() = Ok(true);
+        engine.set_threshold(90).unwrap();
+        assert!(!pref.read_armed().unwrap());
+        assert!(!engine.get_status().armed);
+        assert_eq!(sleep.sleep_calls(), 0);
+    }
+
+    #[test]
+    fn restart_restores_saved_threshold_without_arming() {
+        let (engine, power, sleep, pref, notifications, _) = setup_test_engine(
+            BatteryStatus {
+                is_battery_powered: true,
+                percentage: 50,
+            },
+            false,
+        );
+        engine.set_threshold(90).unwrap();
+        drop(engine);
+        let restored =
+            BatterySleepEngine::new(power, sleep.clone(), pref, notifications, Arc::new(|_| {}));
+        assert_eq!(restored.get_status().threshold_percent, 90);
+        assert!(!restored.get_status().armed);
+        assert_eq!(sleep.sleep_calls(), 0);
     }
 
     #[cfg(target_os = "macos")]
@@ -933,6 +1266,9 @@ pub(crate) mod tests {
 
     struct MockPreferenceStore {
         armed: Mutex<Result<bool, String>>,
+        threshold: Mutex<u8>,
+        write_fail_on_threshold: Mutex<bool>,
+        threshold_write_mutates_before_error: Mutex<bool>,
         write_fail_on_false: Mutex<bool>,
         write_calls: Mutex<Vec<bool>>,
     }
@@ -941,6 +1277,9 @@ pub(crate) mod tests {
         fn new(initial_armed: bool) -> Self {
             Self {
                 armed: Mutex::new(Ok(initial_armed)),
+                threshold: Mutex::new(default_threshold_percent()),
+                write_fail_on_threshold: Mutex::new(false),
+                threshold_write_mutates_before_error: Mutex::new(false),
                 write_fail_on_false: Mutex::new(false),
                 write_calls: Mutex::new(Vec::new()),
             }
@@ -952,6 +1291,23 @@ pub(crate) mod tests {
     }
 
     impl PreferenceStore for MockPreferenceStore {
+        fn read_threshold(&self) -> Result<u8, String> {
+            Ok(*self.threshold.lock().unwrap())
+        }
+
+        fn write_threshold(&self, threshold_percent: u8) -> Result<(), String> {
+            if *self.write_fail_on_threshold.lock().unwrap() {
+                if *self.threshold_write_mutates_before_error.lock().unwrap() {
+                    *self.threshold.lock().unwrap() = threshold_percent;
+                    *self.armed.lock().unwrap() = Ok(false);
+                }
+                return Err("Simulated threshold persistence failure".to_string());
+            }
+            *self.threshold.lock().unwrap() = validate_threshold_percent(threshold_percent)?;
+            *self.armed.lock().unwrap() = Ok(false);
+            Ok(())
+        }
+
         fn read_armed(&self) -> Result<bool, String> {
             self.armed.lock().unwrap().clone()
         }
