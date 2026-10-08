@@ -79,7 +79,7 @@ mod platform {
 
     pub fn acquire() -> Result<IOPMAssertionID, String> {
         let assertion_type = CFString::new("PreventUserIdleDisplaySleep");
-        let assertion_name = CFString::new("Agent Halo — Letta is working");
+        let assertion_name = CFString::new("Agent Halo — Keep display awake");
         let mut assertion_id = 0;
         let result = unsafe {
             IOPMAssertionCreateWithName(

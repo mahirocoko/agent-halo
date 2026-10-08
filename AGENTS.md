@@ -40,3 +40,4 @@
 - `docs/code-style/` - TypeScript, imports, and formatting contracts
 - `docs/patterns/` - component, hook, and state patterns
 - Existing domain contracts remain in `docs/architecture.md`, `docs/battery-sleep.md`, `docs/event-protocol.md`, `docs/presence-model.md`, `docs/runtime-monitor.md`, `docs/pet.md`, `docs/movement-break.md`, `docs/pomodoro.md`, `docs/stopwatch.md`, `docs/notchcode-parity.md`, and `docs/performance.md`.
+- `docs/keep-display-awake.md` owns the On/Agent/Off display assertion modes and legacy preference migration.

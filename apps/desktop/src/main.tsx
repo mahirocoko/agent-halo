@@ -31,6 +31,12 @@ import { type IResizableCardSpec, ResizableCardDivider, useResizableCardLayout }
 import { SurfaceControl } from './components/surface-control'
 import { useBatterySleep } from './features/battery-sleep/use-battery-sleep'
 import { FocusToolsPanel } from './features/focus/components'
+import {
+  type KeepAwakeMode,
+  readKeepAwakeMode,
+  shouldKeepDisplayAwake,
+  writeKeepAwakeMode,
+} from './features/keep-awake/preferences'
 import { readMovementBreakEnabled, writeMovementBreakEnabled } from './features/movement/preferences'
 import type { MovementExerciseId } from './features/movement/types'
 import { buildCompanionProjection } from './features/pet/companion-projection'
@@ -97,7 +103,6 @@ import type { IUsageSettings } from './features/usage/types'
 import { useAgentUsageList } from './features/usage/use-agent-usage-list'
 import './styles.css'
 
-const KEEP_AWAKE_STORAGE_KEY = 'agent-halo.keep-awake-while-working'
 const SESSION_DETAIL_CARD_SPECS: IResizableCardSpec[] = [
   { id: 'overview', defaultRatio: 0.55 },
   { id: 'activity', defaultRatio: 0.45 },
@@ -247,21 +252,6 @@ const getGlyphStatus = (status: IStatusView['status']): ISessionSummary['status'
   return 'idle'
 }
 
-const readKeepAwakeEnabled = (): boolean => {
-  try {
-    return window.localStorage.getItem(KEEP_AWAKE_STORAGE_KEY) === 'true'
-  } catch {
-    return false
-  }
-}
-const writeKeepAwakeEnabled = (enabled: boolean) => {
-  try {
-    window.localStorage.setItem(KEEP_AWAKE_STORAGE_KEY, `${enabled}`)
-  } catch {
-    /* current runtime still owns state */
-  }
-}
-
 const getGroupRemovalId = (groupKey: string, group: IWorkspaceSessionGroup) =>
   [groupKey, ...group.sessions.map((session) => session.conversationId).sort()].join('\n')
 
@@ -360,7 +350,7 @@ const App = () => {
   const [nativeClosedSurfaceWidth, setNativeClosedSurfaceWidth] = useState(DEFAULT_CAMERA_NOTCH_WIDTH)
   const [dismissedSessionIds, setDismissedSessionIds] = useState<DismissedSessionRegistry>(readDismissedSessionIds)
   const [deletedSessionIds, setDeletedSessionIds] = useState<DeletedSessionRegistry>(readDeletedSessionIds)
-  const [keepAwakeEnabled, setKeepAwakeEnabled] = useState(readKeepAwakeEnabled)
+  const [keepAwakeMode, setKeepAwakeMode] = useState(readKeepAwakeMode)
   const [keepAwakeActive, setKeepAwakeActive] = useState(false)
   const [keepAwakeError, setKeepAwakeError] = useState<string | null>(null)
   const [expandedSessionGroupKeys, setExpandedSessionGroupKeys] = useState<Set<string>>(() => new Set())
@@ -806,7 +796,7 @@ const App = () => {
 
     let cancelled = false
     let retryTimer: number | null = null
-    const requestedActive = keepAwakeEnabled && hasWorkingActivity
+    const requestedActive = shouldKeepDisplayAwake(keepAwakeMode, hasWorkingActivity)
     const syncNativeState = (attempt: number) => {
       const request = keepAwakeRequestRef.current
         .catch(() => undefined)
@@ -842,7 +832,7 @@ const App = () => {
       cancelled = true
       if (retryTimer !== null) window.clearTimeout(retryTimer)
     }
-  }, [canUseNativeControls, hasWorkingActivity, keepAwakeEnabled])
+  }, [canUseNativeControls, hasWorkingActivity, keepAwakeMode])
 
   const pillDetail = (() => {
     if (showPomodoroActivity) return pomodoro.completionVisible ? 'Done' : pomodoro.countdownLabel
@@ -1770,9 +1760,9 @@ const App = () => {
     }
   }
 
-  const updateKeepAwakeEnabled = (enabled: boolean) => {
-    setKeepAwakeEnabled(enabled)
-    writeKeepAwakeEnabled(enabled)
+  const updateKeepAwakeMode = (mode: KeepAwakeMode) => {
+    setKeepAwakeMode(mode)
+    writeKeepAwakeMode(mode)
   }
 
   const dismissSession = (conversationId: string) => {
@@ -2469,7 +2459,7 @@ const App = () => {
                       haloBotLoadout={haloBotLoadout}
                       isConnected={isConnected}
                       keepAwakeActive={keepAwakeActive}
-                      keepAwakeEnabled={keepAwakeEnabled}
+                      keepAwakeMode={keepAwakeMode}
                       keepAwakeError={keepAwakeError}
                       batterySleepArmed={batterySleepArmed}
                       batterySleepError={batterySleepError}
@@ -2497,7 +2487,7 @@ const App = () => {
                       onInstallCursorHooks={() => void installCursorHooks()}
                       onInstallCodexHooks={() => void installCodexHooks()}
                       onHaloBotLoadoutChange={updateHaloBotLoadout}
-                      onKeepAwakeChange={updateKeepAwakeEnabled}
+                      onKeepAwakeChange={updateKeepAwakeMode}
                       onBatterySleepChange={setBatterySleepArmed}
                       onPetChange={updatePet}
                       onPetMotionChange={updatePetMotion}

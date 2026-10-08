@@ -485,7 +485,8 @@
   background: transparent;
 }
 
-.setup-size-options button {
+.setup-size-options button,
+.keep-awake-option > span {
   inline-size: 34px;
   block-size: 26px;
   padding: 0;
@@ -499,9 +500,38 @@
   cursor: pointer;
 }
 
-.setup-size-options button[data-active="true"] {
+.setup-size-options button[data-active="true"],
+.keep-awake-option input:checked + span {
   color: #fff;
   background: #111;
+}
+
+.keep-awake-options {
+  display: inline-flex;
+  flex: none;
+  padding: 1px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.keep-awake-option {
+  position: relative;
+}
+
+.keep-awake-option > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: auto;
+  min-inline-size: 34px;
+  padding-inline: 8px;
+  background: transparent;
+  font-size: 10px;
+}
+
+.keep-awake-option input:focus-visible + span {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 
 .pet-motion-mapping {

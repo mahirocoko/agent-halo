@@ -21,6 +21,7 @@ import {
   useResizableCardLayout,
 } from '../../components/resizable-card-tray'
 import { BatterySleepControls } from '../battery-sleep/controls'
+import { KEEP_AWAKE_MODE_COPY, KEEP_AWAKE_MODES, type KeepAwakeMode } from '../keep-awake/preferences'
 import type { CompletionPetSize } from '../pet/preferences'
 import { shortenPath } from '../session/activity'
 import {
@@ -121,7 +122,7 @@ export interface ISetupPanelProps {
   guidance: { title: string; detail: string }
   isConnected: boolean
   keepAwakeActive: boolean
-  keepAwakeEnabled: boolean
+  keepAwakeMode: KeepAwakeMode
   keepAwakeError: string | null
   batterySleepArmed: boolean
   batterySleepError: string | null
@@ -151,7 +152,7 @@ export interface ISetupPanelProps {
   onInstallCodexHooks: () => void
   onDisplayChange: (displayId: string) => Promise<void>
   onDisplayRefresh: () => Promise<void>
-  onKeepAwakeChange: (enabled: boolean) => void
+  onKeepAwakeChange: (mode: KeepAwakeMode) => void
   onBatterySleepChange: (armed: boolean) => void
   onBatterySleepThresholdChange: (thresholdPercent: number) => void
   onPetChange: (pet: HaloPetName) => void
@@ -177,7 +178,7 @@ export const SetupPanel = ({
   haloBotLoadout,
   isConnected,
   keepAwakeActive,
-  keepAwakeEnabled,
+  keepAwakeMode,
   keepAwakeError,
   batterySleepArmed,
   batterySleepError,
@@ -1013,26 +1014,41 @@ export const SetupPanel = ({
                   <span className="setup-copy">
                     <span className="setup-title">Keep display awake</span>
                     <span className="setup-detail">
-                      {!keepAwakeEnabled
-                        ? 'Off · display follows macOS idle settings'
-                        : !canUseNativeControls
-                          ? 'Desktop runtime required'
-                          : keepAwakeError
-                            ? `Unavailable · ${keepAwakeError}`
+                      {keepAwakeError
+                        ? `Unavailable · ${keepAwakeError}`
+                        : keepAwakeMode === 'off'
+                          ? 'Off · display follows macOS idle settings'
+                          : !canUseNativeControls
+                            ? 'Desktop runtime required'
                             : keepAwakeActive
-                              ? 'Active · Letta is working'
-                              : 'On · waiting for active work'}
+                              ? `${KEEP_AWAKE_MODE_COPY[keepAwakeMode].label} · Active`
+                              : `${KEEP_AWAKE_MODE_COPY[keepAwakeMode].label} · Standby`}
+                    </span>
+                    <span className="setup-detail" id="keep-awake-mode-detail">
+                      {KEEP_AWAKE_MODE_COPY[keepAwakeMode].detail}
                     </span>
                   </span>
-                  <button
-                    className={`pill-btn ${keepAwakeEnabled ? 'accent' : ''}`}
-                    type="button"
-                    onClick={() => onKeepAwakeChange(!keepAwakeEnabled)}
+                  <span
+                    className="keep-awake-options"
+                    role="radiogroup"
                     data-tauri-drag-region="false"
-                    aria-label={`${keepAwakeEnabled ? 'Disable' : 'Enable'} keep display awake`}
+                    aria-label="Keep display awake mode"
+                    aria-describedby="keep-awake-mode-detail"
                   >
-                    {keepAwakeEnabled ? 'On' : 'Off'}
-                  </button>
+                    {KEEP_AWAKE_MODES.map((mode) => (
+                      <label className="keep-awake-option" key={mode}>
+                        <input
+                          className="sr-only"
+                          type="radio"
+                          name="keep-awake-mode"
+                          value={mode}
+                          checked={keepAwakeMode === mode}
+                          onChange={() => onKeepAwakeChange(mode)}
+                        />
+                        <span>{KEEP_AWAKE_MODE_COPY[mode].label}</span>
+                      </label>
+                    ))}
+                  </span>
                 </div>
                 <div className="setup-row">
                   <span className="status-slot">

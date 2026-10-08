@@ -51,7 +51,7 @@ The desktop companion uses a view-owned panel width (Sessions 560, Focus 540, Us
 - Lists locally listening TCP services in a dedicated Services tab, separates strongly evidenced browser apps first, exact Letta-started non-web services second, and other listeners last; expands into bounded process/start/memory/parent/executable/cwd context plus trusted Letta/Herdr ancestry, reserves the green service dot for web evidence only, opens detected HTTP endpoints, and can stop an eligible current-user listener only after exact native identity revalidation and confirmation.
 - Runs independent local Pomodoro and Stopwatch tools together, with persisted deadlines/elapsed time, collapsed status, silent Pomodoro notifications, clearable Stopwatch history, and a projection-only Pet; the main renderer remains the sole Pomodoro/notification owner.
 - Offers Squat and Overhead Reach Movement Breaks only after a specific exercise click, either from Focus Move or the Pet chooser; preview and pose tracking share one local stream and bundled offline assets, and manual movement never mutates Pomodoro.
-- Keeps the display awake only while genuine visible Letta work is active.
+- Keeps the display awake continuously, only during agent work, or not at all through explicit On/Agent/Off modes.
 - Remembers the selected display for the notch and Pet, with safe Primary fallback when that display disconnects.
 - Installs, verifies, and diagnoses the local Letta Code mod plus optional AGY, Cursor, and Codex hooks without replacing unrelated user hook entries.
 
@@ -231,6 +231,8 @@ Then reload Letta Code:
 ```
 
 Setup also owns the global Pet, Completion Pet, **Offer movement after Focus**, keep-awake, and target-display preferences. The Focus-completion movement offer is Off by default; manual Move remains available, and no path opens the camera before a specific exercise click.
+
+**Keep display awake** offers **On** (continuously while Halo is open), **Agent** (while any agent is working), and **Off** (normal macOS idle settings, the default). Existing enabled settings migrate to Agent. Active/Standby reflects the confirmed native display assertion, not just the selected mode. Manual sleep and lid close remain allowed. See `docs/keep-display-awake.md`.
 
 **Setup → Display → Low-battery sleep** is an opt-in, one-shot native macOS control. Set a whole threshold from **1–100%** while Off (default **10%**); Enter or leaving the field saves it. While armed, IOKit notifications trigger sleep strictly below the saved threshold on battery power, never on AC power. It saves Off before requesting sleep, preserving the threshold, so waking does not repeat the action; another use requires manually rearming. Arming above the current battery level can immediately sleep the machine—save your work before testing. It defaults Off and does not poll or prevent idle sleep. See `docs/battery-sleep.md` for persistence, failure handling, and verification boundaries.
 
