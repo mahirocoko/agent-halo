@@ -40,6 +40,12 @@ Events are newline-delimited JSON in `~/.letta/mods/agent-halo.events.ndjson` an
 
 `conversationId` is normalized before emission. A real scoped conversation id wins. When Letta reports the literal fallback id `default`, Agent Halo uses `agent:<agentId>` (or a workspace fallback only when no agent id exists) so stateless/subagent lanes from different agents and projects never collapse into one global `default` session.
 
+## Pi public SDK mapping
+
+The private local `adapters/pi` extension uses `agentName: "Pi"`, `agentId` and `conversationId` equal to `pi:<public sessionManager session id>`, actual cwd/provider/model, and optional self-process `sourceKind: "piHost"`. It does not relabel Pi as Letta or publish Herdr lifecycle statuses. No prompts, messages, raw arguments/results, tool-call IDs, environment secrets, or error text are copied; tool names are restricted to 96 identifier characters and argument keys are empty.
+
+Public `session_start` maps to `conversation_open`. `agent_start` opens one Halo turn for the whole agent run, not each model/tool round. `agent_before_settle.outcome` records only the outcome enum; `agent_settled.aborted` takes precedence. Only a completed, non-aborted settled run emits `turn_complete` once. Errors emit sanitized `llm_end` with `stopReason: "error"`; abort emits `llm_end` with normalized `stopReason: "aborted_stop"` (closed activity, not successful completion). Unknown outcomes never fabricate success. Public tool execution start/end emit minimal tool events. Non-reload `session_shutdown` emits `conversation_close` with its public reason; this does not claim the process exited. Reload only invalidates the old extension generation, never sends a late close for the reloaded conversation. Non-TUI child callbacks cannot claim/dispose their TUI parent's owner or read its credentials.
+
 ## Bridge endpoints
 
 `GET /health` and `GET /snapshot` include bridge capability metadata so viewers know which event streams and session actions are real instead of guessing or showing fake controls.

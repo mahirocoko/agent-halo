@@ -30,6 +30,14 @@ Desktop renderer (Tauri)
   - renders compact live presence UI
 ```
 
+## Private local Pi extension
+
+`adapters/pi` is a private, source-local Pi >=1.3 extension package. Its SDK import is type-only and its optional peer is not installed by this adapter. It reuses `adapters/shared/agent-halo-hook-utils.mjs` in this repository; it is not a standalone/public tarball and must not import the sibling Pi configuration repository at runtime.
+
+For a one-off native TUI run, use `pi -e /Users/mahiro/ghq/github.com/mahirocoko/agent-halo/adapters/pi/index.ts`. For persistent local installation, explicitly run `pi install /Users/mahiro/ghq/github.com/mahirocoko/agent-halo/adapters/pi`, then `/reload` in the TUI. Installation/configuration and live bridge verification are separate operator steps, not adapter startup effects. No new service, window, footer, voice, or Herdr lifecycle publisher is installed.
+
+Only public `ctx.mode === 'tui'` sessions may claim process-local ownership or read transport credentials. Foreground Pi outside Herdr is valid. Runtime identity is this SDK host's own PID and OS start time, never the hook helper's ancestor resolver. Herdr metadata is omitted rather than trusting inherited pane variables without current ownership proof. There is no polling, transcript tail, retry daemon, or bridge startup. The shared transport has a 750ms request timeout; failures are harmless and its return value does not prove HTTP acceptance/delivery. The adapter serializes at most 64 queued events, drops overflow, and invalidates queued stale-generation work. A request already handed to the shared transport cannot be cancelled, but newer generation events follow it in order.
+
 ## Why a mod-first bridge
 
 Letta Code has richer runtime state than external CLI hook-only flows: persistent agent identity, conversation identity, scoped cwd/model, tool events, memory, skills, and subagents. A transcript watcher would see some of this late and indirectly. A mod sees public runtime events as they happen.
