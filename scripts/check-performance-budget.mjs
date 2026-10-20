@@ -7,11 +7,11 @@ const distRoot = join(repoRoot, "apps/desktop/dist");
 const assetRoot = join(distRoot, "assets");
 
 const BUDGETS = {
-  coreDistBytes: 575_500,
-  cssGzipBytes: 17_000,
+  coreDistBytes: 590_500,
+  cssGzipBytes: 17_400,
   haloBotAssetBytes: 50_000,
   haloformAssetBytes: 85_000,
-  jsGzipBytes: 106_500,
+  jsGzipBytes: 109_500,
   movementAssetBytes: 28_250_000,
 };
 
@@ -66,8 +66,8 @@ const findLegacy = async (directory, relative = "") => {
 await findLegacy(distRoot);
 
 const payload = {
-  baselineCommit: "6ed1c5f",
-  budgetRevision: "agent-halo-material-tabs-v1",
+  baselineCommit: "3939e2094212331b50f72149eaa83222543530ec",
+  budgetRevision: "pi-observability-v1",
   budgets: BUDGETS,
   current: {
     cssGzipBytes: css.gzipBytes,

@@ -338,7 +338,7 @@ export const useRuntimeMonitor = ({
         acceptSnapshots(next, current)
     } catch (reason) {
       if (processRequestVersionRef.current === requestVersion && targetKeyRef.current === requestTargetKey)
-        setError(reason instanceof Error ? reason.message : 'Could not sample local Letta processes')
+        setError(reason instanceof Error ? reason.message : 'Could not sample local agent processes')
     } finally {
       refreshingRef.current = false
       setLoading(false)

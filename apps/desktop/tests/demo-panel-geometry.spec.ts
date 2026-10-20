@@ -14,18 +14,22 @@ test('board surface tones retain material bases and share monochrome semantic to
   const sources = await Promise.all(owners.map((name) => readFile(`${styleDir}/${name}`, 'utf8')))
   const board = sources[0]
 
-  for (const [tone, base] of Object.entries({
-    mint: '#8ea594',
-    lavender: '#8c87a1',
-    sand: '#a39e6a',
-    parchment: '#9b9683',
-    slate: '#717f8e',
-    navy: '#717f8e',
-    teal: '#6f8888',
+  for (const [tone, tokens] of Object.entries({
+    mint: { base: '#8ea594', 'ink-2': 'rgba(17, 17, 17, 0.9)', 'ink-3': 'rgba(17, 17, 17, 0.78)' },
+    lavender: { base: '#8c87a1', 'ink-2': 'rgba(17, 17, 17, 0.96)', 'ink-3': 'rgba(17, 17, 17, 0.88)' },
+    sand: { base: '#a39e6a', 'ink-2': 'rgba(17, 17, 17, 0.9)', 'ink-3': 'rgba(17, 17, 17, 0.78)' },
+    parchment: { base: '#9b9683', 'ink-2': 'rgba(17, 17, 17, 0.92)', 'ink-3': 'rgba(17, 17, 17, 0.82)' },
+    slate: { base: '#717f8e' },
+    navy: { base: '#717f8e' },
+    teal: { base: '#6f8888', 'ink-3': 'rgba(17, 17, 17, 0.94)' },
   })) {
     const block = board.match(new RegExp(`\\.halo-surface-${tone}(?:,| \\{)[\\s\\S]*?\\}`))?.[0] ?? ''
-    expect(block).toContain(`--surface-base: ${base}`)
-    expect(block).not.toMatch(/--surface-(?:ink|line|fill|accent|ok|warn|danger|dot)/)
+    // Exact overrides: tone-specific monochrome ink opacity is intentional;
+    // colored semantic roles and any additional surface overrides are not.
+    const declarations = Object.fromEntries(
+      [...block.matchAll(/--surface-([\w-]+):\s*([^;]+);/g)].map(([, name, value]) => [name, value]),
+    )
+    expect(declarations).toEqual(tokens)
   }
 
   const surfaceBlock = board.match(/\.halo-tab-surface \{[\s\S]*?\}/)?.[0] ?? ''
@@ -1309,6 +1313,15 @@ for (const width of [620, 320]) {
     await page.goto('/?demo=1&demoScenario=multi')
     await page.locator('.session-row-main').first().click()
     const tray = page.getByTestId('session-detail-board')
+    // The overview entry transform briefly adds ~3px to ancestor scrollHeight.
+    // Measure settled layout, not transformed animation overflow; keep the fit guard.
+    await tray.evaluate(async (node) => {
+      await Promise.allSettled(
+        node.getAnimations({ subtree: true })
+          .filter((animation) => Number.isFinite(animation.effect?.getComputedTiming().endTime))
+          .map((animation) => animation.finished),
+      )
+    })
     const geometry = await tray.evaluate((node) => {
       const cards = [...node.querySelectorAll<HTMLElement>('.session-detail-card')]
       const rects = cards.map((card) => card.getBoundingClientRect())
@@ -1349,6 +1362,14 @@ for (const width of [620, 320]) {
       { position: 'relative', overflowY: 'visible' },
       { position: 'relative', overflowY: 'visible' },
     ])
+
+    const back = tray.locator('.session-context-return')
+    await back.scrollIntoViewIfNeeded()
+    expect(await back.evaluate((button) => {
+      const trayRect = button.closest<HTMLElement>('.session-detail-tray')!.getBoundingClientRect()
+      const rect = button.getBoundingClientRect()
+      return rect.top >= trayRect.top - 1 && rect.bottom <= trayRect.bottom + 1
+    })).toBe(true)
 
     await tray.evaluate((node) => {
       node.scrollTop = node.scrollHeight

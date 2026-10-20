@@ -1,5 +1,11 @@
 import { Camera, CameraOff, Dumbbell, Play, RotateCcw, X } from 'lucide-react'
-import { type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from 'react'
+import {
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
 import { getMovementExercise } from './exercises'
 import { createLocalPoseLandmarker } from './runtime'
 import type { IMovementPoseSnapshot } from './types'

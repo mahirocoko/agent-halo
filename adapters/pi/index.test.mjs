@@ -14,6 +14,7 @@ function fixture(overrides = {}, shared = { tail: Promise.resolve() }) {
   let tokens = 0
   const deps = {
     registry: shared,
+    loadTaskAccessor: () => new Promise(() => {}),
     selfIdentity: () => ({ sourcePid: 42, sourcePpid: 2, sourceStartedAtMs: 123, sourceKind: 'piHost' }),
     readEndpoint: async () => ({ hostname: '127.0.0.1', port: 1 }),
     readIngestToken: async () => {
@@ -25,7 +26,7 @@ function fixture(overrides = {}, shared = { tail: Promise.resolve() }) {
     },
     ...overrides,
   }
-  registerHalo({ on: (name, handler) => handlers.set(name, handler) }, deps)
+  registerHalo({ on: (name, handler) => handlers.set(name, handler), events: { on: () => () => {} } }, deps)
   return {
     events,
     shared,

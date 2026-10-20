@@ -12,10 +12,33 @@ import type {
 } from './types'
 
 const GIB = 1024 ** 3
-const RECENT_SHARED_PROCESS_MS = 10 * 60_000
 export const RUNTIME_NATIVE_TARGET_LIMIT = 64
 export const RUNTIME_HISTORY_TARGET_LIMIT = 512
 export const LOCAL_SERVICE_OWNER_TARGET_LIMIT = 512
+
+export const runtimeHostLabel = (sourceKind: string | null | undefined): string => {
+  switch (sourceKind) {
+    case 'lettaHost':
+      return 'Letta'
+    case 'agyHost':
+      return 'AGY'
+    case 'cursorHost':
+      return 'Cursor'
+    case 'codexHost':
+      return 'Codex'
+    case 'piHost':
+      return 'Pi'
+    default:
+      return 'Unknown agent'
+  }
+}
+
+export const localServiceOwnerLabel = (owner: ILocalService['owner']): string | null => {
+  if (!owner) return null
+  const host = runtimeHostLabel(owner.sourceKind)
+  if ((owner.relatedConversationCount ?? 1) > 1) return `Started by ${host} · shared host (session unknown)`
+  return `Started by ${host} · ${owner.project}${owner.herdrPaneId ? ` · ${owner.herdrPaneId}` : ''}`
+}
 
 export const runtimeTargetKey = (
   target: Pick<IRuntimeUsageTarget, 'conversationId' | 'processId' | 'sourceStartedAtMs'>,
@@ -36,16 +59,20 @@ const isHostRuntime = (runtime: IAgentHaloEventRuntime | null | undefined): runt
   (runtime?.sourceKind === 'lettaHost' ||
     runtime?.sourceKind === 'agyHost' ||
     runtime?.sourceKind === 'cursorHost' ||
-    runtime?.sourceKind === 'codexHost') &&
+    runtime?.sourceKind === 'codexHost' ||
+    runtime?.sourceKind === 'piHost') &&
   Number.isInteger(runtime.sourcePid) &&
   runtime.sourcePid > 1 &&
-  Number.isFinite(runtime.sourceStartedAtMs)
+  Number.isFinite(runtime.sourceStartedAtMs) &&
+  runtime.sourceStartedAtMs > 0
 
 const buildRuntimeTarget = (
   session: ISessionSummary,
   registry: IRuntimeTargetSource['registry'],
 ): IRuntimeUsageTarget | null => {
-  const runtimeEvent = (registry[session.conversationId] ?? []).find((event) => isHostRuntime(event.runtime))
+  const runtimeEvent = (registry[session.conversationId] ?? []).find(
+    (event) => event.type !== 'task_snapshot' && isHostRuntime(event.runtime),
+  )
   if (!runtimeEvent?.runtime || !isHostRuntime(runtimeEvent.runtime)) return null
   const cwd = session.workspacePath ?? runtimeEvent.cwd ?? null
   if (!cwd) return null
@@ -86,16 +113,10 @@ export const buildRuntimeUsageTargets = ({ sessions, registry }: IRuntimeTargetS
     .map((group) => {
       const sorted = [...group].sort((a, b) => Date.parse(b.lastActivityAt) - Date.parse(a.lastActivityAt))
       const newest = sorted[0]
-      const newestAt = Date.parse(newest.lastActivityAt)
-      const recentLive = sorted.filter(
-        (target) =>
-          ['working', 'attention'].includes(target.sessionStatus) &&
-          newestAt - Date.parse(target.lastActivityAt) <= RECENT_SHARED_PROCESS_MS,
-      )
       return {
         ...newest,
         relatedConversationCount: sorted.length,
-        mappingStatus: recentLive.length > 1 ? ('sharedProcess' as const) : ('exact' as const),
+        mappingStatus: sorted.length > 1 ? ('sharedProcess' as const) : ('exact' as const),
       }
     })
     .sort((a, b) => Date.parse(b.lastActivityAt) - Date.parse(a.lastActivityAt))
@@ -115,12 +136,16 @@ export const buildLocalServiceOwnerTargets = ({
 }: IRuntimeTargetSource): ILocalServiceOwnerTarget[] => {
   const byProcessIdentity = new Map<string, { target: ILocalServiceOwnerTarget; lastActivityAt: string }>()
   for (const session of sessions) {
-    const runtimeEvent = (registry[session.conversationId] ?? []).find((event) => isHostRuntime(event.runtime))
+    const runtimeEvent = (registry[session.conversationId] ?? []).find(
+      (event) => event.type !== 'task_snapshot' && isHostRuntime(event.runtime),
+    )
     if (!runtimeEvent?.runtime || !isHostRuntime(runtimeEvent.runtime)) continue
     const target: ILocalServiceOwnerTarget = {
       conversationId: session.conversationId,
       processId: runtimeEvent.runtime.sourcePid,
       expectedStartTimeMs: runtimeEvent.runtime.sourceStartedAtMs,
+      sourceKind: runtimeEvent.runtime.sourceKind,
+      relatedConversationCount: 1,
       project: session.project,
       herdrPaneId:
         session.herdrTarget?.sourcePid === runtimeEvent.runtime.sourcePid &&
@@ -130,9 +155,16 @@ export const buildLocalServiceOwnerTargets = ({
     }
     const key = `${target.processId}:${target.expectedStartTimeMs}`
     const previous = byProcessIdentity.get(key)
-    if (!previous || Date.parse(session.lastActivityAt) > Date.parse(previous.lastActivityAt)) {
-      byProcessIdentity.set(key, { target, lastActivityAt: session.lastActivityAt })
-    }
+    const newest = !previous || Date.parse(session.lastActivityAt) > Date.parse(previous.lastActivityAt)
+    const selected = newest ? target : previous.target
+    byProcessIdentity.set(key, {
+      target: {
+        ...selected,
+        sourceKind: previous && previous.target.sourceKind !== target.sourceKind ? 'unknown' : selected.sourceKind,
+        relatedConversationCount: (previous?.target.relatedConversationCount ?? 0) + 1,
+      },
+      lastActivityAt: newest ? session.lastActivityAt : previous.lastActivityAt,
+    })
   }
   return [...byProcessIdentity.values()]
     .sort((a, b) => Date.parse(b.lastActivityAt) - Date.parse(a.lastActivityAt))
@@ -435,7 +467,7 @@ export const createDemoRuntimeSnapshots = (targets: IRuntimeUsageTarget[]): IRun
         cwd: target.cwd,
         sampledAtMs: Date.now(),
         status: 'missing',
-        error: 'Letta process is no longer available',
+        error: 'Agent host process is no longer available',
         host: null,
         children: null,
       }

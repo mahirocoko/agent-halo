@@ -40,8 +40,8 @@ test("Runtime and Services use separate canonical top-level tabs", async ({ page
   await expect(servicesPanel.locator(".runtime-service-row")).toHaveCount(6);
   await expect(servicesPanel.locator('[data-service-group="web-frontends"]')).toContainText("Detected web frontends");
   await expect(servicesPanel.locator('[data-service-group="web-frontends"] .runtime-service-row')).toHaveCount(2);
-  await expect(servicesPanel.locator('[data-service-group="letta-services"]')).toContainText("Letta services");
-  await expect(servicesPanel.locator('[data-service-group="letta-services"] .runtime-service-row')).toHaveCount(2);
+  await expect(servicesPanel.locator('[data-service-group="agent-services"]')).toContainText("Agent services");
+  await expect(servicesPanel.locator('[data-service-group="agent-services"] .runtime-service-row')).toHaveCount(2);
   await expect(servicesPanel.locator('[data-service-group="other"]')).toContainText("Other listeners");
   await expect(servicesPanel.locator('[data-service-group="other"] .runtime-service-row')).toHaveCount(2);
   const haabizService = servicesPanel.locator('.runtime-service-row[data-web-frontend="true"]').filter({ hasText: "Haabiz UI" });
@@ -51,7 +51,7 @@ test("Runtime and Services use separate canonical top-level tabs", async ({ page
   await expect(servicesPanel.getByRole("button", { name: "Stop process…" })).toHaveCount(0);
   await servicesPanel.getByRole("button", { name: "Expand Haabiz UI service details on port 5173" }).click();
   await expect(haabizService).toContainText("catalog");
-  await expect(haabizService).toContainText("Started by Letta · admin-template · wH:p1");
+  await expect(haabizService).toContainText("Started by Unknown agent · admin-template · wH:p1");
   await expect(haabizService).toContainText("Memory");
   await expect(haabizService).toContainText("Parent");
   await expect(haabizService).toContainText("Working directory");
@@ -59,7 +59,7 @@ test("Runtime and Services use separate canonical top-level tabs", async ({ page
   await expect(morrowService).toContainText("4173 · bun");
   await expect(pythonService).toContainText("8000");
   await expect(servicesPanel.locator(".runtime-service-open")).toHaveCount(4);
-  await expect(page.getByText("Web evidence first · exact Letta ancestry · Stop requires confirmation")).toBeVisible();
+  await expect(page.getByText("Web evidence first · trusted agent ancestry · Stop requires confirmation")).toBeVisible();
   const [servicesBox, openBox] = await Promise.all([
     servicesPanel.boundingBox(),
     servicesPanel.locator(".runtime-service-open").first().boundingBox(),

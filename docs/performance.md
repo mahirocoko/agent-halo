@@ -29,6 +29,20 @@ The revision entries below are historical measurement/provenance records, not th
 2. **Session model** — deterministic 3,200-existing + 500-incoming event merge across 100 conversations, summary derivation, and 1,000-session workspace grouping.
 3. **Bridge** — temporary-`HOME` mod startup and 5,000-event publication with bounded startup/throughput and a real temporary NDJSON log.
 
+### Current bundle gate: `pi-observability-v1`
+
+The executable bundle gate is `scripts/check-performance-budget.mjs`. A fresh isolated archive of `3939e2094212331b50f72149eaa83222543530ec` was built with the same installed dependencies and Node 22.22.3 toolchain, with its workspace protocol resolving to the archived source rather than the candidate. The earlier material-tabs limits already failed on that HEAD; the comparison below separates that existing drift from this change instead of attributing the entire increase to Pi.
+
+| Metric (bytes) | Archived HEAD | Pi candidate | Candidate delta | Current ceiling |
+| --- | ---: | ---: | ---: | ---: |
+| Primary CSS gzip | 17,210 | 17,292 | +82 | 17,400 |
+| Primary JavaScript gzip | 108,012 | 109,218 | +1,206 | 109,500 |
+| Core `dist/` | 579,188 | 589,899 | +10,711 | 590,500 |
+
+The bounded allowance covers provider-aware Runtime/Services labels, owner-scoped Pi task snapshots and their validation/rendering, plus explicit native-focus dispatch tokens. It adds no mandatory runtime dependency, per-task OS-resource totals, or task poller. Mascot/MediaPipe ceilings, legacy-asset prohibition, session-model timing budgets, and bridge durability/throughput checks are unchanged. The ceilings retain only 108 CSS-gzip bytes, 282 JavaScript-gzip bytes, and 601 core bytes of measured candidate headroom; they are not an unrestricted reset to observed size. These are build-script gzip measurements, not Vite's differently compressed console estimates.
+
+### Historical revision measurements
+
 The initial registry-native refactor measured:
 
 | Operation | Before p95 | After p95 | Change |

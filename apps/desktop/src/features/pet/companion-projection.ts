@@ -98,7 +98,11 @@ export const normalizeCompletionPetSummon = (value: unknown): ICompletionPetSumm
     } satisfies IFocusCompletionPetSummon
   }
   if (value.purpose === 'break-completion') {
-    if (value.nextPhase !== 'focus' || value.movementBreakEnabled !== undefined || value.requestedExerciseId !== undefined)
+    if (
+      value.nextPhase !== 'focus' ||
+      value.movementBreakEnabled !== undefined ||
+      value.requestedExerciseId !== undefined
+    )
       return null
     return {
       ...base,

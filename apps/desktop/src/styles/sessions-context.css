@@ -26,6 +26,45 @@
   overflow: hidden;
 }
 
+.session-row.has-tasks {
+  flex-wrap: wrap;
+}
+
+.session-tasks {
+  flex-basis: 100%;
+  min-width: 0;
+  padding: 4px 8px 8px 24px;
+  color: var(--text-2);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.session-tasks > span {
+  display: block;
+}
+
+.session-tasks ul {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+}
+
+.session-tasks li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  padding: 3px 0;
+}
+
+.session-tasks li > span:first-child {
+  flex: 1;
+}
+
+.session-tasks li > span:last-child {
+  flex-basis: 100%;
+  color: var(--text-3);
+}
+
 .session-row-main {
   min-width: 0;
   min-height: 52px;

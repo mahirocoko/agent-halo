@@ -25,19 +25,19 @@ The desktop companion uses a view-owned panel width (Sessions 560, Focus 540, Us
   - **Sessions**: Real agent conversations grouped into Active and Completed sections, showing compact project/status/model/age context with reachable focus/detail/clear actions (mint `#7fba8f` surface).
   - **Focus**: Pomodoro countdown, phase progress, and quick action controls, with independent Pomodoro, Stopwatch, and Move challenge tools (lavender `#b59ae0` surface).
   - **Usage**: Codex, Antigravity, Claude Code, and Cursor quota/token cards shown together, with resizable widths and truthful per-provider unavailable/offline diagnostics.
-  - **Runtime**: Read-only Letta host/subprocess CPU and memory pressure, with no process controls (navy `#1a3350` surface).
-  - **Services**: Local TCP/HTTP listeners grouped into Detected web frontends, Letta services, and Other listeners, with expandable process detail, browser-open actions, and guarded Stop → Force kill controls for eligible current-user listener processes (teal `#154038` surface).
+  - **Runtime**: Read-only trusted agent host/subprocess CPU and memory pressure (including Pi Main), with shared-host attribution and no process controls (navy `#1a3350` surface).
+  - **Services**: Local TCP/HTTP listeners grouped into Detected web frontends, Agent services, and Other listeners, with provider-aware/shared-host attribution, expandable process detail, browser-open actions, and guarded Stop → Force kill controls for eligible current-user listener processes (teal `#154038` surface).
 - **Setup Surface**: Separate circular gear button opening a parchment `#f0d49a` surface for bridge diagnostics, Pet customization, display placement, and preferences.
 
 ## Product surfaces
 
 | Surface | Current role |
 | --- | --- |
-| **Sessions** | Workspace-grouped Letta conversations, truthful activity state, sticky completion history, detail, clear/dismiss, exact Herdr-pane focus when available, and Ghostty fallback |
+| **Sessions** | Workspace-grouped agent conversations, truthful activity state, sticky completion history, detail, clear/dismiss, exact Herdr-pane focus when available, Ghostty fallback, and owner-scoped Pi task observations under Main |
 | **Focus** | Independent Pomodoro, Stopwatch, and Move tools; Pomodoro keeps custom phases and silent alerts, while Stopwatch adds reload-safe elapsed tracking and clearable local history |
 | **Usage** | Four local provider cards on one board; each card keeps its own metrics, loading/error state, and scroll position, with resizable widths |
-| **Runtime** | Read-only Letta host/subprocess CPU and memory pressure, with no process controls |
-| **Services** | Local TCP/HTTP listeners grouped into Detected web frontends, Letta services, and Other listeners, with expandable process detail, browser-open actions, and guarded Stop → Force kill controls for eligible current-user listener processes |
+| **Runtime** | Read-only trusted agent host/subprocess CPU and memory pressure, including Pi Main; shared-host attribution and no process controls |
+| **Services** | Local TCP/HTTP listeners grouped into Detected web frontends, Agent services, and Other listeners, with provider-aware/shared-host attribution, expandable process detail, browser-open actions, and guarded Stop → Force kill controls for eligible current-user listener processes |
 | **Setup** | Separate circular gear action and surface for connection/mod install, global Pet choice and size, Completion Pet and **Offer movement after Focus** settings, keep-awake, and target-display selection |
 | **Pet** | A separate passively shown, non-focus-stealing Pet window: Focus completion retains Start break/Later/Close and notification handoff; a manual companion persists until Hide and offers deliberate Focus navigation and movement; setup preview is dismiss-only |
 | **Movement Break** | Explicit Squat or Overhead Reach challenge from Focus exact-exercise buttons or the Pet chooser, using one local camera stream, exercise-specific tracking, live progress, and bundled offline pose inference |
@@ -47,13 +47,15 @@ The desktop companion uses a view-owned panel width (Sessions 560, Focus 540, Us
 - Projects live Letta Code, AGY, Cursor, and Codex lifecycle, turn, model, tool, compaction, completion, and needs-input activity into a compact notch surface.
 - Keeps recent conversations in workspace groups, including distinct subagent/default lanes, sticky completed rows, per-session context, and guarded clear/dismiss behavior.
 - Focuses the exact Herdr pane when trusted runtime identity is present, then falls back to native Ghostty cwd/title/session matching.
-- Tracks local AI usage and read-only Letta/subprocess pressure without hiding known providers or adding Runtime process controls.
-- Lists locally listening TCP services in a dedicated Services tab, separates strongly evidenced browser apps first, exact Letta-started non-web services second, and other listeners last; expands into bounded process/start/memory/parent/executable/cwd context plus trusted Letta/Herdr ancestry, reserves the green service dot for web evidence only, opens detected HTTP endpoints, and can stop an eligible current-user listener only after exact native identity revalidation and confirmation.
+- Tracks local AI usage and read-only trusted agent host/subprocess pressure, including Pi Main, without hiding known providers or adding Runtime process controls.
+- Lists locally listening TCP services in a dedicated Services tab, separates strongly evidenced browser apps first, trusted agent-started non-web services second, and other listeners last; expands into bounded process/start/memory/parent/executable/cwd context plus provider-aware agent/Herdr ancestry (shared hosts never claim an exact session), reserves the green service dot for web evidence only, opens detected HTTP endpoints, and can stop an eligible current-user listener only after exact native identity revalidation and confirmation.
 - Runs independent local Pomodoro and Stopwatch tools together, with persisted deadlines/elapsed time, collapsed status, silent Pomodoro notifications, clearable Stopwatch history, and a projection-only Pet; the main renderer remains the sole Pomodoro/notification owner.
 - Offers Squat and Overhead Reach Movement Breaks only after a specific exercise click, either from Focus Move or the Pet chooser; preview and pose tracking share one local stream and bundled offline assets, and manual movement never mutates Pomodoro.
 - Keeps the display awake continuously, only during agent work, or not at all through explicit On/Agent/Off modes.
 - Remembers the selected display for the notch and Pet, with safe Primary fallback when that display disconnects.
 - Installs, verifies, and diagnoses the local Letta Code mod plus optional AGY, Cursor, and Codex hooks without replacing unrelated user hook entries.
+
+The optional private Pi SDK extension in `adapters/pi/` adds Pi Main presence, trusted Runtime/liveness identity, and subagent task observations under their real Main session. Task records expose only ID, role, native status, and times; they are not child-session identities or independently measured processes. The patched native subagent service must provide its exact-session accessor; otherwise Halo reports task availability as unavailable. See [`docs/event-protocol.md`](docs/event-protocol.md#pi-public-sdk-mapping) for the privacy, lifecycle, and last-observed contract.
 
 Agent Halo intentionally stays local. It uses the public Letta Code mod surface, AGY/Cursor/Codex hooks APIs, a local bridge, local credentials, and local logs. The desktop app supervises a bundled standalone bridge whenever no existing Agent Halo bridge is reachable, so non-Letta presence does not require Letta Code to be open. It does not depend on a hosted dashboard and does not use transcript parsing as its primary source of truth.
 

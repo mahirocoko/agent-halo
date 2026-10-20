@@ -1,4 +1,4 @@
-import type { AgentHaloEvent, IAgentHaloHerdrTarget } from '@agent-halo/protocol'
+import type { AgentHaloEvent, IAgentHaloHerdrTarget, IAgentHaloTaskSnapshotEvent } from '@agent-halo/protocol'
 
 export type ActivityKind =
   | 'session'
@@ -27,6 +27,8 @@ export interface IActivityDescriptor {
 }
 
 export interface ISessionSummary {
+  tasks?: IAgentHaloTaskSnapshotEvent['data'] | null
+  tasksObservedAt?: string | null
   conversationId: string
   project: string
   workspace: string

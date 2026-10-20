@@ -37,6 +37,44 @@ const statusLabel = (status: ISessionSummary['status']) =>
   ]
 const shortSessionId = (id: string) => id.replace(/^local-conv-/, '').slice(-8)
 
+export const SessionTasks = ({
+  tasks,
+  tasksObservedAt,
+  status,
+}: Pick<ISessionSummary, 'tasks' | 'tasksObservedAt' | 'status'>) => {
+  if (!tasks) return null
+  return (
+    <section className="session-tasks" aria-label="Pi subagent tasks">
+      <span className="session-context-eyebrow">Subagent tasks</span>
+      <span title={tasksObservedAt ?? undefined}>
+        Last observed {tasksObservedAt ? formatTime(tasksObservedAt) : 'time unavailable'} · not a live heartbeat
+      </span>
+      {status === 'inactive' ? <span>Parent inactive · task state is historical</span> : null}
+      {tasks.omittedCount ? <span>{tasks.omittedCount} older tasks omitted</span> : null}
+      {tasks.availability === 'unavailable' ? (
+        <span>Unavailable · owner-scoped service not ready</span>
+      ) : tasks.tasks.length === 0 ? (
+        <span>No tasks</span>
+      ) : (
+        <ul>
+          {tasks.tasks.map((task) => (
+            <li key={task.id}>
+              <span>
+                {task.role} · <code>{task.id}</code>
+              </span>
+              <span>{task.status}</span>
+              <span title={task.startedAt ? new Date(task.startedAt).toISOString() : undefined}>
+                {task.startedAt ? `Started ${formatTime(new Date(task.startedAt).toISOString())}` : 'Start unavailable'}
+                {task.completedAt ? ` · Ended ${formatTime(new Date(task.completedAt).toISOString())}` : ''}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
 export const SessionContextSummary = ({
   loadout,
   motionMapping,
@@ -77,34 +115,37 @@ export const SessionContextSummary = ({
     }
   })()
   return (
-    <section
-      className="session-context-summary"
-      data-status={session.status}
-      aria-labelledby="session-context-title"
-      data-panel-focus-target
-      tabIndex={-1}
-    >
-      <SessionPet
-        activityKind={session.activityKind}
-        loadout={loadout}
-        motionMapping={motionMapping}
-        pet={pet}
-        status={session.status}
-      />
-      <span className="session-context-copy">
-        <span className="session-context-eyebrow">{copy.eyebrow}</span>
-        <span className="session-context-title" id="session-context-title">
-          {copy.title}
+    <>
+      <section
+        className="session-context-summary"
+        data-status={session.status}
+        aria-labelledby="session-context-title"
+        data-panel-focus-target
+        tabIndex={-1}
+      >
+        <SessionPet
+          activityKind={session.activityKind}
+          loadout={loadout}
+          motionMapping={motionMapping}
+          pet={pet}
+          status={session.status}
+        />
+        <span className="session-context-copy">
+          <span className="session-context-eyebrow">{copy.eyebrow}</span>
+          <span className="session-context-title" id="session-context-title">
+            {copy.title}
+          </span>
+          <span className="session-context-detail">{copy.detail}</span>
         </span>
-        <span className="session-context-detail">{copy.detail}</span>
-      </span>
-      <span className="session-context-meta">
-        <span className="session-model">{shortModelName(session.model)}</span>
-        <span className="session-age" title={formatTime(session.lastActivityAt)}>
-          {formatRelativeAge(session.lastActivityAt)}
+        <span className="session-context-meta">
+          <span className="session-model">{shortModelName(session.model)}</span>
+          <span className="session-age" title={formatTime(session.lastActivityAt)}>
+            {formatRelativeAge(session.lastActivityAt)}
+          </span>
         </span>
-      </span>
-    </section>
+      </section>
+      <SessionTasks tasks={session.tasks} tasksObservedAt={session.tasksObservedAt} status={session.status} />
+    </>
   )
 }
 
@@ -129,7 +170,7 @@ export const SessionListRow = ({
   session,
 }: ISessionListRowProps) => (
   <li
-    className={`session-row ${child ? 'session-child-row' : ''} ${session.status === 'done' ? 'ended' : ''}`}
+    className={`session-row ${session.tasks ? 'has-tasks' : ''} ${child ? 'session-child-row' : ''} ${session.status === 'done' ? 'ended' : ''}`}
     data-status={session.status}
   >
     <button
@@ -188,6 +229,7 @@ export const SessionListRow = ({
         </button>
       ) : null}
     </div>
+    <SessionTasks tasks={session.tasks} tasksObservedAt={session.tasksObservedAt} status={session.status} />
   </li>
 )
 

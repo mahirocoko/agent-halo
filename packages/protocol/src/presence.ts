@@ -50,6 +50,7 @@ export const reducePresence = (
   current: IAgentHaloPresence,
   event: AgentHaloEvent,
 ): IAgentHaloPresence => {
+  if (event.type === "task_snapshot") return current;
   const scoped = {
     agentId: event.agentId ?? current.agentId,
     agentName: event.agentName ?? current.agentName,

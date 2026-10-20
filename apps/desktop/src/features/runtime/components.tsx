@@ -15,6 +15,8 @@ import {
   formatRuntimeBytes,
   formatRuntimeCpu,
   localServiceListenerKey,
+  localServiceOwnerLabel,
+  runtimeHostLabel,
 } from './model'
 import type {
   ILocalService,
@@ -130,9 +132,7 @@ const LocalServiceRow = ({
     service.httpTitle?.toLowerCase().startsWith('directory listing') ||
     service.httpTitle?.toLowerCase().startsWith('index of ')
   const displayTitle = service.httpTitle && !genericTitle ? service.httpTitle : service.processName
-  const ownerLabel = service.owner
-    ? `Started by Letta · ${service.owner.project}${service.owner.herdrPaneId ? ` · ${service.owner.herdrPaneId}` : ''}`
-    : null
+  const ownerLabel = localServiceOwnerLabel(service.owner)
   const detailsId = `local-service-${service.processId}-${service.port}-details`
   const [phase, setPhase] = useState<LocalServiceControlPhase>('idle')
   const [controlError, setControlError] = useState<string | null>(null)
@@ -285,7 +285,7 @@ const LocalServiceRow = ({
             {ownerLabel ? (
               <div>
                 <dt>Owner</dt>
-                <dd title={service.owner?.conversationId}>{ownerLabel}</dd>
+                <dd title={service.owner?.conversationId ?? undefined}>{ownerLabel}</dd>
               </div>
             ) : null}
           </dl>
@@ -431,16 +431,8 @@ const RuntimeRow = ({ onHide, row }: { onHide: (row: IRuntimeSessionView) => voi
       </div>
       <div className="runtime-metrics">
         <span>
-          <b>
-            {row.sourceKind === 'agyHost'
-              ? 'AGY'
-              : row.sourceKind === 'cursorHost'
-                ? 'Cursor'
-                : row.sourceKind === 'codexHost'
-                  ? 'Codex'
-                  : 'Letta'}
-          </b>{' '}
-          {formatRuntimeBytes(host?.physicalFootprintBytes)} · {formatRuntimeCpu(host?.cpuPercent)}
+          <b>{runtimeHostLabel(row.sourceKind)}</b> {formatRuntimeBytes(host?.physicalFootprintBytes)} ·{' '}
+          {formatRuntimeCpu(host?.cpuPercent)}
         </span>
         <span>
           <b>Subprocesses</b> {formatRuntimeBytes(children?.physicalFootprintBytes)} ·{' '}
@@ -624,7 +616,7 @@ export const LocalServicesPanel = ({
   const [expandedServiceKey, setExpandedServiceKey] = useState<string | null>(null)
   const [controlAnnouncement, setControlAnnouncement] = useState('')
   const webFrontends = useMemo(() => monitor.services.filter((service) => service.webFrontend), [monitor.services])
-  const lettaServices = useMemo(
+  const agentServices = useMemo(
     () => monitor.services.filter((service) => !service.webFrontend && service.owner),
     [monitor.services],
   )
@@ -716,8 +708,8 @@ export const LocalServicesPanel = ({
               </SurfaceStatus>
             </div>
             <div>
-              <span>Letta services</span>
-              <SurfaceStatus tone="info">{lettaServices.length}</SurfaceStatus>
+              <span>Agent services</span>
+              <SurfaceStatus tone="info">{agentServices.length}</SurfaceStatus>
             </div>
             <div>
               <span>Other listeners</span>
@@ -729,7 +721,7 @@ export const LocalServicesPanel = ({
               {monitor.services.length === 0 ? 'Checking local listeners…' : 'Checking web apps…'}
             </span>
           ) : null}
-          <p className="runtime-footnote">Web evidence first · exact Letta ancestry · Stop requires confirmation</p>
+          <p className="runtime-footnote">Web evidence first · trusted agent ancestry · Stop requires confirmation</p>
         </BoardScroll>
       </BoardSurface>
       <ResizableCardDivider layout={layout} index={0} label="Resize Services overview and listening services" />
@@ -777,9 +769,9 @@ export const LocalServicesPanel = ({
               />
               <LocalServiceGroup
                 expandedKey={expandedServiceKey}
-                id="letta-services"
-                label="Letta services"
-                services={lettaServices}
+                id="agent-services"
+                label="Agent services"
+                services={agentServices}
                 onControl={controlService}
                 onOpen={openService}
                 onResult={setControlAnnouncement}

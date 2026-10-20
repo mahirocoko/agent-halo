@@ -86,6 +86,8 @@ pub struct LocalServiceControlResult {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct LocalServiceOwnerTarget {
+    pub source_kind: Option<String>,
+    pub related_conversation_count: Option<usize>,
     pub conversation_id: String,
     pub process_id: i32,
     pub expected_start_time_ms: u64,
@@ -96,7 +98,9 @@ pub struct LocalServiceOwnerTarget {
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct LocalServiceOwner {
-    pub conversation_id: String,
+    pub source_kind: Option<String>,
+    pub related_conversation_count: usize,
+    pub conversation_id: Option<String>,
     pub project: String,
     pub herdr_pane_id: Option<String>,
 }
@@ -577,24 +581,51 @@ mod macos {
         targets: &[LocalServiceOwnerTarget],
     ) -> Option<LocalServiceOwner> {
         ancestry.iter().find_map(|process| {
-            targets.iter().find_map(|target| {
-                if target.process_id != process.pid
-                    || target
-                        .expected_start_time_ms
-                        .abs_diff(process.start_time_ms)
-                        > super::PROCESS_START_TOLERANCE_MS
-                {
-                    return None;
-                }
-                let herdr_pane_id = match target.herdr_pane_id.as_deref() {
-                    Some(pane_id) => Some(safe_herdr_pane_id(pane_id)?),
-                    None => None,
-                };
-                Some(LocalServiceOwner {
-                    conversation_id: safe_label(&target.conversation_id, 160)?,
-                    project: safe_label(&target.project, 120)?,
-                    herdr_pane_id,
+            let matches: Vec<_> = targets
+                .iter()
+                .filter(|target| {
+                    target.process_id == process.pid
+                        && target
+                            .expected_start_time_ms
+                            .abs_diff(process.start_time_ms)
+                            <= super::PROCESS_START_TOLERANCE_MS
                 })
+                .collect();
+            let target = *matches.first()?;
+            let related_conversation_count = matches.iter().fold(0usize, |count, target| {
+                count.saturating_add(target.related_conversation_count.unwrap_or(1).max(1))
+            });
+            let source_kind = target
+                .source_kind
+                .as_deref()
+                .filter(|kind| {
+                    matches!(
+                        *kind,
+                        "lettaHost" | "agyHost" | "cursorHost" | "codexHost" | "piHost"
+                    ) && matches
+                        .iter()
+                        .all(|other| other.source_kind.as_deref() == Some(*kind))
+                })
+                .map(str::to_string);
+            if related_conversation_count > 1 {
+                return Some(LocalServiceOwner {
+                    source_kind,
+                    related_conversation_count,
+                    conversation_id: None,
+                    project: "Shared host".to_string(),
+                    herdr_pane_id: None,
+                });
+            }
+            let herdr_pane_id = match target.herdr_pane_id.as_deref() {
+                Some(pane_id) => Some(safe_herdr_pane_id(pane_id)?),
+                None => None,
+            };
+            Some(LocalServiceOwner {
+                source_kind,
+                related_conversation_count,
+                conversation_id: Some(safe_label(&target.conversation_id, 160)?),
+                project: safe_label(&target.project, 120)?,
+                herdr_pane_id,
             })
         })
     }
@@ -785,7 +816,7 @@ mod macos {
             return Some("Agent Halo process is protected".to_string());
         }
         if process_is_exact_owner_target(process, owner_targets) {
-            return Some("Letta host is protected".to_string());
+            return Some("Agent host is protected".to_string());
         }
         if !process_owned_by_current_user(process) {
             return Some("Only current-user services can be stopped".to_string());
@@ -1396,7 +1427,7 @@ mod macos {
                             process.as_ref().and_then(|identity| {
                                 protected_host_identities
                                     .contains(&(identity.pid, identity.start_time_ms))
-                                    .then(|| "Letta host is protected".to_string())
+                                    .then(|| "Agent host is protected".to_string())
                             })
                         },
                     );
@@ -1902,6 +1933,8 @@ mod macos {
                 },
             ];
             let targets = vec![LocalServiceOwnerTarget {
+                source_kind: Some("piHost".to_string()),
+                related_conversation_count: None,
                 conversation_id: "local-conv-haabiz".to_string(),
                 process_id: 81_354,
                 expected_start_time_ms: 1_750,
@@ -1909,8 +1942,42 @@ mod macos {
                 herdr_pane_id: Some("wH:p1".to_string()),
             }];
             let owner = match_service_owner(&ancestry, &targets).expect("exact ancestor owner");
+            assert_eq!(owner.source_kind.as_deref(), Some("piHost"));
+            assert_eq!(owner.conversation_id.as_deref(), Some("local-conv-haabiz"));
             assert_eq!(owner.project, "admin-template");
             assert_eq!(owner.herdr_pane_id.as_deref(), Some("wH:p1"));
+
+            let shared_targets = vec![LocalServiceOwnerTarget {
+                related_conversation_count: Some(2),
+                ..targets[0].clone()
+            }];
+            let shared = match_service_owner(&ancestry, &shared_targets).expect("shared Pi host");
+            assert_eq!(shared.source_kind.as_deref(), Some("piHost"));
+            assert_eq!(shared.related_conversation_count, 2);
+            assert_eq!(shared.conversation_id, None);
+            assert_eq!(shared.herdr_pane_id, None);
+            assert_eq!(shared.project, "Shared host");
+
+            let duplicate_targets = vec![
+                targets[0].clone(),
+                LocalServiceOwnerTarget {
+                    conversation_id: "pi:other-session".to_string(),
+                    ..targets[0].clone()
+                },
+            ];
+            assert_eq!(
+                match_service_owner(&ancestry, &duplicate_targets),
+                Some(shared)
+            );
+
+            let legacy: LocalServiceOwnerTarget = serde_json::from_value(serde_json::json!({
+                "conversationId": "legacy", "processId": 81354,
+                "expectedStartTimeMs": 1750, "project": "legacy", "herdrPaneId": null
+            }))
+            .expect("legacy target without additive fields");
+            let legacy_owner = match_service_owner(&ancestry, &[legacy]).expect("legacy owner");
+            assert_eq!(legacy_owner.source_kind, None);
+            assert_eq!(legacy_owner.related_conversation_count, 1);
 
             let stale_targets = vec![LocalServiceOwnerTarget {
                 expected_start_time_ms: 10_000,
@@ -1975,6 +2042,8 @@ mod macos {
                     &listener,
                     Some(&process),
                     &[LocalServiceOwnerTarget {
+                        source_kind: None,
+                        related_conversation_count: None,
                         conversation_id: "local-conv".to_string(),
                         process_id: process.pid,
                         expected_start_time_ms: process.start_time_ms,
@@ -1983,7 +2052,7 @@ mod macos {
                     }],
                 )
                 .as_deref(),
-                Some("Letta host is protected")
+                Some("Agent host is protected")
             );
             assert_eq!(
                 control_unavailable_reason(

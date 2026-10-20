@@ -1,4 +1,4 @@
-import type { AgentHaloEvent, IAgentHaloPresence } from '@agent-halo/protocol'
+import { type AgentHaloEvent, type IAgentHaloPresence, normalizeTaskSnapshot } from '@agent-halo/protocol'
 import { getEventActivity, getEventSessionStatus, projectName, shortenPath } from './activity'
 import type { ISessionDetail, ISessionSummary, IWorkspaceSessionGroup, SessionEventRegistry } from './types'
 
@@ -110,11 +110,13 @@ export const buildSessionSummaries = (
 
   for (const [conversationId, sessionEvents] of Object.entries(registry)) {
     if (conversationId === 'default' && isInternalOnlySession(sessionEvents)) continue
-    const latest = sessionEvents[0]
+    const activityEvents = sessionEvents.filter((event) => event.type !== 'task_snapshot')
+    const latest = activityEvents[0]
     if (!latest) continue
 
     const activity = getEventActivity(latest)
-    const workspacePath = getSessionWorkspacePath(sessionEvents, latest.cwd)
+    const workspacePath = getSessionWorkspacePath(activityEvents, latest.cwd)
+    const taskSnapshot = normalizeTaskSnapshot(sessionEvents.find((event) => event.type === 'task_snapshot'))
     sessions.set(conversationId, {
       conversationId,
       project: projectName(workspacePath ?? latest.cwd),
@@ -122,10 +124,12 @@ export const buildSessionSummaries = (
       workspacePath,
       detail: activity.detail,
       activityKind: activity.kind,
-      model: sessionEvents.find((event) => event.model)?.model ?? 'Letta',
+      model: activityEvents.find((event) => event.model)?.model ?? 'Letta',
+      tasks: taskSnapshot?.data ?? null,
+      tasksObservedAt: taskSnapshot?.timestamp ?? null,
       status: getEventSessionStatus(latest, now),
       lastActivityAt: latest.timestamp,
-      herdrTarget: getSessionHerdrTarget(sessionEvents),
+      herdrTarget: getSessionHerdrTarget(activityEvents),
     })
   }
 
@@ -141,6 +145,7 @@ export const buildSessionSummaries = (
       project: projectName(workspacePath ?? presence.cwd),
       workspace: shortenPath(workspacePath ?? presence.cwd),
       workspacePath,
+      tasks: null,
       detail: 'idle',
       activityKind: 'session',
       model: presence.model ?? 'Letta',
@@ -163,7 +168,7 @@ export const buildSessionDetail = (
   const summary = sessions.find((session) => session.conversationId === conversationId)
   if (!summary) return null
 
-  const sessionEvents = registry[conversationId] ?? []
+  const sessionEvents = (registry[conversationId] ?? []).filter((event) => event.type !== 'task_snapshot')
   const latest = sessionEvents[0]
   const current = presence.conversationId === conversationId
   const workspacePath = summary.workspacePath ?? getSessionWorkspacePath(sessionEvents, latest?.cwd)

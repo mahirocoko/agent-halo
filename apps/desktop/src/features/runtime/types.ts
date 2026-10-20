@@ -27,6 +27,8 @@ export interface IRuntimeNativeTarget {
 }
 
 export interface ILocalServiceOwnerTarget {
+  sourceKind?: string
+  relatedConversationCount?: number
   conversationId: string
   processId: number
   expectedStartTimeMs: number
@@ -58,7 +60,9 @@ export interface IRuntimeChildMetrics {
 export type LocalServiceKind = 'http' | 'tcp'
 
 export interface ILocalServiceOwner {
-  conversationId: string
+  sourceKind?: string | null
+  relatedConversationCount?: number
+  conversationId: string | null
   project: string
   herdrPaneId: string | null
 }

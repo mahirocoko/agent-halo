@@ -362,7 +362,17 @@ const App = () => {
   const returnFocusRef = useRef<HTMLElement | null>(null)
   const returnSessionIdRef = useRef<string | null>(null)
   const shouldFocusPanelRef = useRef(false)
-  const nativeFocusRequestRef = useRef(false)
+  const nativeFocusRequestIdRef = useRef(0)
+  const nativeFocusRequestRef = useRef<{ id: number; phase: 'pending' | 'dispatched' } | null>(null)
+  const requestNativeFocus = () => {
+    const id = ++nativeFocusRequestIdRef.current
+    nativeFocusRequestRef.current = { id, phase: 'pending' }
+    setPanelFocusRequestId(id)
+  }
+  const cancelNativeFocus = () => {
+    ++nativeFocusRequestIdRef.current
+    nativeFocusRequestRef.current = null
+  }
   const keyboardNavigationRef = useRef(false)
   const hoverOpenTimerRef = useRef<number | null>(null)
   const hoverCloseTimerRef = useRef<number | null>(null)
@@ -429,8 +439,7 @@ const App = () => {
         if (action.action === 'open-focus') {
           rememberFocusOrigin()
           shouldFocusPanelRef.current = true
-          nativeFocusRequestRef.current = true
-          setPanelFocusRequestId((current) => current + 1)
+          requestNativeFocus()
           setSelectedSessionId(null)
           setSetupOpen(false)
           setActiveMainTab('pomodoro')
@@ -1121,26 +1130,42 @@ const App = () => {
     let closeTimer: number | null = null
     const requestVersion = panelNativeRequestVersionRef.current + 1
     panelNativeRequestVersionRef.current = requestVersion
-    const focus = panelOpen && nativeFocusRequestRef.current
-    if (focus) nativeFocusRequestRef.current = false
 
     const isCurrent = () => !cancelled && panelNativeRequestVersionRef.current === requestVersion
+    let dispatchSequence = nativeFocusRequestIdRef.current
+    const isDispatchCurrent = () => isCurrent() && nativeFocusRequestIdRef.current === dispatchSequence
 
     const resizeNativePanel = async (open: boolean): Promise<boolean | null> => {
       if (!canUseNativeControls) return true
+      if (!isCurrent()) return null
+      dispatchSequence = nativeFocusRequestIdRef.current
+      // Claim only at dispatch: queued replacements retain pending intent, but
+      // passive updates must never replay an already dispatched explicit action.
+      const intent = open && nativeFocusRequestRef.current?.phase === 'pending' ? nativeFocusRequestRef.current : null
+      const clearClaim = () => {
+        if (intent && nativeFocusRequestRef.current?.id === intent.id) nativeFocusRequestRef.current = null
+      }
+      if (intent) intent.phase = 'dispatched'
       for (let attempt = 0; attempt < 2; attempt += 1) {
-        if (!isCurrent()) return null
+        if (!isDispatchCurrent() || (intent && nativeFocusRequestRef.current?.id !== intent.id)) {
+          clearClaim()
+          return null
+        }
         try {
           await invoke('set_panel_open', {
             open,
-            focus: open && focus,
+            focus: intent !== null,
             width: open ? panelWindowWidth : nativeClosedSurfaceWidth,
             height: open ? panelHeight : closedSurfaceHeight,
           })
-          if (!isCurrent()) return null
+          clearClaim()
+          if (!isDispatchCurrent()) return null
           return true
         } catch (error) {
-          if (!isCurrent()) return null
+          if (!isDispatchCurrent() || (intent && nativeFocusRequestRef.current?.id !== intent.id)) {
+            clearClaim()
+            return null
+          }
           if (attempt === 0) {
             await new Promise((resolve) => window.setTimeout(resolve, 120))
             continue
@@ -1156,6 +1181,7 @@ const App = () => {
           }
         }
       }
+      clearClaim()
       return false
     }
 
@@ -1182,8 +1208,8 @@ const App = () => {
         const opened = await resizeNativePanel(true)
         if (opened === null) return
         if (opened === false) {
-          if (isCurrent()) {
-            nativeFocusRequestRef.current = false
+          if (isDispatchCurrent()) {
+            cancelNativeFocus()
             setPanelOpen(false)
             setRenderPanel(false)
           }
@@ -1456,7 +1482,7 @@ const App = () => {
     clearHoverOpenTimer()
     clearHoverCloseTimer()
     if (suppressHover) setHoverExpandSuppressed(true)
-    nativeFocusRequestRef.current = false
+    cancelNativeFocus()
     if (setupOpen) {
       setSetupOpen(false)
       setActiveMainTab(setupOriginTabRef.current || 'sessions')
@@ -1541,7 +1567,7 @@ const App = () => {
     saveCurrentTabScroll()
     returnSessionIdRef.current = conversationId
     shouldFocusPanelRef.current = true
-    nativeFocusRequestRef.current = true
+    requestNativeFocus()
     clearHoverOpenTimer()
     clearHoverCloseTimer()
     setSetupOpen(false)
@@ -1558,7 +1584,7 @@ const App = () => {
     returnSessionIdRef.current = null
     setupOriginTabRef.current = activeMainTab
     shouldFocusPanelRef.current = true
-    nativeFocusRequestRef.current = true
+    requestNativeFocus()
     clearHoverOpenTimer()
     clearHoverCloseTimer()
     setSelectedSessionId(null)
@@ -1637,7 +1663,7 @@ const App = () => {
     if (event.target !== event.currentTarget || panelOpen || !['Enter', ' '].includes(event.key)) return
     event.preventDefault()
     shouldFocusPanelRef.current = true
-    nativeFocusRequestRef.current = true
+    requestNativeFocus()
     setHoverExpandSuppressed(false)
     setPanelOpen(true)
   }
@@ -1971,6 +1997,7 @@ const App = () => {
     const conversationId = activitySession?.status === 'done' ? activitySession.conversationId : presence.conversationId
     setAcknowledgedConversationId(conversationId)
     setSelectedSessionId(null)
+    cancelNativeFocus()
     setPanelOpen(false)
   }
 
@@ -2140,7 +2167,7 @@ const App = () => {
           }}
           onClick={(event) => {
             if (event.target !== event.currentTarget || panelOpen) return
-            nativeFocusRequestRef.current = true
+            requestNativeFocus()
             setPanelOpen(true)
           }}
           onKeyDown={handleSurfaceKeyDown}

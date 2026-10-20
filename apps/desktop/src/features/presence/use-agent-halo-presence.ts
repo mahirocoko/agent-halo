@@ -581,7 +581,7 @@ export const useAgentHaloPresence = ({
       let index = 0
       const push = () => {
         const event = createDemoEvent(index++)
-        setLastLiveEvent(event)
+        if (event.type !== 'task_snapshot') setLastLiveEvent(event)
         setPresence((current) => reducePresence(current, event))
         setRecentEvents((current) => appendRecentEvent(current, event))
         store([event])
@@ -610,7 +610,12 @@ export const useAgentHaloPresence = ({
         const recent = payload.recent.map(normalizeSessionEventIdentity)
         if (liveEventVersionRef.current === snapshotStartVersion) {
           setPresence(recent.reduce(reducePresence, createInitialPresence()))
-          setRecentEvents(recent.slice(-MAX_RECENT_EVENTS).reverse())
+          setRecentEvents(
+            recent
+              .filter((event) => event.type !== 'task_snapshot')
+              .slice(-MAX_RECENT_EVENTS)
+              .reverse(),
+          )
         }
         store(recent)
       } catch {
@@ -647,7 +652,7 @@ export const useAgentHaloPresence = ({
       try {
         const event = normalizeSessionEventIdentity(JSON.parse(message.data) as AgentHaloEvent)
         liveEventVersionRef.current += 1
-        setLastLiveEvent(event)
+        if (event.type !== 'task_snapshot') setLastLiveEvent(event)
         setPresence((current) => reducePresence(current, event))
         setRecentEvents((current) => appendRecentEvent(current, event))
         store([event])
@@ -670,6 +675,7 @@ export const useAgentHaloPresence = ({
       'llm_start',
       'llm_end',
       'bridge_error',
+      'task_snapshot',
     ]) {
       source.addEventListener(type, handle as EventListener)
     }

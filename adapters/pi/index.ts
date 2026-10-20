@@ -4,6 +4,7 @@ import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-a
 import type { AgentHaloEvent, IAgentHaloEventRuntime } from '../../packages/protocol/src/index.ts'
 // Shared source-owner transport; this private package is not a standalone tarball.
 import { postEvent, readEndpoint, readIngestToken } from '../shared/agent-halo-hook-utils.mjs'
+import { createTaskObserver, loadTaskAccessor } from './tasks.ts'
 
 export const selfIdentity = (): IAgentHaloEventRuntime | null => {
   try {
@@ -24,7 +25,7 @@ type Registry = { owner?: object; tail: Promise<void> }
 const key = Symbol.for('agent-halo.pi.tui-owner.v1')
 const globals = globalThis as typeof globalThis & { [key]?: Registry }
 const registry = (globals[key] ??= { tail: Promise.resolve() })
-const defaults = { postEvent, readEndpoint, readIngestToken, selfIdentity, registry }
+const defaults = { postEvent, readEndpoint, readIngestToken, selfIdentity, registry, loadTaskAccessor }
 
 export function registerHalo(pi: ExtensionAPI, deps = defaults) {
   const owner = {}
@@ -53,6 +54,7 @@ export function registerHalo(pi: ExtensionAPI, deps = defaults) {
       permissionMode: null,
       runtime,
       ...payload,
+      ...(payload.type === 'task_snapshot' ? { runtime: null, model: null } : {}),
     }
     pending++
     const work = deps.registry.tail
@@ -72,6 +74,13 @@ export function registerHalo(pi: ExtensionAPI, deps = defaults) {
     return work
   }
 
+  const tasks = createTaskObserver(
+    pi,
+    owns,
+    (ctx, data) => emit(ctx, { type: 'task_snapshot', data }),
+    () => deps.loadTaskAccessor(pi),
+  )
+
   pi.on('session_start', (event, ctx) => {
     if (disposed || ctx.mode !== 'tui') return
     const id = ctx.sessionManager.getSessionId()
@@ -82,7 +91,9 @@ export function registerHalo(pi: ExtensionAPI, deps = defaults) {
     runtime = deps.selfIdentity()
     running = false
     outcome = undefined
-    return emit(ctx, { type: 'conversation_open', data: { reason: event.reason } })
+    const opened = emit(ctx, { type: 'conversation_open', data: { reason: event.reason } })
+    tasks.start(ctx)
+    return opened
   })
   pi.on('agent_start', (_event, ctx) => {
     if (!owns(ctx) || running) return
@@ -151,6 +162,7 @@ export function registerHalo(pi: ExtensionAPI, deps = defaults) {
   })
   pi.on('session_shutdown', async (event, ctx) => {
     if (!owns(ctx)) return
+    tasks.stop()
     disposed = true
     running = false
     // Reload tears down extensions, not the conversation. Never enqueue a late close.

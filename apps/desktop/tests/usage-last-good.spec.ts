@@ -293,11 +293,15 @@ test('Usage meters communicate remaining quota with monochrome structure and cop
       }
     }),
   )
-  expect(fillPaint[0]).toMatchObject({ backgroundColor: 'rgb(17, 17, 17)', backgroundImage: 'none' })
-  expect(fillPaint[1].backgroundImage).toContain('rgb(17, 17, 17)')
-  expect(fillPaint[2]).toMatchObject({ backgroundColor: 'rgb(17, 17, 17)', borderRadius: '1px' })
-  expect(fillPaint[2].boxShadow).toContain('rgb(255, 255, 255)')
-  expect(fillPaint[3]).toEqual(fillPaint[2])
+  for (const fill of fillPaint) {
+    expect(fill).toEqual({
+      backgroundColor: 'rgb(17, 17, 17)',
+      backgroundImage: 'none',
+      borderRadius: '999px',
+      boxShadow: 'none',
+    })
+  }
+  await expect(meters.nth(3).locator('.usage-meter-fill')).toHaveCSS('width', '0px')
 
   const statusPaint = await meters.locator('.usage-meter-status').evaluateAll((statuses) =>
     statuses.map((status) => {

@@ -1,3 +1,5 @@
+export { normalizeTaskSnapshot } from "./tasks.js";
+
 export const AGENT_HALO_PROTOCOL_VERSION = 2 as const;
 
 
@@ -61,13 +63,14 @@ export type AgentHaloEventType =
   | "compact_end"
   | "llm_start"
   | "llm_end"
-  | "bridge_error";
+  | "bridge_error"
+  | "task_snapshot";
 
 export interface IAgentHaloEventRuntime {
   sourcePid: number;
   sourcePpid: number | null;
   sourceStartedAtMs: number;
-  sourceKind: "lettaHost" | "agyHost" | "cursorHost" | "codexHost" | "hookRelay" | "unknown" | string;
+  sourceKind: "lettaHost" | "agyHost" | "cursorHost" | "codexHost" | "piHost" | "hookRelay" | "unknown" | string;
   herdr?: IAgentHaloHerdrTarget | null;
 }
 
@@ -234,8 +237,24 @@ export interface IAgentHaloBridgeErrorEvent extends IAgentHaloBaseEvent {
   };
 }
 
+export interface IAgentHaloTaskSnapshotEvent extends IAgentHaloBaseEvent {
+  type: "task_snapshot";
+  data: {
+    availability: "available" | "unavailable";
+    omittedCount?: number;
+    tasks: {
+      id: string;
+      role: string;
+      status: "queued" | "running" | "completed" | "aborted" | "stopped" | "error";
+      startedAt: number | null;
+      completedAt: number | null;
+    }[];
+  };
+}
+
 export type AgentHaloEvent =
   | IAgentHaloBridgeReadyEvent
+  | IAgentHaloTaskSnapshotEvent
   | IAgentHaloConversationOpenEvent
   | IAgentHaloConversationCloseEvent
   | IAgentHaloTurnStartEvent

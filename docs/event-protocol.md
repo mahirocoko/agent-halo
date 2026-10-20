@@ -22,7 +22,7 @@ Events are newline-delimited JSON in `~/.letta/mods/agent-halo.events.ndjson` an
     sourcePid: number,
     sourcePpid: number | null,
     sourceStartedAtMs: number,
-    sourceKind: "lettaHost" | "agyHost" | "cursorHost" | "codexHost" | "hookRelay" | "unknown" | string,
+    sourceKind: "lettaHost" | "agyHost" | "cursorHost" | "codexHost" | "piHost" | "hookRelay" | "unknown" | string,
     herdr?: {
       socketPath: string,
       paneId: string,
@@ -42,9 +42,17 @@ Events are newline-delimited JSON in `~/.letta/mods/agent-halo.events.ndjson` an
 
 ## Pi public SDK mapping
 
-The private local `adapters/pi` extension uses `agentName: "Pi"`, `agentId` and `conversationId` equal to `pi:<public sessionManager session id>`, actual cwd/provider/model, and optional self-process `sourceKind: "piHost"`. It does not relabel Pi as Letta or publish Herdr lifecycle statuses. No prompts, messages, raw arguments/results, tool-call IDs, environment secrets, or error text are copied; tool names are restricted to 96 identifier characters and argument keys are empty.
+The private local `adapters/pi` extension uses `agentName: "Pi"`, `agentId` and `conversationId` equal to `pi:<public sessionManager session id>`, actual cwd/provider/model, and optional self-process `sourceKind: "piHost"`. Trusted `piHost` PID/start/cwd identity is eligible for the existing read-only Runtime and live-status liveness lanes. Sessions sharing a host retain distinct public session IDs, but process metrics and service ancestry cannot identify which session owns work on that host. Services therefore reports a shared Pi host without an exact session/pane claim. Missing identity stays unavailable; PID reuse ends only the old identity. It does not relabel Pi as Letta or publish Herdr lifecycle statuses. No prompts, messages, raw arguments/results, tool-call IDs, environment secrets, or error text are copied; tool names are restricted to 96 identifier characters and argument keys are empty.
 
 Public `session_start` maps to `conversation_open`. `agent_start` opens one Halo turn for the whole agent run, not each model/tool round. `agent_before_settle.outcome` records only the outcome enum; `agent_settled.aborted` takes precedence. Only a completed, non-aborted settled run emits `turn_complete` once. Errors emit sanitized `llm_end` with `stopReason: "error"`; abort emits `llm_end` with normalized `stopReason: "aborted_stop"` (closed activity, not successful completion). Unknown outcomes never fabricate success. Public tool execution start/end emit minimal tool events. Non-reload `session_shutdown` emits `conversation_close` with its public reason; this does not claim the process exited. Reload only invalidates the old extension generation, never sends a late close for the reloaded conversation. Non-TUI child callbacks cannot claim/dispose their TUI parent's owner or read its credentials.
+
+### Pi owner-scoped task snapshots
+
+`task_snapshot` is a separate protocol-v2 projection under a real `pi:<session id>` parent, not a conversation, child-session join, activity event, or runtime host. Its `data` contains `availability: "available" | "unavailable"`, `tasks` (at most 256 records), and optional `omittedCount`. Each task contains only `id`, `role`, the actual native `status` (`queued`, `running`, `completed`, `aborted`, `stopped`, or `error`), and nullable millisecond `startedAt` / `completedAt`. Task IDs are not child session IDs. A native completed bus event can mean stopped; only the scoped service record determines status.
+
+The optional patched `@gotgenes/pi-subagents` public accessor must expose `getSubagentsServiceForSession`. Halo resolves the public package export from the registered native `subagent` tool's SDK `sourceInfo.path`, using Pi's TypeScript extension loader; it never imports a hardcoded sibling checkout or uses the global service accessor. Missing package/accessor/owner binding is unavailable, not an empty successful list. Bus events trigger coalesced scoped reads only; payloads are ignored. Three finite startup retries accommodate service binding load order; lifecycle events provide subsequent refreshes. Shutdown/reload removes subscriptions, cancels retries, and invalidates late loads/queued old-generation publication. No ongoing task poller is installed.
+
+The renderer allowlists snapshots again on hydration/SSE/persisted registry reads, bounds dates/identifiers, and deterministically keeps the first valid duplicate task ID. One latest snapshot is retained separately from the session activity event budget. Task-only scopes never create rows; snapshots do not change completion, presence, model context, activity age, focus identity, CPU/RAM, or Runtime targets. Sessions row/detail label task state **Last observed** with the snapshot time, not a live heartbeat; inactive parents explicitly mark task state historical. Stale observations never fabricate a stopped/completed task. Prompts, results, descriptions, error text, output paths, environment, usage, and raw event payloads are excluded. CPU/RAM remain shared Pi host metrics only.
 
 ## Bridge endpoints
 

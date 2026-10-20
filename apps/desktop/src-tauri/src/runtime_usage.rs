@@ -392,7 +392,7 @@ mod macos {
                             cwd: None,
                             sampled_at_ms,
                             status: "missing".to_string(),
-                            error: Some("Letta host process is no longer available".to_string()),
+                            error: Some("Agent host process is no longer available".to_string()),
                             host: None,
                             children: None,
                         };
@@ -408,7 +408,7 @@ mod macos {
                             cwd: process_cwd(root_basic.pid),
                             sampled_at_ms,
                             status: "unavailable".to_string(),
-                            error: Some("Could not read Letta host resource usage".to_string()),
+                            error: Some("Could not read agent host resource usage".to_string()),
                             host: None,
                             children: None,
                         };

@@ -112,6 +112,8 @@ const usageTokens = (
 
 export const getEventActivity = (event: AgentHaloEvent): IActivityDescriptor => {
   switch (event.type) {
+    case 'task_snapshot':
+      return { kind: 'session', label: 'tasks', detail: 'Subagent task snapshot' }
     case 'bridge_ready':
       return { kind: 'bridge', label: 'bridge', detail: `:${event.data.port}` }
     case 'conversation_open':
