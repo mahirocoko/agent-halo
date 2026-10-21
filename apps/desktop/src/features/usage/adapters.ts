@@ -19,18 +19,10 @@ export {
   writeUsageSettings,
 } from './settings'
 
-const clampPercent = (value: number | null): number | null => {
-  if (value === null || !Number.isFinite(value)) {
-    return null
-  }
-
-  return Math.max(0, Math.min(100, Math.round(value)))
-}
-
 const findMetricLine = (lines: IUsageMetricLine[], label: string): IUsageMetricLine | null =>
   lines.find((line) => line.label.toLowerCase() === label.toLowerCase()) ?? null
 
-const getProgressPercent = (line: IUsageMetricLine | null): number | null => {
+const getProgressPercent = (line: IUsageMetricLine | null, precise = false): number | null => {
   if (!line || line.type !== 'progress' || typeof line.used !== 'number') {
     return null
   }
@@ -38,7 +30,12 @@ const getProgressPercent = (line: IUsageMetricLine | null): number | null => {
   const progress =
     typeof line.limit === 'number' && line.limit > 0 && line.limit !== 100 ? (line.used / line.limit) * 100 : line.used
 
-  return clampPercent(progress)
+  if (!Number.isFinite(progress)) {
+    return null
+  }
+
+  const scale = precise ? 100 : 1
+  return Math.max(0, Math.min(100, Math.round(progress * scale) / scale))
 }
 
 const getTextValue = (line: IUsageMetricLine | null): string | null => {
@@ -81,10 +78,17 @@ const getStatusLabel = (left: number | null): IUsageMetric['statusLabel'] => {
   return left <= 45 ? 'Running low' : 'Available'
 }
 
-const normalizeMetric = (line: IUsageMetricLine, settings: IUsageSettings): IUsageMetric => {
-  const used = getProgressPercent(line)
-  const left = used === null ? null : Math.max(0, 100 - used)
-  const value = settings.usageMode === 'used' ? used : left
+const normalizeMetric = (
+  line: IUsageMetricLine,
+  settings: IUsageSettings,
+  providerId: UsageProviderId,
+  lines: IUsageMetricLine[],
+): IUsageMetric => {
+  const isAgy = providerId === 'agy'
+  const showRemaining = settings.usageMode === 'left'
+  const used = getProgressPercent(line, isAgy)
+  const left = used === null ? null : Math.round((100 - used) * 100) / 100
+  const value = showRemaining ? left : used
   const groupLabel = getUsageMetricGroupLabel(line.label)
   const normalizedLabel = line.label.toLowerCase()
   const limitLabel = groupLabel
@@ -92,8 +96,23 @@ const normalizeMetric = (line: IUsageMetricLine, settings: IUsageSettings): IUsa
       ? 'Five Hour Limit'
       : 'Weekly Limit'
     : null
+  const weekly =
+    isAgy && limitLabel === 'Five Hour Limit'
+      ? lines.find(
+          (candidate) =>
+            getUsageMetricGroupLabel(candidate.label) === groupLabel &&
+            candidate.label.toLowerCase().includes('weekly'),
+        )
+      : undefined
+  const blockedByWeekly =
+    weekly?.type === 'progress' &&
+    typeof weekly.used === 'number' &&
+    Number.isFinite(weekly.used) &&
+    typeof weekly.limit === 'number' &&
+    weekly.limit > 0 &&
+    weekly.used >= weekly.limit
   const hasAvailableQuota =
-    groupLabel !== null && limitLabel === 'Five Hour Limit' && settings.usageMode === 'left' && left === 100
+    !blockedByWeekly && groupLabel !== null && limitLabel === 'Five Hour Limit' && showRemaining && left === 100
 
   return {
     label: line.label,
@@ -101,14 +120,14 @@ const normalizeMetric = (line: IUsageMetricLine, settings: IUsageSettings): IUsa
     groupModels: getUsageMetricGroupModels(groupLabel),
     limitLabel,
     value,
-    statusLevel: getStatusLevel(left),
-    statusLabel: getStatusLabel(left),
+    statusLevel: blockedByWeekly ? 'danger' : getStatusLevel(left),
+    statusLabel: blockedByWeekly ? 'Blocked by weekly limit' : getStatusLabel(left),
     remainingLabel: hasAvailableQuota
       ? 'Quota available'
       : value === null
         ? null
-        : `${value}% ${groupLabel && settings.usageMode === 'left' ? 'remaining' : settings.usageMode}`,
-    resetLabel: hasAvailableQuota ? null : formatResetLabel(line.resetsAt, settings),
+        : `${value}% ${groupLabel && showRemaining ? 'remaining' : settings.usageMode}`,
+    resetLabel: hasAvailableQuota && !isAgy ? null : formatResetLabel(line.resetsAt, settings),
   }
 }
 
@@ -145,7 +164,9 @@ export const parseAgentUsageSnapshot = (
 ): IAgentUsageState => {
   const lines = Array.isArray(snapshot.lines) ? snapshot.lines : []
   const message = getTextValue(findMetricLine(lines, 'Status'))
-  const metrics = lines.filter((line) => line.type === 'progress').map((line) => normalizeMetric(line, settings))
+  const metrics = lines
+    .filter((line) => line.type === 'progress')
+    .map((line) => normalizeMetric(line, settings, providerId, lines))
   const knownTextLabels = new Set([
     'rate limit resets',
     'credits',

@@ -85,8 +85,8 @@ const AGY_LS_SERVICE: &str = "exa.language_server_pb.LanguageServerService";
 const AGY_KEYCHAIN_SERVICE: &str = "gemini";
 const AGY_KEYCHAIN_ACCOUNT: &str = "antigravity";
 const AGY_CLOUD_CODE_BASE_URLS: [&str; 2] = [
-    "https://daily-cloudcode-pa.googleapis.com",
     "https://cloudcode-pa.googleapis.com",
+    "https://daily-cloudcode-pa.googleapis.com",
 ];
 const AGY_CLOUD_QUOTA_SUMMARY_PATH: &str = "/v1internal:retrieveUserQuotaSummary";
 const AGY_CLOUD_LOAD_CODE_ASSIST_PATH: &str = "/v1internal:loadCodeAssist";
@@ -697,6 +697,13 @@ async fn agy_usage() -> Result<CodexUsageSnapshot, String> {
 }
 
 fn agy_usage_blocking() -> Result<CodexUsageSnapshot, String> {
+    match read_antigravity_cli_usage() {
+        Ok(snapshot) => return Ok(snapshot),
+        Err(AntigravityCliError::NotInstalled) => {}
+        Err(AntigravityCliError::Unavailable) => {
+            return Err("Antigravity CLI usage is temporarily unavailable. Refresh to retry; legacy quota sources were not substituted.".to_string());
+        }
+    }
     if let Some(snapshot) = probe_antigravity_ls_usage() {
         return Ok(snapshot);
     }
@@ -3727,6 +3734,74 @@ fn fetch_antigravity_cloud_json(
     Err(AntigravityCloudError::Unavailable)
 }
 
+// At most two blocking requests, each bounded independently. A complete preferred
+// summary needs no fallback: later hosts cannot change a first-usable bucket.
+fn fetch_antigravity_cloud_quota_lines(
+    client: &reqwest::blocking::Client,
+    token: &str,
+    base_urls: &[&str],
+) -> Result<Option<Vec<CodexMetricLine>>, AntigravityCloudError> {
+    let mut summaries = Vec::new();
+    let mut auth_failed = false;
+    for base_url in base_urls.iter().take(2) {
+        let response = client
+            .post(format!("{base_url}{AGY_CLOUD_QUOTA_SUMMARY_PATH}"))
+            .bearer_auth(token)
+            .header(reqwest::header::ACCEPT, "application/json")
+            .header(reqwest::header::USER_AGENT, "antigravity")
+            .timeout(Duration::from_secs(12))
+            .json(&serde_json::json!({}))
+            .send();
+        let Ok(response) = response else { continue };
+        if response.status() == reqwest::StatusCode::UNAUTHORIZED
+            || response.status() == reqwest::StatusCode::FORBIDDEN
+        {
+            auth_failed = true;
+            continue;
+        }
+        if !response.status().is_success() {
+            continue;
+        }
+        if let Ok(value) = response.json::<Value>() {
+            summaries.push(value);
+            if let Some(lines) = build_antigravity_quota_summaries_lines(&summaries) {
+                if lines.len() == 4 {
+                    return Ok(Some(lines));
+                }
+            }
+        }
+    }
+    let lines = build_antigravity_quota_summaries_lines(&summaries);
+    if lines.is_some() {
+        Ok(lines)
+    } else if auth_failed {
+        Err(AntigravityCloudError::Auth)
+    } else if !summaries.is_empty() {
+        Ok(None)
+    } else {
+        Err(AntigravityCloudError::Unavailable)
+    }
+}
+
+fn antigravity_client_user_agent() -> String {
+    let arch = if cfg!(target_arch = "aarch64") {
+        "arm64"
+    } else {
+        "amd64"
+    };
+    format!("antigravity/2.24.0 (aidev_client; os_type=darwin; arch={arch})")
+}
+
+fn antigravity_load_code_assist_body() -> Value {
+    serde_json::json!({
+        "metadata": {
+            "ideType": "ANTIGRAVITY",
+            "platform": "PLATFORM_UNSPECIFIED",
+            "pluginType": "GEMINI"
+        }
+    })
+}
+
 fn fetch_antigravity_cloud_snapshot(
     client: &reqwest::blocking::Client,
     auth: &AntigravityAuth,
@@ -3736,22 +3811,17 @@ fn fetch_antigravity_cloud_snapshot(
         .as_deref()
         .filter(|token| !token.trim().is_empty())
         .ok_or(AntigravityCloudError::Auth)?;
-    let response = fetch_antigravity_cloud_json(
-        client,
-        AGY_CLOUD_QUOTA_SUMMARY_PATH,
-        token,
-        "antigravity",
-        &serde_json::json!({}),
-    )?;
-    let Some(lines) = build_antigravity_quota_summary_lines(&response) else {
+    let Some(lines) =
+        fetch_antigravity_cloud_quota_lines(client, token, &AGY_CLOUD_CODE_BASE_URLS)?
+    else {
         return Ok(None);
     };
     let plan = fetch_antigravity_cloud_json(
         client,
         AGY_CLOUD_LOAD_CODE_ASSIST_PATH,
         token,
-        "agy",
-        &serde_json::json!({}),
+        &antigravity_client_user_agent(),
+        &antigravity_load_code_assist_body(),
     )
     .ok()
     .and_then(|value| read_antigravity_cloud_plan(&value));
@@ -3765,6 +3835,12 @@ fn fetch_antigravity_cloud_snapshot(
 }
 
 fn read_antigravity_cloud_plan(value: &Value) -> Option<String> {
+    match value.pointer("/paidTier/id").and_then(Value::as_str) {
+        Some("g1-pro-tier") => return Some("Pro".to_string()),
+        Some("g1-ultra-tier") => return Some("Ultra".to_string()),
+        Some("g1-ultra-lite-tier") => return Some("Ultra Lite".to_string()),
+        _ => {}
+    }
     value
         .get("paidTier")
         .and_then(|tier| tier.get("name"))
@@ -3841,6 +3917,159 @@ fn parse_antigravity_oauth_client(value: &Value) -> Option<(String, String)> {
     let client_id = maybe_string(value.get("client_id"))?;
     let client_secret = maybe_string(value.get("client_secret"))?;
     Some((client_id, client_secret))
+}
+
+// The installed CLI owns its current quota route and auth. /usage is a documented
+// read-only print command, not an agent prompt. Never parse its human response or
+// forward the command envelope (which can contain account/session metadata).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AntigravityCliError {
+    NotInstalled,
+    Unavailable,
+}
+
+fn read_antigravity_cli_usage() -> Result<CodexUsageSnapshot, AntigravityCliError> {
+    let mut command = Command::new("agy");
+    command
+        .args(["--output-format", "json", "-p", "/usage"])
+        .env("PATH", enriched_cli_path())
+        .current_dir(home_dir().ok_or(AntigravityCliError::Unavailable)?);
+    let bytes = run_antigravity_cli_command(command, Duration::from_secs(12))?;
+    parse_antigravity_cli_output(&bytes)
+}
+
+fn parse_antigravity_cli_output(bytes: &[u8]) -> Result<CodexUsageSnapshot, AntigravityCliError> {
+    let value =
+        serde_json::from_slice::<Value>(bytes).map_err(|_| AntigravityCliError::Unavailable)?;
+    parse_antigravity_cli_usage(&value).ok_or(AntigravityCliError::Unavailable)
+}
+
+fn run_antigravity_cli_command(
+    mut command: Command,
+    timeout: Duration,
+) -> Result<Vec<u8>, AntigravityCliError> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
+    let mut child = command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|error| {
+            if error.kind() == ErrorKind::NotFound {
+                AntigravityCliError::NotInstalled
+            } else {
+                AntigravityCliError::Unavailable
+            }
+        })?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or(AntigravityCliError::Unavailable)?;
+    let (sender, receiver) = mpsc::channel();
+    thread::spawn(move || {
+        let mut bytes = Vec::new();
+        let result = stdout.take(256 * 1024 + 1).read_to_end(&mut bytes);
+        let _ = sender.send((result.is_ok() && bytes.len() <= 256 * 1024).then_some(bytes));
+    });
+    let deadline = Instant::now() + timeout;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break Some(status),
+            Err(_) => break None,
+            Ok(None) if Instant::now() < deadline => thread::sleep(Duration::from_millis(50)),
+            Ok(None) => break None,
+        }
+    };
+    // Terminate this read's entire process group, including any helper retaining
+    // stdout, before waiting for the bounded reader. Never leave a CLI turn alive.
+    #[cfg(unix)]
+    unsafe {
+        libc::kill(-(child.id() as i32), libc::SIGKILL);
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+    if !status.is_some_and(|status| status.success()) {
+        return Err(AntigravityCliError::Unavailable);
+    }
+    receiver
+        .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+        .map_err(|_| AntigravityCliError::Unavailable)?
+        .ok_or(AntigravityCliError::Unavailable)
+}
+
+fn parse_antigravity_cli_usage(value: &Value) -> Option<CodexUsageSnapshot> {
+    if value.get("num_turns").and_then(Value::as_u64) != Some(0)
+        || value
+            .pointer("/command/name")
+            .and_then(Value::as_str)?
+            .trim_start_matches('/')
+            != "usage"
+    {
+        return None;
+    }
+    let groups = value.pointer("/command/data/groups")?.as_array()?;
+    for group in groups {
+        group.get("name")?.as_str()?;
+        for bucket in group.get("buckets")?.as_array()? {
+            let bucket = bucket.as_object()?;
+            let id = bucket.get("id")?.as_str()?;
+            if id.trim().is_empty() || id != id.trim() {
+                return None;
+            }
+            let shared_bucket = matches!(id, "gemini-5h" | "gemini-weekly" | "3p-5h" | "3p-weekly");
+            match bucket.get("remaining_fraction") {
+                Some(fraction) if fraction.as_f64().is_some_and(f64::is_finite) => {}
+                None if !shared_bucket => {}
+                _ => return None,
+            }
+            match bucket.get("reset_time") {
+                None | Some(Value::Null) => {}
+                Some(Value::String(reset)) => {
+                    time::OffsetDateTime::parse(
+                        reset,
+                        &time::format_description::well_known::Rfc3339,
+                    )
+                    .ok()?;
+                }
+                _ => return None,
+            }
+        }
+    }
+    let normalized_groups = groups
+        .iter()
+        .map(|group| {
+            let buckets = group
+                .get("buckets")
+                .and_then(Value::as_array)
+                .map(|buckets| {
+                    buckets
+                        .iter()
+                        .map(|bucket| {
+                            serde_json::json!({
+                                "bucketId": bucket.get("id"),
+                                "remainingFraction": bucket.get("remaining_fraction"),
+                                "resetTime": bucket.get("reset_time"),
+                            })
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            serde_json::json!({"displayName": group.get("name"), "buckets": buckets})
+        })
+        .collect::<Vec<_>>();
+    Some(CodexUsageSnapshot {
+        provider_id: "agy".to_string(),
+        display_name: "Antigravity".to_string(),
+        plan: None,
+        lines: build_antigravity_quota_summary_lines(
+            &serde_json::json!({"groups": normalized_groups}),
+        )?,
+        fetched_at: now_iso(),
+    })
 }
 
 fn probe_antigravity_ls_usage() -> Option<CodexUsageSnapshot> {
@@ -4104,8 +4333,23 @@ fn read_antigravity_user_status_plan(data: &Value) -> Option<String> {
 }
 
 fn build_antigravity_quota_summary_lines(response: &Value) -> Option<Vec<CodexMetricLine>> {
-    let response = response.get("response").unwrap_or(response);
-    let groups = response.get("groups").and_then(Value::as_array)?;
+    build_antigravity_quota_summaries_lines(std::slice::from_ref(response))
+}
+
+fn build_antigravity_quota_summaries_lines(responses: &[Value]) -> Option<Vec<CodexMetricLine>> {
+    let group_lists = responses
+        .iter()
+        .filter_map(|response| {
+            response
+                .get("response")
+                .unwrap_or(response)
+                .get("groups")
+                .and_then(Value::as_array)
+        })
+        .collect::<Vec<_>>();
+    if group_lists.is_empty() {
+        return None;
+    }
 
     const BUCKETS: [(&str, &str, u64); 4] = [
         ("gemini-5h", "Gemini 5h", 5 * 60 * 60 * 1000),
@@ -4119,8 +4363,10 @@ fn build_antigravity_quota_summary_lines(response: &Value) -> Option<Vec<CodexMe
     ];
     let mut resolved = BTreeMap::new();
 
-    for bucket in groups
-        .iter()
+    for bucket in group_lists
+        .into_iter()
+        .flatten()
+        .filter(|group| group.get("displayName").and_then(Value::as_str) != Some("Gemini 4 Argon"))
         .filter_map(|group| group.get("buckets").and_then(Value::as_array))
         .flatten()
     {
@@ -4134,7 +4380,9 @@ fn build_antigravity_quota_summary_lines(response: &Value) -> Option<Vec<CodexMe
         if resolved.contains_key(id) {
             continue;
         }
-        let Some(remaining) = value_to_f64(bucket.get("remainingFraction")) else {
+        let Some(remaining) =
+            value_to_f64(bucket.get("remainingFraction")).filter(|value| value.is_finite())
+        else {
             continue;
         };
         let reset_time = bucket
@@ -4147,7 +4395,7 @@ fn build_antigravity_quota_summary_lines(response: &Value) -> Option<Vec<CodexMe
             id,
             CodexMetricLine::Progress {
                 label: (*label).to_string(),
-                used: ((1.0 - remaining.clamp(0.0, 1.0)) * 100.0).round(),
+                used: (1.0 - remaining.clamp(0.0, 1.0)) * 100.0,
                 limit: 100.0,
                 format: CodexProgressFormat::Percent,
                 resets_at: reset_time,
@@ -5964,6 +6212,184 @@ pub fn run() {
 mod display_selection_tests {
     use super::*;
 
+    fn agy_cli_fixture() -> Value {
+        serde_json::from_str(include_str!("../../tests/fixtures/agy-cli-usage.json")).unwrap()
+    }
+
+    #[test]
+    fn antigravity_cli_preserves_real_fractions_and_reset_absence() {
+        let snapshot = parse_antigravity_cli_usage(&agy_cli_fixture()).unwrap();
+        assert_eq!(snapshot.lines.len(), 4);
+        let expected = [
+            ("Gemini 5h", 1.33, Some("2026-10-21T12:38:41Z")),
+            ("Gemini Weekly", 39.56, Some("2026-10-24T03:35:06Z")),
+            ("Claude and GPT 5h", 0.0, None),
+            ("Claude and GPT Weekly", 100.0, Some("2026-10-24T11:44:04Z")),
+        ];
+        for (line, (label, expected_used, reset)) in snapshot.lines.iter().zip(expected) {
+            let CodexMetricLine::Progress {
+                label: actual,
+                used,
+                resets_at,
+                ..
+            } = line
+            else {
+                panic!("expected progress")
+            };
+            assert_eq!(actual, label);
+            assert!((used - expected_used).abs() < 0.000001);
+            assert_eq!(resets_at.as_deref(), reset);
+        }
+    }
+
+    #[test]
+    fn antigravity_cli_rejects_turns_text_and_malformed_commands() {
+        let mut fixture = agy_cli_fixture();
+        fixture["num_turns"] = serde_json::json!(1);
+        assert!(parse_antigravity_cli_usage(&fixture).is_none());
+        fixture["num_turns"] = serde_json::json!(0);
+        fixture["command"]["name"] = serde_json::json!("model");
+        assert!(parse_antigravity_cli_usage(&fixture).is_none());
+        assert!(
+            parse_antigravity_cli_usage(&serde_json::json!({"response":"quota available"}))
+                .is_none()
+        );
+        fixture["command"]["name"] = serde_json::json!("usage");
+        fixture["command"]["data"]["groups"] = serde_json::json!([{}]);
+        assert!(parse_antigravity_cli_usage(&fixture).is_none());
+    }
+
+    #[test]
+    fn antigravity_cli_rejects_malformed_bucket_entries_instead_of_authoritative_empty() {
+        for bucket in [
+            serde_json::json!(null),
+            serde_json::json!("not a bucket"),
+            serde_json::json!({}),
+            serde_json::json!({"id": 1}),
+            serde_json::json!({"id": ""}),
+            serde_json::json!({"id": "  "}),
+            serde_json::json!({"id": " gemini-weekly", "remaining_fraction": 0.6}),
+            serde_json::json!({"id": "gemini-weekly"}),
+            serde_json::json!({"id": "gemini-weekly", "remaining_fraction": {}}),
+            serde_json::json!({"id": "gemini-weekly", "remaining_fraction": null}),
+            serde_json::json!({"id": "gemini-weekly", "remaining_fraction": "0.6"}),
+            serde_json::json!({"id": "gemini-weekly", "remaining_fraction": true}),
+            serde_json::json!({"id": "future-bucket", "remaining_fraction": {}}),
+        ] {
+            let mut fixture = agy_cli_fixture();
+            fixture["command"]["data"]["groups"][0]["buckets"] = serde_json::json!([bucket]);
+            assert!(parse_antigravity_cli_usage(&fixture).is_none());
+        }
+    }
+
+    #[test]
+    fn antigravity_cli_validates_optional_reset_without_inventing_one() {
+        for reset in [
+            serde_json::json!(""),
+            serde_json::json!("not a timestamp"),
+            serde_json::json!(42),
+            serde_json::json!({}),
+        ] {
+            let mut fixture = agy_cli_fixture();
+            fixture["command"]["data"]["groups"][0]["buckets"][0]["reset_time"] = reset;
+            assert!(parse_antigravity_cli_usage(&fixture).is_none());
+        }
+        let mut fixture = agy_cli_fixture();
+        fixture["command"]["data"]["groups"][0]["buckets"][0]["reset_time"] = Value::Null;
+        let snapshot = parse_antigravity_cli_usage(&fixture).unwrap();
+        assert!(snapshot.lines.iter().any(|line| matches!(line, CodexMetricLine::Progress { label, resets_at: None, .. } if label == "Gemini Weekly")));
+    }
+
+    #[test]
+    fn antigravity_cli_accepts_empty_bucket_arrays_unknown_ids_and_excludes_argon() {
+        let mut fixture = agy_cli_fixture();
+        fixture["command"]["data"]["groups"] = serde_json::json!([
+            {"name": "Gemini Models", "buckets": []},
+            {"name": "Future Models", "buckets": [{"id": "future-bucket"}, {"id": "future-weekly", "remaining_fraction": 0.7, "reset_time": null}]},
+            {"name": "Gemini 4 Argon", "buckets": [{"id": "gemini-weekly", "remaining_fraction": 0.8}]}
+        ]);
+        assert!(parse_antigravity_cli_usage(&fixture)
+            .unwrap()
+            .lines
+            .is_empty());
+    }
+
+    #[test]
+    fn antigravity_cli_partial_and_empty_snapshots_do_not_fill_from_other_sources() {
+        let mut fixture = agy_cli_fixture();
+        fixture["command"]["data"]["groups"][0]["buckets"]
+            .as_array_mut()
+            .unwrap()
+            .remove(0);
+        let snapshot = parse_antigravity_cli_usage(&fixture).unwrap();
+        assert_eq!(snapshot.lines.len(), 3);
+        fixture["command"]["data"]["groups"] = serde_json::json!([]);
+        assert!(parse_antigravity_cli_usage(&fixture)
+            .unwrap()
+            .lines
+            .is_empty());
+    }
+
+    #[test]
+    fn antigravity_cli_command_reads_only_bounded_successful_output() {
+        let fixture = include_str!("../../tests/fixtures/agy-cli-usage.json");
+        let mut valid = Command::new("/bin/sh");
+        valid.args(["-c", "printf '%s' \"$1\"", "halo-quota-test", fixture]);
+        let bytes = run_antigravity_cli_command(valid, Duration::from_secs(2)).unwrap();
+        assert!(
+            parse_antigravity_cli_usage(&serde_json::from_slice::<Value>(&bytes).unwrap())
+                .is_some()
+        );
+        let mut oversized = Command::new("/bin/sh");
+        oversized.args(["-c", "head -c 262145 /dev/zero"]);
+        assert_eq!(
+            run_antigravity_cli_command(oversized, Duration::from_secs(2)).unwrap_err(),
+            AntigravityCliError::Unavailable
+        );
+    }
+
+    #[test]
+    fn antigravity_cli_only_absent_executable_allows_legacy_fallback() {
+        assert_eq!(
+            run_antigravity_cli_command(
+                Command::new("/nonexistent/agent-halo-agy"),
+                Duration::from_millis(100)
+            )
+            .unwrap_err(),
+            AntigravityCliError::NotInstalled
+        );
+        let mut failed = Command::new("/bin/sh");
+        failed.args(["-c", "exit 1"]);
+        assert_eq!(
+            run_antigravity_cli_command(failed, Duration::from_secs(1)).unwrap_err(),
+            AntigravityCliError::Unavailable
+        );
+        let mut slow = Command::new("/bin/sh");
+        slow.args(["-c", "sleep 10"]);
+        let started = Instant::now();
+        assert_eq!(
+            run_antigravity_cli_command(slow, Duration::from_millis(100)).unwrap_err(),
+            AntigravityCliError::Unavailable
+        );
+        assert!(started.elapsed() < Duration::from_secs(2));
+        let denied = Command::new("/");
+        assert_eq!(
+            run_antigravity_cli_command(denied, Duration::from_secs(1)).unwrap_err(),
+            AntigravityCliError::Unavailable
+        );
+    }
+
+    #[test]
+    fn antigravity_cli_malformed_output_cannot_enable_legacy_fallback() {
+        for bytes in [b"not JSON".as_slice(), br#"{"num_turns":0,"command":{"name":"usage","data":{"groups":[{"name":"Gemini Models","buckets":[null]}]}}}"#.as_slice()] {
+            assert_eq!(parse_antigravity_cli_output(bytes).unwrap_err(), AntigravityCliError::Unavailable);
+        }
+        assert!(parse_antigravity_cli_output(include_bytes!(
+            "../../tests/fixtures/agy-cli-usage.json"
+        ))
+        .is_ok());
+    }
+
     #[test]
     fn herdr_focus_accepts_only_public_pane_identity_shape() {
         assert!(is_valid_herdr_pane_id("w1:p1"));
@@ -6523,6 +6949,269 @@ mod display_selection_tests {
 
         assert_eq!(labels, ["Session", "Weekly", "Spark", "Spark Weekly"]);
         assert!(!labels.iter().any(|label| label.contains("5.4")));
+    }
+
+    // Local HTTP fixtures only: never construct the production usage client or read auth.
+    fn antigravity_mock_host(
+        status: u16,
+        body: &str,
+    ) -> (String, std::thread::JoinHandle<Option<String>>) {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        listener.set_nonblocking(true).unwrap();
+        let body = body.to_string();
+        let handle = std::thread::spawn(move || {
+            let deadline = std::time::Instant::now() + Duration::from_secs(2);
+            let mut stream = loop {
+                match listener.accept() {
+                    Ok((stream, _)) => break stream,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        if std::time::Instant::now() >= deadline {
+                            return None;
+                        }
+                        std::thread::sleep(Duration::from_millis(5));
+                    }
+                    Err(error) => panic!("mock accept failed: {error}"),
+                }
+            };
+            stream
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .unwrap();
+            let mut request = Vec::new();
+            let mut buffer = [0; 2048];
+            loop {
+                let count = stream.read(&mut buffer).unwrap();
+                assert!(count > 0, "incomplete mock request");
+                request.extend_from_slice(&buffer[..count]);
+                if let Some(end) = request.windows(4).position(|bytes| bytes == b"\r\n\r\n") {
+                    let headers = String::from_utf8_lossy(&request[..end]);
+                    let length = headers
+                        .lines()
+                        .find_map(|line| {
+                            let (key, value) = line.split_once(':')?;
+                            key.eq_ignore_ascii_case("content-length")
+                                .then(|| value.trim().parse::<usize>().unwrap())
+                        })
+                        .unwrap_or(0);
+                    if request.len() >= end + 4 + length {
+                        break;
+                    }
+                }
+            }
+            write!(stream, "HTTP/1.1 {status} Fixture\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
+            Some(String::from_utf8(request).unwrap())
+        });
+        (url, handle)
+    }
+
+    fn antigravity_mock_fetch(
+        first: (u16, &str),
+        second: (u16, &str),
+    ) -> Result<Option<Vec<CodexMetricLine>>, AntigravityCloudError> {
+        let (first_url, first_server) = antigravity_mock_host(first.0, first.1);
+        let (second_url, second_server) = antigravity_mock_host(second.0, second.1);
+        let client = reqwest::blocking::Client::builder()
+            .no_proxy()
+            .timeout(Duration::from_secs(2))
+            .build()
+            .unwrap();
+        let result = fetch_antigravity_cloud_quota_lines(
+            &client,
+            "fixture-token",
+            &[&first_url, &second_url],
+        );
+        for server in [first_server, second_server] {
+            let request = server.join().unwrap().expect("expected host request");
+            assert!(request.starts_with("POST /v1internal:retrieveUserQuotaSummary HTTP/1.1"));
+            assert!(request
+                .to_lowercase()
+                .contains("authorization: bearer fixture-token"));
+            assert!(request.ends_with("{}"));
+        }
+        result
+    }
+
+    #[test]
+    fn antigravity_cloud_merges_complementary_hosts_first_usable_wins() {
+        let first = r#"{"groups":[{"buckets":[
+            {"bucketId":"gemini-5h"},
+            {"bucketId":"gemini-5h","remainingFraction":"NaN"},
+            {"bucketId":"3p-5h","remainingFraction":0.8},
+            {"bucketId":"3p-5h","remainingFraction":0.1}
+        ]}]}"#;
+        let second = r#"{"response":{"groups":[{"buckets":[
+            {"bucketId":"gemini-5h","remainingFraction":0.7},
+            {"bucketId":"gemini-weekly","remainingFraction":0.6},
+            {"bucketId":"3p-5h","remainingFraction":0.2},
+            {"bucketId":"3p-weekly","remainingFraction":0.5}
+        ]}]}}"#;
+        let lines = antigravity_mock_fetch((200, first), (200, second))
+            .unwrap()
+            .unwrap();
+        let used = lines
+            .iter()
+            .map(|line| match line {
+                CodexMetricLine::Progress { used, .. } => *used,
+                _ => unreachable!(),
+            })
+            .collect::<Vec<_>>();
+        for (actual, expected) in used.iter().zip([30.0, 40.0, 20.0, 50.0]) {
+            assert!((actual - expected).abs() < 0.000001);
+        }
+    }
+
+    #[test]
+    fn antigravity_cloud_tolerates_host_errors_and_malformed_summaries() {
+        let valid =
+            r#"{"groups":[{"buckets":[{"bucketId":"gemini-5h","remainingFraction":0.5}]}]}"#;
+        for status in [401, 403, 500] {
+            for reverse in [false, true] {
+                let (first, second) = if reverse {
+                    ((200, valid), (status, "{}"))
+                } else {
+                    ((status, "{}"), (200, valid))
+                };
+                assert_eq!(
+                    antigravity_mock_fetch(first, second)
+                        .unwrap()
+                        .unwrap()
+                        .len(),
+                    1
+                );
+            }
+        }
+        for malformed in ["not-json", "{}", r#"{"groups":null}"#] {
+            assert_eq!(
+                antigravity_mock_fetch((200, malformed), (200, valid))
+                    .unwrap()
+                    .unwrap()
+                    .len(),
+                1
+            );
+        }
+        assert!(antigravity_mock_fetch((200, "{}"), (200, "{}"))
+            .unwrap()
+            .is_none());
+        assert!(
+            antigravity_mock_fetch((200, r#"{"groups":[]}"#), (500, "{}"))
+                .unwrap()
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(
+            antigravity_mock_fetch((401, "{}"), (403, "{}")).unwrap_err(),
+            AntigravityCloudError::Auth
+        );
+        assert_eq!(
+            antigravity_mock_fetch((500, "{}"), (200, "not-json")).unwrap_err(),
+            AntigravityCloudError::Unavailable
+        );
+    }
+
+    #[test]
+    fn antigravity_cloud_continues_after_connection_failure() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let failed_url = format!("http://{}", listener.local_addr().unwrap());
+        drop(listener);
+        let (url, server) = antigravity_mock_host(200, r#"{"groups":[]}"#);
+        let client = reqwest::blocking::Client::builder()
+            .no_proxy()
+            .timeout(Duration::from_secs(2))
+            .build()
+            .unwrap();
+        assert!(
+            fetch_antigravity_cloud_quota_lines(&client, "fixture", &[&failed_url, &url])
+                .unwrap()
+                .unwrap()
+                .is_empty()
+        );
+        assert!(server.join().unwrap().is_some());
+    }
+
+    #[test]
+    fn antigravity_cloud_skips_fallback_only_for_complete_non_argon_summary() {
+        let shared = serde_json::json!({"buckets": [
+            {"bucketId":"gemini-5h","remainingFraction":0.5},
+            {"bucketId":"gemini-weekly","remainingFraction":0.5},
+            {"bucketId":"3p-5h","remainingFraction":0.5},
+            {"bucketId":"3p-weekly","remainingFraction":0.5}
+        ]});
+        let complete = serde_json::json!({"groups":[shared.clone()]}).to_string();
+        let (url, server) = antigravity_mock_host(200, &complete);
+        let (unused_url, unused_server) = antigravity_mock_host(500, "{}");
+        let client = reqwest::blocking::Client::builder()
+            .no_proxy()
+            .build()
+            .unwrap();
+        assert_eq!(
+            fetch_antigravity_cloud_quota_lines(&client, "fixture", &[&url, &unused_url])
+                .unwrap()
+                .unwrap()
+                .len(),
+            4
+        );
+        assert!(server.join().unwrap().is_some());
+        assert!(unused_server.join().unwrap().is_none());
+
+        let mut argon = shared;
+        argon["displayName"] = serde_json::json!("Gemini 4 Argon");
+        let argon_only = serde_json::json!({"groups":[argon]}).to_string();
+        assert!(
+            build_antigravity_quota_summary_lines(&serde_json::from_str(&argon_only).unwrap())
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(
+            antigravity_mock_fetch((200, &argon_only), (200, &complete))
+                .unwrap()
+                .unwrap()
+                .len(),
+            4
+        );
+    }
+
+    #[test]
+    fn antigravity_cloud_request_metadata_and_paid_tier_mapping() {
+        assert_eq!(
+            AGY_CLOUD_CODE_BASE_URLS[0],
+            "https://cloudcode-pa.googleapis.com"
+        );
+        let body = antigravity_load_code_assist_body();
+        assert_eq!(
+            body,
+            serde_json::json!({"metadata":{"ideType":"ANTIGRAVITY","platform":"PLATFORM_UNSPECIFIED","pluginType":"GEMINI"}})
+        );
+        let ua = antigravity_client_user_agent();
+        assert!(ua.starts_with("antigravity/2.24.0 (aidev_client; os_type=darwin; arch="));
+        assert!(ua.ends_with(if cfg!(target_arch = "aarch64") {
+            "arm64)"
+        } else {
+            "amd64)"
+        }));
+        for (id, expected) in [
+            ("g1-pro-tier", "Pro"),
+            ("g1-ultra-tier", "Ultra"),
+            ("g1-ultra-lite-tier", "Ultra Lite"),
+        ] {
+            assert_eq!(
+                read_antigravity_cloud_plan(
+                    &serde_json::json!({"paidTier":{"id":id,"name":"wrong"}})
+                )
+                .as_deref(),
+                Some(expected)
+            );
+        }
+        assert_eq!(read_antigravity_cloud_plan(&serde_json::json!({"paidTier":{"id":"future","name":"Custom"},"currentTier":{"name":"Free"}})).as_deref(), Some("Custom"));
+        assert_eq!(
+            read_antigravity_cloud_plan(&serde_json::json!({"currentTier":{"name":"Free"}}))
+                .as_deref(),
+            Some("Free")
+        );
+        assert!(read_antigravity_cloud_plan(
+            &serde_json::json!({"allowedTiers":[{"id":"g1-pro-tier"}]})
+        )
+        .is_none());
     }
 
     #[test]
