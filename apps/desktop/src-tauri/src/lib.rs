@@ -550,6 +550,14 @@ fn set_keep_awake(state: tauri::State<'_, KeepAwakeState>, active: bool) -> Resu
 }
 
 #[tauri::command]
+fn set_system_keep_awake(
+    state: tauri::State<'_, KeepAwakeState>,
+    active: bool,
+) -> Result<bool, String> {
+    state.set_system_active(active)
+}
+
+#[tauri::command]
 async fn get_battery_sleep_status(
     app: tauri::AppHandle,
     state: tauri::State<'_, BatterySleepState>,
@@ -5844,6 +5852,7 @@ pub fn run() {
             runtime_usage,
             schedule_pomodoro_notification,
             set_keep_awake,
+            set_system_keep_awake,
             get_battery_sleep_status,
             set_battery_sleep_armed,
             set_battery_sleep_threshold,
@@ -5915,7 +5924,7 @@ pub fn run() {
         tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
             app_handle.state::<BatterySleepState>().shutdown();
             app_handle.state::<StandaloneBridgeState>().stop();
-            let _ = app_handle.state::<KeepAwakeState>().set_active(false);
+            app_handle.state::<KeepAwakeState>().release_all();
             pet_window::hide_pet_on_exit(app_handle);
         }
         tauri::RunEvent::WindowEvent {
@@ -5945,7 +5954,7 @@ pub fn run() {
             event: tauri::WindowEvent::Destroyed,
             ..
         } if label == "main" => {
-            let _ = app_handle.state::<KeepAwakeState>().set_active(false);
+            app_handle.state::<KeepAwakeState>().release_all();
         }
         _ => {}
     });
@@ -6164,6 +6173,7 @@ mod display_selection_tests {
             "agent_halo_codex_hook_status",
             "schedule_pomodoro_notification",
             "set_keep_awake",
+            "set_system_keep_awake",
             "show_completion_pet",
             "take_completion_pet_action",
         ] {

@@ -15,13 +15,57 @@ fn assertion_transition(is_active: bool, requested_active: bool) -> AssertionTra
     }
 }
 
+#[derive(Clone, Copy)]
+enum AssertionKind {
+    Display,
+    System,
+}
+
+impl AssertionKind {
+    fn assertion_type(self) -> &'static str {
+        match self {
+            Self::Display => "PreventUserIdleDisplaySleep",
+            Self::System => "PreventUserIdleSystemSleep",
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::Display => "Agent Halo — Keep display awake",
+            Self::System => "Agent Halo — Keep system awake",
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct KeepAwakeState {
-    assertion_id: Mutex<Option<u32>>,
+    display: AssertionState,
+    system: AssertionState,
 }
 
 impl KeepAwakeState {
-    pub fn set_active(&self, requested_active: bool) -> Result<bool, String> {
+    pub fn set_active(&self, active: bool) -> Result<bool, String> {
+        self.display.set_active(AssertionKind::Display, active)
+    }
+
+    pub fn set_system_active(&self, active: bool) -> Result<bool, String> {
+        self.system.set_active(AssertionKind::System, active)
+    }
+
+    pub fn release_all(&self) {
+        // Always attempt both, even if one release fails.
+        let _ = self.set_active(false);
+        let _ = self.set_system_active(false);
+    }
+}
+
+#[derive(Default)]
+struct AssertionState {
+    assertion_id: Mutex<Option<u32>>,
+}
+
+impl AssertionState {
+    fn set_active(&self, kind: AssertionKind, requested_active: bool) -> Result<bool, String> {
         let mut assertion_id = self
             .assertion_id
             .lock()
@@ -29,7 +73,7 @@ impl KeepAwakeState {
 
         match assertion_transition(assertion_id.is_some(), requested_active) {
             AssertionTransition::Acquire => {
-                *assertion_id = Some(platform::acquire()?);
+                *assertion_id = Some(platform::acquire(kind)?);
             }
             AssertionTransition::Release => {
                 if let Some(id) = *assertion_id {
@@ -44,7 +88,7 @@ impl KeepAwakeState {
     }
 }
 
-impl Drop for KeepAwakeState {
+impl Drop for AssertionState {
     fn drop(&mut self) {
         let Ok(assertion_id) = self.assertion_id.get_mut() else {
             return;
@@ -77,9 +121,9 @@ mod platform {
         fn IOPMAssertionRelease(assertion_id: IOPMAssertionID) -> IOReturn;
     }
 
-    pub fn acquire() -> Result<IOPMAssertionID, String> {
-        let assertion_type = CFString::new("PreventUserIdleDisplaySleep");
-        let assertion_name = CFString::new("Agent Halo — Keep display awake");
+    pub fn acquire(kind: super::AssertionKind) -> Result<IOPMAssertionID, String> {
+        let assertion_type = CFString::new(kind.assertion_type());
+        let assertion_name = CFString::new(kind.name());
         let mut assertion_id = 0;
         let result = unsafe {
             IOPMAssertionCreateWithName(
@@ -94,7 +138,8 @@ mod platform {
             Ok(assertion_id)
         } else {
             Err(format!(
-                "Failed to acquire display keep-awake assertion ({result})"
+                "Failed to acquire {} keep-awake assertion ({result})",
+                kind.assertion_type()
             ))
         }
     }
@@ -104,16 +149,14 @@ mod platform {
         if result == IO_RETURN_SUCCESS {
             Ok(())
         } else {
-            Err(format!(
-                "Failed to release display keep-awake assertion ({result})"
-            ))
+            Err(format!("Failed to release keep-awake assertion ({result})"))
         }
     }
 }
 
 #[cfg(not(target_os = "macos"))]
 mod platform {
-    pub fn acquire() -> Result<u32, String> {
+    pub fn acquire(_kind: super::AssertionKind) -> Result<u32, String> {
         Err("Keep awake is available only on macOS".to_string())
     }
 
@@ -149,9 +192,36 @@ mod tests {
 
     #[cfg(target_os = "macos")]
     #[test]
-    fn native_assertion_can_be_acquired_and_released() {
+    fn native_assertions_are_independent_idempotent_and_release_together() {
         let state = KeepAwakeState::default();
         assert_eq!(state.set_active(true), Ok(true));
+        assert_eq!(state.set_system_active(true), Ok(true));
+        let display_id = *state.display.assertion_id.lock().unwrap();
+        let system_id = *state.system.assertion_id.lock().unwrap();
+        assert_ne!(display_id, system_id);
+        assert_eq!(state.set_system_active(true), Ok(true));
+        assert_eq!(*state.system.assertion_id.lock().unwrap(), system_id);
         assert_eq!(state.set_active(false), Ok(false));
+        assert_eq!(*state.system.assertion_id.lock().unwrap(), system_id);
+        assert_eq!(state.set_active(true), Ok(true));
+        assert_eq!(state.set_system_active(false), Ok(false));
+        assert!(state.display.assertion_id.lock().unwrap().is_some());
+        assert_eq!(state.set_system_active(true), Ok(true));
+        state.release_all();
+        assert!(state.display.assertion_id.lock().unwrap().is_none());
+        assert!(state.system.assertion_id.lock().unwrap().is_none());
+        state.release_all();
+    }
+
+    #[test]
+    fn assertion_types_only_block_user_idle_sleep() {
+        assert_eq!(
+            super::AssertionKind::Display.assertion_type(),
+            "PreventUserIdleDisplaySleep"
+        );
+        assert_eq!(
+            super::AssertionKind::System.assertion_type(),
+            "PreventUserIdleSystemSleep"
+        );
     }
 }

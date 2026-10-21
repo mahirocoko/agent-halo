@@ -21,7 +21,12 @@ import {
   useResizableCardLayout,
 } from '../../components/resizable-card-tray'
 import { BatterySleepControls } from '../battery-sleep/controls'
-import { KEEP_AWAKE_MODE_COPY, KEEP_AWAKE_MODES, type KeepAwakeMode } from '../keep-awake/preferences'
+import {
+  KEEP_AWAKE_MODE_COPY,
+  KEEP_AWAKE_MODES,
+  type KeepAwakeMode,
+  SYSTEM_KEEP_AWAKE_MODE_COPY,
+} from '../keep-awake/preferences'
 import type { CompletionPetSize } from '../pet/preferences'
 import { shortenPath } from '../session/activity'
 import {
@@ -124,6 +129,9 @@ export interface ISetupPanelProps {
   keepAwakeActive: boolean
   keepAwakeMode: KeepAwakeMode
   keepAwakeError: string | null
+  systemKeepAwakeActive: boolean
+  systemKeepAwakeMode: KeepAwakeMode
+  systemKeepAwakeError: string | null
   batterySleepArmed: boolean
   batterySleepError: string | null
   batterySleepSupported: boolean
@@ -153,6 +161,7 @@ export interface ISetupPanelProps {
   onDisplayChange: (displayId: string) => Promise<void>
   onDisplayRefresh: () => Promise<void>
   onKeepAwakeChange: (mode: KeepAwakeMode) => void
+  onSystemKeepAwakeChange: (mode: KeepAwakeMode) => void
   onBatterySleepChange: (armed: boolean) => void
   onBatterySleepThresholdChange: (thresholdPercent: number) => void
   onPetChange: (pet: HaloPetName) => void
@@ -180,6 +189,9 @@ export const SetupPanel = ({
   keepAwakeActive,
   keepAwakeMode,
   keepAwakeError,
+  systemKeepAwakeActive,
+  systemKeepAwakeMode,
+  systemKeepAwakeError,
   batterySleepArmed,
   batterySleepError,
   batterySleepSupported,
@@ -208,6 +220,7 @@ export const SetupPanel = ({
   onInstallCursorHooks,
   onInstallCodexHooks,
   onKeepAwakeChange,
+  onSystemKeepAwakeChange,
   onMovementBreakEnabledChange,
   onPetChange,
   onPetMotionChange,
@@ -1007,49 +1020,68 @@ export const SetupPanel = ({
                     ))}
                   </div>
                 ) : null}
-                <div className="setup-row">
-                  <span className="status-slot">
-                    <Coffee className="setup-icon" size={14} strokeWidth={2.3} />
-                  </span>
-                  <span className="setup-copy">
-                    <span className="setup-title">Keep display awake</span>
-                    <span className="setup-detail">
-                      {keepAwakeError
-                        ? `Unavailable · ${keepAwakeError}`
-                        : keepAwakeMode === 'off'
-                          ? 'Off · display follows macOS idle settings'
-                          : !canUseNativeControls
-                            ? 'Desktop runtime required'
-                            : keepAwakeActive
-                              ? `${KEEP_AWAKE_MODE_COPY[keepAwakeMode].label} · Active`
-                              : `${KEEP_AWAKE_MODE_COPY[keepAwakeMode].label} · Standby`}
+                {[
+                  {
+                    target: 'display',
+                    name: 'keep-awake-mode',
+                    mode: keepAwakeMode,
+                    active: keepAwakeActive,
+                    error: keepAwakeError,
+                    copy: KEEP_AWAKE_MODE_COPY,
+                    onChange: onKeepAwakeChange,
+                  },
+                  {
+                    target: 'system',
+                    name: 'system-keep-awake-mode',
+                    mode: systemKeepAwakeMode,
+                    active: systemKeepAwakeActive,
+                    error: systemKeepAwakeError,
+                    copy: SYSTEM_KEEP_AWAKE_MODE_COPY,
+                    onChange: onSystemKeepAwakeChange,
+                  },
+                ].map((setting) => (
+                  <div className="setup-row" key={setting.name}>
+                    <span className="status-slot">
+                      <Coffee className="setup-icon" size={14} strokeWidth={2.3} />
                     </span>
-                    <span className="setup-detail" id="keep-awake-mode-detail">
-                      {KEEP_AWAKE_MODE_COPY[keepAwakeMode].detail}
+                    <span className="setup-copy">
+                      <span className="setup-title">Keep {setting.target} awake</span>
+                      <span className="setup-detail">
+                        {setting.error
+                          ? `Unavailable · ${setting.error}`
+                          : setting.mode === 'off'
+                            ? `Off · ${setting.target} follows macOS idle settings`
+                            : !canUseNativeControls
+                              ? 'Desktop runtime required'
+                              : `${setting.copy[setting.mode].label} · ${setting.active ? 'Active' : 'Standby'}`}
+                      </span>
+                      <span className="setup-detail" id={`${setting.name}-detail`}>
+                        {setting.copy[setting.mode].detail}
+                      </span>
                     </span>
-                  </span>
-                  <span
-                    className="keep-awake-options"
-                    role="radiogroup"
-                    data-tauri-drag-region="false"
-                    aria-label="Keep display awake mode"
-                    aria-describedby="keep-awake-mode-detail"
-                  >
-                    {KEEP_AWAKE_MODES.map((mode) => (
-                      <label className="keep-awake-option" key={mode}>
-                        <input
-                          className="sr-only"
-                          type="radio"
-                          name="keep-awake-mode"
-                          value={mode}
-                          checked={keepAwakeMode === mode}
-                          onChange={() => onKeepAwakeChange(mode)}
-                        />
-                        <span>{KEEP_AWAKE_MODE_COPY[mode].label}</span>
-                      </label>
-                    ))}
-                  </span>
-                </div>
+                    <span
+                      className="keep-awake-options"
+                      role="radiogroup"
+                      data-tauri-drag-region="false"
+                      aria-label={`Keep ${setting.target} awake mode`}
+                      aria-describedby={`${setting.name}-detail`}
+                    >
+                      {KEEP_AWAKE_MODES.map((mode) => (
+                        <label className="keep-awake-option" key={mode}>
+                          <input
+                            className="sr-only"
+                            type="radio"
+                            name={setting.name}
+                            value={mode}
+                            checked={setting.mode === mode}
+                            onChange={() => setting.onChange(mode)}
+                          />
+                          <span>{setting.copy[mode].label}</span>
+                        </label>
+                      ))}
+                    </span>
+                  </div>
+                ))}
                 <div className="setup-row">
                   <span className="status-slot">
                     <BatteryLow className="setup-icon" size={14} strokeWidth={2.3} />

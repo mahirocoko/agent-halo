@@ -72,7 +72,9 @@ test('On holds even when idle; Agent releases; mode survives panel remount and r
   await expect(control.getByRole('radio', { name: 'On', exact: true })).toBeChecked()
   await expect(page.getByText('On · Active', { exact: true })).toBeVisible()
   await control.getByText('Agent', { exact: true }).click()
-  await expect(page.getByText('Agent · Standby', { exact: true })).toBeVisible()
+  await expect(
+    page.locator('.setup-row').filter({ hasText: 'Keep display awake' }).getByText('Agent · Standby', { exact: true }),
+  ).toBeVisible()
   await expect.poll(() => page.evaluate(() => (window as any).__awakeCalls.at(-1))).toBe(false)
   await control.getByText('On', { exact: true }).click()
   await expect(page.getByText('On · Active', { exact: true })).toBeVisible()

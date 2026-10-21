@@ -34,9 +34,13 @@ import { FocusToolsPanel } from './features/focus/components'
 import {
   type KeepAwakeMode,
   readKeepAwakeMode,
+  readSystemKeepAwakeMode,
   shouldKeepDisplayAwake,
+  shouldKeepSystemAwake,
   writeKeepAwakeMode,
+  writeSystemKeepAwakeMode,
 } from './features/keep-awake/preferences'
+import { useKeepAwakeSync } from './features/keep-awake/use-keep-awake-sync'
 import { readMovementBreakEnabled, writeMovementBreakEnabled } from './features/movement/preferences'
 import type { MovementExerciseId } from './features/movement/types'
 import { buildCompanionProjection } from './features/pet/companion-projection'
@@ -155,7 +159,6 @@ const PANEL_HEIGHT_TRANSITION_MS = 320
 const HOVER_OPEN_DELAY_MS = 24
 const HOVER_CLOSE_DELAY_MS = 170
 const DISPLAY_RECONCILE_INTERVAL_MS = 3_000
-const KEEP_AWAKE_RETRY_DELAYS_MS = [750, 2_500] as const
 const CLOSED_TOP_SHOULDER_RADIUS = 11
 const OPEN_TOP_SHOULDER_RADIUS = 19
 const CLOSED_BOTTOM_RADIUS = 15
@@ -351,8 +354,7 @@ const App = () => {
   const [dismissedSessionIds, setDismissedSessionIds] = useState<DismissedSessionRegistry>(readDismissedSessionIds)
   const [deletedSessionIds, setDeletedSessionIds] = useState<DeletedSessionRegistry>(readDeletedSessionIds)
   const [keepAwakeMode, setKeepAwakeMode] = useState(readKeepAwakeMode)
-  const [keepAwakeActive, setKeepAwakeActive] = useState(false)
-  const [keepAwakeError, setKeepAwakeError] = useState<string | null>(null)
+  const [systemKeepAwakeMode, setSystemKeepAwakeMode] = useState(readSystemKeepAwakeMode)
   const [expandedSessionGroupKeys, setExpandedSessionGroupKeys] = useState<Set<string>>(() => new Set())
   const [clearCompletedArmed, setClearCompletedArmed] = useState(false)
   const [pendingRemoveHistoryId, setPendingRemoveHistoryId] = useState<string | null>(null)
@@ -378,7 +380,6 @@ const App = () => {
   const hoverCloseTimerRef = useRef<number | null>(null)
   const panelNativeOperationRef = useRef<Promise<void>>(Promise.resolve())
   const panelNativeRequestVersionRef = useRef(0)
-  const keepAwakeRequestRef = useRef<Promise<unknown>>(Promise.resolve())
   const displayRequestBusyRef = useRef(false)
   const displayStateRef = useRef<IDisplayStateSnapshot | null>(null)
   const displayView =
@@ -796,52 +797,16 @@ const App = () => {
     })
   }, [activePetSummon, activityKind, activityStatus, canUseNativeControls, companionReplayId, petMotionMapping])
 
-  useEffect(() => {
-    if (!canUseNativeControls) {
-      setKeepAwakeActive(false)
-      setKeepAwakeError(null)
-      return undefined
-    }
-
-    let cancelled = false
-    let retryTimer: number | null = null
-    const requestedActive = shouldKeepDisplayAwake(keepAwakeMode, hasWorkingActivity)
-    const syncNativeState = (attempt: number) => {
-      const request = keepAwakeRequestRef.current
-        .catch(() => undefined)
-        .then(() => invoke<boolean>('set_keep_awake', { active: requestedActive }))
-        .then((active) => {
-          if (active !== requestedActive) {
-            throw new Error('Native keep-awake state did not match the requested state')
-          }
-          return active
-        })
-      keepAwakeRequestRef.current = request
-      void request
-        .then((active) => {
-          if (cancelled) return
-          setKeepAwakeActive(active)
-          setKeepAwakeError(null)
-        })
-        .catch((error) => {
-          if (cancelled) return
-          const retryDelay = KEEP_AWAKE_RETRY_DELAYS_MS[attempt]
-          if (retryDelay !== undefined) {
-            retryTimer = window.setTimeout(() => syncNativeState(attempt + 1), retryDelay)
-            return
-          }
-          setKeepAwakeActive(false)
-          setKeepAwakeError(error instanceof Error ? error.message : String(error || 'Keep awake unavailable'))
-        })
-    }
-    setKeepAwakeError(null)
-    syncNativeState(0)
-
-    return () => {
-      cancelled = true
-      if (retryTimer !== null) window.clearTimeout(retryTimer)
-    }
-  }, [canUseNativeControls, hasWorkingActivity, keepAwakeMode])
+  const { active: keepAwakeActive, error: keepAwakeError } = useKeepAwakeSync(
+    canUseNativeControls,
+    shouldKeepDisplayAwake(keepAwakeMode, hasWorkingActivity),
+    'set_keep_awake',
+  )
+  const { active: systemKeepAwakeActive, error: systemKeepAwakeError } = useKeepAwakeSync(
+    canUseNativeControls,
+    shouldKeepSystemAwake(systemKeepAwakeMode, hasWorkingActivity),
+    'set_system_keep_awake',
+  )
 
   const pillDetail = (() => {
     if (showPomodoroActivity) return pomodoro.completionVisible ? 'Done' : pomodoro.countdownLabel
@@ -1786,6 +1751,11 @@ const App = () => {
     }
   }
 
+  const updateSystemKeepAwakeMode = (mode: KeepAwakeMode) => {
+    setSystemKeepAwakeMode(mode)
+    writeSystemKeepAwakeMode(mode)
+  }
+
   const updateKeepAwakeMode = (mode: KeepAwakeMode) => {
     setKeepAwakeMode(mode)
     writeKeepAwakeMode(mode)
@@ -2488,6 +2458,9 @@ const App = () => {
                       keepAwakeActive={keepAwakeActive}
                       keepAwakeMode={keepAwakeMode}
                       keepAwakeError={keepAwakeError}
+                      systemKeepAwakeActive={systemKeepAwakeActive}
+                      systemKeepAwakeMode={systemKeepAwakeMode}
+                      systemKeepAwakeError={systemKeepAwakeError}
                       batterySleepArmed={batterySleepArmed}
                       batterySleepError={batterySleepError}
                       batterySleepSupported={batterySleepSupported}
@@ -2515,6 +2488,7 @@ const App = () => {
                       onInstallCodexHooks={() => void installCodexHooks()}
                       onHaloBotLoadoutChange={updateHaloBotLoadout}
                       onKeepAwakeChange={updateKeepAwakeMode}
+                      onSystemKeepAwakeChange={updateSystemKeepAwakeMode}
                       onBatterySleepChange={setBatterySleepArmed}
                       onPetChange={updatePet}
                       onPetMotionChange={updatePetMotion}

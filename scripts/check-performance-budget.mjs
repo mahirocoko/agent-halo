@@ -19,6 +19,8 @@ const walk = async (directory) => {
   let bytes = 0;
   let files = 0;
   for (const entry of await readdir(directory, { withFileTypes: true })) {
+    // Finder metadata is local filesystem state, not runtime payload.
+    if (entry.name === ".DS_Store") continue;
     const path = join(directory, entry.name);
     if (entry.isDirectory()) {
       const child = await walk(path);

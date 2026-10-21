@@ -41,6 +41,10 @@ The executable bundle gate is `scripts/check-performance-budget.mjs`. A fresh is
 
 The bounded allowance covers provider-aware Runtime/Services labels, owner-scoped Pi task snapshots and their validation/rendering, plus explicit native-focus dispatch tokens. It adds no mandatory runtime dependency, per-task OS-resource totals, or task poller. Mascot/MediaPipe ceilings, legacy-asset prohibition, session-model timing budgets, and bridge durability/throughput checks are unchanged. The ceilings retain only 108 CSS-gzip bytes, 282 JavaScript-gzip bytes, and 601 core bytes of measured candidate headroom; they are not an unrestricted reset to observed size. These are build-script gzip measurements, not Vite's differently compressed console estimates.
 
+### System-awake release check (v0.1.23)
+
+The system-awake candidate retains every `pi-observability-v1` ceiling. The two native radio rows now share their repeated rendering recipe without changing labels, input names, controlled values or ARIA relationships. Local Finder `.DS_Store` files are excluded from recursive payload byte/file counts: two ignored metadata files (6,148 bytes each, at the public root and under MediaPipe) otherwise polluted the local build comparison. They are not runtime assets; this exclusion does not remove local files or exempt application payload. A clean archived `ce650b7` build measured 583,751 core bytes and 109,218 primary-JS gzip bytes; the candidate measures 584,859 core bytes and 109,366 primary-JS gzip bytes (+1,108 raw core bytes / +148 primary-JS gzip bytes). CSS and application asset bytes remain unchanged. No budget increase is introduced.
+
 ### Historical revision measurements
 
 The initial registry-native refactor measured:
