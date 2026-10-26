@@ -3,8 +3,8 @@
   min-height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  padding: 6px 2px 4px;
+  gap: 14px;
+  padding: 4px 2px;
 }
 
 .focus-movement-actions-zone,
@@ -15,6 +15,7 @@
 }
 
 .focus-movement-launcher h2 {
+  min-height: 24px;
   display: inline-flex;
   align-items: center;
   gap: 6px;

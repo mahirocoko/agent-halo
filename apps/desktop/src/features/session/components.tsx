@@ -6,43 +6,34 @@ import { SessionPet } from './halo-pet'
 import type { HaloPetMotionMapping } from './pet-motion'
 import type { ISessionDetail, ISessionSummary, IWorkspaceSessionGroup } from './types'
 
-export const StatusGlyph = ({ status }: { status: ISessionSummary['status'] }) => {
-  if (status === 'working')
-    return (
-      <span className="status-slot">
-        <span className="glyph-pulse">✱</span>
-      </span>
-    )
-  if (status === 'attention')
-    return (
-      <span className="status-slot">
-        <span className="glyph-attention">!</span>
-      </span>
-    )
-  if (status === 'done')
-    return (
-      <span className="status-slot">
-        <span className="glyph-check">✓</span>
-      </span>
-    )
-  return (
-    <span className="status-slot">
+export const StatusGlyph = ({ status }: { status: ISessionSummary['status'] }) => (
+  <span className="status-slot">
+    {status === 'working' ? (
+      <span className="glyph-pulse">✱</span>
+    ) : status === 'attention' ? (
+      <span className="glyph-attention">!</span>
+    ) : status === 'done' ? (
+      <span className="glyph-check">✓</span>
+    ) : (
       <span className={`status-dot status-${status}`} />
-    </span>
-  )
-}
+    )}
+  </span>
+)
 const statusLabel = (status: ISessionSummary['status']) =>
   ({ attention: 'Needs input', done: 'Done', error: 'Error', idle: 'Idle', inactive: 'Inactive', working: 'Working' })[
     status
   ]
 const shortSessionId = (id: string) => id.replace(/^local-conv-/, '').slice(-8)
 
+export const hasVisibleSessionTasks = (tasks: ISessionSummary['tasks']) =>
+  Boolean(tasks && (tasks.availability === 'unavailable' || tasks.tasks.length || tasks.omittedCount))
+
 export const SessionTasks = ({
   tasks,
   tasksObservedAt,
   status,
 }: Pick<ISessionSummary, 'tasks' | 'tasksObservedAt' | 'status'>) => {
-  if (!tasks) return null
+  if (!tasks || !hasVisibleSessionTasks(tasks)) return null
   return (
     <section className="session-tasks" aria-label="Pi subagent tasks">
       <span className="session-context-eyebrow">Subagent tasks</span>
@@ -53,8 +44,6 @@ export const SessionTasks = ({
       {tasks.omittedCount ? <span>{tasks.omittedCount} older tasks omitted</span> : null}
       {tasks.availability === 'unavailable' ? (
         <span>Unavailable · owner-scoped service not ready</span>
-      ) : tasks.tasks.length === 0 ? (
-        <span>No tasks</span>
       ) : (
         <ul>
           {tasks.tasks.map((task) => (
@@ -62,7 +51,7 @@ export const SessionTasks = ({
               <span>
                 {task.role} · <code>{task.id}</code>
               </span>
-              <span>{task.status}</span>
+              <span data-status={task.status}>{task.status}</span>
               <span title={task.startedAt ? new Date(task.startedAt).toISOString() : undefined}>
                 {task.startedAt ? `Started ${formatTime(new Date(task.startedAt).toISOString())}` : 'Start unavailable'}
                 {task.completedAt ? ` · Ended ${formatTime(new Date(task.completedAt).toISOString())}` : ''}
@@ -87,33 +76,25 @@ export const SessionContextSummary = ({
   session: ISessionDetail
 }) => {
   const latest = session.events[0]
-  const copy = (() => {
-    switch (session.status) {
-      case 'working':
-        return {
-          eyebrow: 'Current activity',
-          title:
-            session.activityKind === 'thinking' || session.activityKind === 'model' ? 'Model is working' : 'Working',
-          detail: session.detail,
-        }
-      case 'attention': {
-        const kind = latest?.type === 'attention_requested' ? latest.data.kind : null
-        return {
-          eyebrow: 'Needs input',
-          title: kind === 'question' || session.activityKind === 'asking' ? 'Question requested' : 'Approval requested',
-          detail: session.detail,
-        }
-      }
-      case 'done':
-        return { eyebrow: 'Completed', title: 'Turn completed', detail: session.detail }
-      case 'error':
-        return { eyebrow: 'Error', title: 'Activity failed', detail: session.detail }
-      case 'inactive':
-        return { eyebrow: 'Inactive', title: 'Activity paused', detail: 'No recent terminal event' }
-      case 'idle':
-        return { eyebrow: 'Idle', title: 'Ready', detail: session.detail }
-    }
-  })()
+  const kind = latest?.type === 'attention_requested' ? latest.data.kind : null
+  const [eyebrow, title, detail = session.detail] =
+    session.status === 'working'
+      ? [
+          'Current activity',
+          session.activityKind === 'thinking' || session.activityKind === 'model' ? 'Model is working' : 'Working',
+        ]
+      : session.status === 'attention'
+        ? [
+            'Needs input',
+            kind === 'question' || session.activityKind === 'asking' ? 'Question requested' : 'Approval requested',
+          ]
+        : session.status === 'done'
+          ? ['Completed', 'Turn completed']
+          : session.status === 'error'
+            ? ['Error', 'Activity failed']
+            : session.status === 'inactive'
+              ? ['Inactive', 'Activity paused', 'No recent terminal event']
+              : ['Idle', 'Ready']
   return (
     <>
       <section
@@ -131,11 +112,11 @@ export const SessionContextSummary = ({
           status={session.status}
         />
         <span className="session-context-copy">
-          <span className="session-context-eyebrow">{copy.eyebrow}</span>
+          <span className="session-context-eyebrow">{eyebrow}</span>
           <span className="session-context-title" id="session-context-title">
-            {copy.title}
+            {title}
           </span>
-          <span className="session-context-detail">{copy.detail}</span>
+          <span className="session-context-detail">{detail}</span>
         </span>
         <span className="session-context-meta">
           <span className="session-model">{shortModelName(session.model)}</span>
@@ -170,7 +151,7 @@ export const SessionListRow = ({
   session,
 }: ISessionListRowProps) => (
   <li
-    className={`session-row ${session.tasks ? 'has-tasks' : ''} ${child ? 'session-child-row' : ''} ${session.status === 'done' ? 'ended' : ''}`}
+    className={`session-row ${hasVisibleSessionTasks(session.tasks) ? 'has-tasks' : ''} ${child ? 'session-child-row' : ''} ${session.status === 'done' ? 'ended' : ''}`}
     data-status={session.status}
   >
     <button
@@ -273,6 +254,7 @@ export const WorkspaceSessionGroupItem = ({
         onOpen={onOpen}
       />
     )
+  const allDone = group.sessions.every((session) => session.status === 'done')
   const canRemoveInactiveGroup = group.sessions.every((session) => session.status === 'inactive')
   return (
     <li className="session-group-block" data-status={group.status}>
@@ -309,37 +291,32 @@ export const WorkspaceSessionGroupItem = ({
             <span className="session-age">{formatRelativeAge(group.lastActivityAt)}</span>
           </span>
         </button>
-        {group.sessions.every((session) => session.status === 'done') ? (
+        {allDone || canRemoveInactiveGroup ? (
           <div className="session-row-actions">
-            <button
-              className="row-btn row-clear"
-              type="button"
-              onClick={() => onGroupAction(groupKey, group)}
-              data-tauri-drag-region="false"
-              aria-label={`Clear completed ${group.project} group`}
-              title="Hide every completed session in this group until it has fresh activity"
-            >
-              <X size={12} strokeWidth={2.5} />
-            </button>
-          </div>
-        ) : null}
-        {canRemoveInactiveGroup ? (
-          <div className="session-row-actions">
-            <button
-              className={`row-btn danger row-remove-group ${removeGroupArmed ? 'is-armed' : ''}`}
-              type="button"
-              onClick={() => onGroupAction(groupKey, group)}
-              data-tauri-drag-region="false"
-              aria-label={
-                removeGroupArmed
-                  ? `Confirm remove ${group.sessions.length} inactive ${group.project} sessions`
-                  : `Remove ${group.sessions.length} inactive ${group.project} sessions`
-              }
-              title="Remove inactive group from local history"
-            >
-              <Trash2 size={11} strokeWidth={2.3} />
-              {removeGroupArmed ? <span>Remove {group.sessions.length}</span> : null}
-            </button>
+            {allDone ? (
+              <button
+                className="row-btn row-clear"
+                type="button"
+                onClick={() => onGroupAction(groupKey, group)}
+                data-tauri-drag-region="false"
+                aria-label={`Clear completed ${group.project} group`}
+                title="Hide every completed session in this group until it has fresh activity"
+              >
+                <X size={12} strokeWidth={2.5} />
+              </button>
+            ) : (
+              <button
+                className={`row-btn danger row-remove-group ${removeGroupArmed ? 'is-armed' : ''}`}
+                type="button"
+                onClick={() => onGroupAction(groupKey, group)}
+                data-tauri-drag-region="false"
+                aria-label={`${removeGroupArmed ? 'Confirm remove' : 'Remove'} ${group.sessions.length} inactive ${group.project} sessions`}
+                title="Remove inactive group from local history"
+              >
+                <Trash2 size={11} strokeWidth={2.3} />
+                {removeGroupArmed ? <span>Remove {group.sessions.length}</span> : null}
+              </button>
+            )}
           </div>
         ) : null}
       </div>

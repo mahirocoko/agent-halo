@@ -254,7 +254,7 @@ test('Sessions uses dark paper ink for row details, badges, and semantic status'
   expect(paint.actual.count).toBe(paint.expected.completedInk)
   expect(paint.actual.countBackground).toBe(paint.expected.completedFill2)
   expect(paint.actual.done).toBe('rgb(17, 17, 17)')
-  expect(paint.actual.doneBackground).toBe('rgb(255, 255, 255)')
+  expect(paint.actual.doneBackground).toBe(paint.expected.completedFill2)
   expect(paint.actual.opacities.every((opacity) => opacity === '1')).toBe(true)
 })
 
@@ -1317,7 +1317,8 @@ for (const width of [620, 320]) {
     // Measure settled layout, not transformed animation overflow; keep the fit guard.
     await tray.evaluate(async (node) => {
       await Promise.allSettled(
-        node.getAnimations({ subtree: true })
+        node
+          .getAnimations({ subtree: true })
           .filter((animation) => Number.isFinite(animation.effect?.getComputedTiming().endTime))
           .map((animation) => animation.finished),
       )
@@ -1365,11 +1366,13 @@ for (const width of [620, 320]) {
 
     const back = tray.locator('.session-context-return')
     await back.scrollIntoViewIfNeeded()
-    expect(await back.evaluate((button) => {
-      const trayRect = button.closest<HTMLElement>('.session-detail-tray')!.getBoundingClientRect()
-      const rect = button.getBoundingClientRect()
-      return rect.top >= trayRect.top - 1 && rect.bottom <= trayRect.bottom + 1
-    })).toBe(true)
+    expect(
+      await back.evaluate((button) => {
+        const trayRect = button.closest<HTMLElement>('.session-detail-tray')!.getBoundingClientRect()
+        const rect = button.getBoundingClientRect()
+        return rect.top >= trayRect.top - 1 && rect.bottom <= trayRect.bottom + 1
+      }),
+    ).toBe(true)
 
     await tray.evaluate((node) => {
       node.scrollTop = node.scrollHeight

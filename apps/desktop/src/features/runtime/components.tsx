@@ -542,11 +542,11 @@ export const RuntimeProcessesPanel = ({
           <div className="runtime-summary-list" aria-label="Runtime summary">
             <div>
               <span>Critical</span>
-              <SurfaceStatus tone={criticalCount > 0 ? 'danger' : 'success'}>{criticalCount}</SurfaceStatus>
+              <SurfaceStatus tone={criticalCount > 0 ? 'danger' : 'info'}>{criticalCount}</SurfaceStatus>
             </div>
             <div>
               <span>Elevated or high</span>
-              <SurfaceStatus tone={warningCount > 0 ? 'warning' : 'success'}>{warningCount}</SurfaceStatus>
+              <SurfaceStatus tone={warningCount > 0 ? 'warning' : 'info'}>{warningCount}</SurfaceStatus>
             </div>
             <div>
               <span>Unavailable</span>

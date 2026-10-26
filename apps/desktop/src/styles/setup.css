@@ -135,6 +135,10 @@
 
 .setup-category-panel .notice-row {
   margin: 8px 0 0;
+  border: 1px solid var(--surface-line);
+  color: var(--surface-ink-2);
+  background: rgba(255, 255, 255, 0.24);
+  font-weight: 600;
 }
 
 .setup-row {
@@ -201,12 +205,25 @@
 
 .setup-card .pill-btn {
   flex: none;
-  border: 0;
+  border: 1px solid var(--surface-line);
+  color: var(--surface-ink);
+  background: var(--surface-fill-2);
+  font-weight: 650;
+}
+
+.setup-card .pill-btn:hover:not(:disabled) {
+  border-color: #111;
+  color: var(--surface-ink);
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.setup-card .pill-btn.accent {
+  border-color: transparent;
   color: #fff;
   background: #111;
 }
 
-.setup-card .pill-btn:hover {
+.setup-card .pill-btn.accent:hover:not(:disabled) {
   color: #fff;
   background: rgba(0, 0, 0, 0.78);
 }

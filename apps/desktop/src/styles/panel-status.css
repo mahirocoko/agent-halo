@@ -20,8 +20,9 @@
 }
 
 .surface-status[data-surface-status-tone="info"] {
-  --surface-status-background: #fff;
+  --surface-status-background: var(--surface-fill-2, rgba(255, 255, 255, 0.38));
   --surface-status-ink: #111;
+  border-color: var(--surface-line, rgba(17, 17, 17, 0.18));
 }
 
 .surface-status[data-surface-status-tone="warning"] {

@@ -46,29 +46,6 @@
   font-weight: 750;
 }
 
-.stopwatch-status {
-  min-height: 24px;
-  display: inline-flex;
-  align-items: center;
-  margin-inline-start: auto;
-  padding: 2px 8px;
-  border: 1px solid #111;
-  border-radius: 999px;
-  color: #111;
-  background: transparent;
-  font-size: 12px;
-  font-weight: 650;
-}
-.stopwatch-status[data-status="running"] {
-  color: #fff;
-  background: #111;
-}
-.stopwatch-status[data-status="paused"] {
-  color: #111;
-  background: #fff;
-  border-style: dashed;
-}
-
 .stopwatch-clock {
   min-width: 8ch;
   padding: 26px 0 20px;
