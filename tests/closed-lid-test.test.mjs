@@ -142,7 +142,7 @@ test('closed-lid recovery retains its claim on failure and retries after restart
   assert.equal(fixture.value(), '0')
 })
 
-test('closed-lid installer rejects expired approval and preexisting or AC-powered policies', {
+test('closed-lid installer rejects expired approval, preexisting overrides and unknown power', {
   skip: process.platform !== 'darwin',
 }, (t) => {
   const fixture = setup(t)
@@ -150,7 +150,7 @@ test('closed-lid installer rejects expired approval and preexisting or AC-powere
   fixture.put('value', 1)
   assert.notEqual(fixture.install().status, 0)
   fixture.put('value', 0)
-  fixture.put('source', 'AC Power')
+  fixture.put('source', 'Unknown Power')
   assert.notEqual(fixture.install().status, 0)
   assert.equal(fixture.writes(), '')
   assert.equal(existsSync(fixture.daemon), false)
@@ -223,10 +223,24 @@ test('switching console users ends the old account override', { skip: process.pl
   assert.notEqual(fixture.install().status, 0)
 })
 
-test('plugging in turns the closed-lid mode off', { skip: process.platform !== 'darwin' }, (t) => {
+test('closed-lid mode starts on AC below the armed floor, survives power changes, and stops on AC', {
+  skip: process.platform !== 'darwin',
+}, (t) => {
   const fixture = setup(t)
-  succeeds(fixture.install())
   fixture.put('source', 'AC Power')
+  fixture.put('charge', 19)
+  succeeds(fixture.install(1795490030, 20))
+  assert.equal(fixture.value(), '1')
+
+  // Low-battery sleep is evaluated separately by Halo against live battery state.
+  fixture.put('charge', 40)
+  for (const source of ['Battery Power', 'AC Power']) {
+    fixture.put('source', source)
+    succeeds(fixture.recover())
+    assert.equal(fixture.value(), '1')
+    assert.equal(fixture.writes(), '1')
+  }
+  rmSync(fixture.flag('owner-fingerprint'))
   succeeds(fixture.recover())
   assert.equal(fixture.value(), '0')
   assert.equal(fixture.writes(), '1\n0')

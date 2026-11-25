@@ -241,7 +241,7 @@ Setup also owns the global Pet, Completion Pet, **Offer movement after Focus**, 
 
 **Setup → Display → Low-battery sleep** is an opt-in, one-shot native macOS control. Set a whole threshold from **1–100%** while Off (default **10%**); Enter or leaving the field saves it. While armed, IOKit notifications trigger sleep strictly below the saved threshold on battery power, never on AC power. It saves Off before requesting sleep, preserving the threshold, so waking does not repeat the action; another use requires manually rearming. Arming above the current battery level can immediately sleep the machine—save your work before testing. It defaults Off, monitors battery charge without polling, and takes priority over closed-lid keep-awake. See `docs/battery-sleep.md` for persistence, failure handling, and verification boundaries.
 
-**Setup → Display → Keep awake with lid closed** overrides machine-wide sleep on battery. Turning it on requires macOS administrator approval. Switch it off, quit Halo, or plug in to restore normal sleep. See [closed-lid behavior and recovery](docs/closed-lid-test.md).
+**Setup → Display → Keep awake with lid closed** overrides machine-wide sleep whether on battery or charging. Turning it on requires macOS administrator approval. Switch it off or quit Halo to restore normal sleep. See [closed-lid behavior and recovery](docs/closed-lid-test.md).
 
 You can also install the mod directly from the repository:
 

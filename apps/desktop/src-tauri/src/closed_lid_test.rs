@@ -13,7 +13,7 @@ pub enum ClosedLidTestPhase {
 #[cfg(target_os = "macos")]
 mod macos {
     use super::ClosedLidTestPhase;
-    use crate::battery_sleep::{MacPowerSourceProvider, PowerSourceProvider};
+    use crate::battery_sleep::BatterySleepStatus;
     use core_foundation::{
         base::{CFType, CFTypeRef, TCFType},
         boolean::CFBoolean,
@@ -206,9 +206,6 @@ mod macos {
                     && active
                     && lease.display_request.is_none()
                     && matches!(lease.process.try_wait(), Ok(None))
-                    && MacPowerSourceProvider
-                        .query_power_status()
-                        .is_ok_and(|power| power.is_some_and(|p| p.is_battery_powered))
                     && fs::metadata("/dev/console")
                         .is_ok_and(|meta| meta.uid() == unsafe { libc::geteuid() })
                     && disk_phase() == ClosedLidTestPhase::Active
@@ -239,6 +236,29 @@ mod macos {
 
     pub struct StartRequest {
         committed: bool,
+    }
+
+    pub fn activation_battery_floor(status: &BatterySleepStatus) -> Result<u8, String> {
+        let (true, Some(on_battery), Some(level)) = (
+            status.supported,
+            status.is_battery_powered,
+            status.battery_level,
+        ) else {
+            return Err("MacBook battery unavailable".to_string());
+        };
+        if status.error.is_some() {
+            return Err("Resolve the Low-battery sleep error first".to_string());
+        }
+        let floor = if status.armed {
+            status.threshold_percent
+        } else {
+            0
+        };
+        if on_battery && level < floor {
+            return Err("Low-battery sleep takes priority below the saved threshold".to_string());
+        }
+        // Pass the armed threshold even on AC: power can change during approval.
+        Ok(floor)
     }
 
     pub fn acquire_battery_owner(config_dir: &Path) -> io::Result<File> {
@@ -343,9 +363,7 @@ mod macos {
             if control.stopping || current == Restoring {
                 return Ok(Restoring);
             }
-            return Err(
-                "Close the Halo instance that turned this on, or plug in power".to_string(),
-            );
+            return Err("Quit the Halo instance that turned this on".to_string());
         }
         Ok(current)
     }
@@ -485,7 +503,10 @@ mod macos {
                         self.committed = true;
                         Ok(phase)
                     }
-                    ClosedLidTestPhase::Ready => Err("Could not turn on. Unplug your MacBook and leave the lid open until the switch shows On.".to_string()),
+                    ClosedLidTestPhase::Ready => Err(
+                        "Could not turn on. Leave the lid open until the switch shows On."
+                            .to_string(),
+                    ),
                     phase => Ok(phase),
                 };
             }
@@ -506,16 +527,38 @@ mod macos {
             {
                 return Ok(phase);
             }
-            Err("Could not turn on. Keep the lid open, unplug power, and check the battery threshold or other sleep overrides.".to_string())
+            Err("Could not turn on. Keep the lid open and check Low-battery sleep or other sleep overrides.".to_string())
         }
     }
 
     #[cfg(test)]
     mod tests {
         use super::{
-            acquire_battery_owner, parse_phase, ClosedLidTestPhase::*, Lease, LidDisplayCycle,
-            DISPLAY_ATTEMPTS_PER_CLOSE,
+            acquire_battery_owner, activation_battery_floor, parse_phase, BatterySleepStatus,
+            ClosedLidTestPhase::*, Lease, LidDisplayCycle, DISPLAY_ATTEMPTS_PER_CLOSE,
         };
+
+        #[test]
+        fn activation_keeps_armed_floor_on_ac_but_only_blocks_low_charge_on_battery() {
+            let mut status = BatterySleepStatus {
+                supported: true,
+                armed: true,
+                threshold_percent: 20,
+                error: None,
+                battery_level: Some(19),
+                is_battery_powered: Some(false),
+            };
+            assert_eq!(activation_battery_floor(&status), Ok(20));
+            status.is_battery_powered = Some(true);
+            assert!(activation_battery_floor(&status).is_err());
+            status.battery_level = Some(20);
+            assert_eq!(activation_battery_floor(&status), Ok(20));
+            status.armed = false;
+            status.battery_level = Some(3);
+            assert_eq!(activation_battery_floor(&status), Ok(0));
+            status.is_battery_powered = None;
+            assert!(activation_battery_floor(&status).is_err());
+        }
 
         #[test]
         fn display_request_retries_are_bounded_and_reset_only_on_open() {
@@ -598,7 +641,9 @@ mod macos {
 }
 
 #[cfg(target_os = "macos")]
-pub use macos::{acquire_battery_owner, begin, phase, stop, yield_to_battery_sleep};
+pub use macos::{
+    acquire_battery_owner, activation_battery_floor, begin, phase, stop, yield_to_battery_sleep,
+};
 
 #[cfg(not(target_os = "macos"))]
 pub fn phase() -> ClosedLidTestPhase {

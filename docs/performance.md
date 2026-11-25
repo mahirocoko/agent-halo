@@ -37,7 +37,7 @@ The executable gate is `scripts/check-performance-budget.mjs`. The v0.1.25 basel
 | --- | ---: | ---: | ---: | ---: |
 | Primary CSS gzip | 17,391 | 17,391 | 0 | 17,400 |
 | Primary JavaScript gzip | 109,493 | 109,558 | +65 | 109,600 |
-| Core `dist/` | 584,509 | 588,772 | +4,263 | 590,500 |
+| Core `dist/` | 584,509 | 588,778 | +4,269 | 590,500 |
 
 The JavaScript allowance covers the state that preserves a native enable request through the immediate panel collapse. Switch logic lives in the lazy Setup chunk; the native lease, watchdog and lid monitor are not web payload. CSS, core, asset and legacy-asset limits, session timings, and bridge budgets are unchanged.
 

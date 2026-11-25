@@ -1600,6 +1600,32 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn an_armed_low_charge_only_preempts_keep_awake_after_unplugging() {
+        let (engine, power, sleep, prefs, notifications, _) = setup_test_engine(
+            BatteryStatus {
+                is_battery_powered: false,
+                percentage: 9,
+            },
+            false,
+        );
+        *sleep.restored.lock().unwrap() = false;
+        assert!(engine.set_armed(true).unwrap().armed);
+        assert!(prefs.read_armed().unwrap());
+        assert!(sleep.retry.lock().unwrap().is_none());
+
+        power.set_status(Ok(Some(BatteryStatus {
+            is_battery_powered: true,
+            percentage: 9,
+        })));
+        notifications.trigger_callback();
+        assert!(!prefs.read_armed().unwrap());
+        assert_eq!(sleep.sleep_calls(), 0);
+        *sleep.restored.lock().unwrap() = true;
+        sleep.run_retry();
+        assert_eq!(sleep.sleep_calls(), 1);
+    }
+
+    #[test]
     fn test_exactly_10_percent_does_not_sleep() {
         let (engine, power_provider, sleep_req, _, notif_ctrl, _) = setup_test_engine(
             BatteryStatus {

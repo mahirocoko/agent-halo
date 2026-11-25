@@ -586,24 +586,7 @@ async fn start_closed_lid_test(
             .power_owner()
             .ok_or_else(|| "Close other Agent Halo instances, then reopen this app".to_string())?;
         let status = get_battery_sleep_status(app, state).await?;
-        if !status.supported || status.is_battery_powered != Some(true) {
-            return Err("Unplug your MacBook first".to_string());
-        }
-        if status.error.is_some() {
-            return Err("Resolve the Low-battery sleep error first".to_string());
-        }
-        if status.armed
-            && status
-                .battery_level
-                .is_some_and(|level| level < status.threshold_percent)
-        {
-            return Err("Low-battery sleep takes priority below the saved threshold".to_string());
-        }
-        let battery_floor = if status.armed {
-            status.threshold_percent
-        } else {
-            0
-        };
+        let battery_floor = closed_lid_test::activation_battery_floor(&status)?;
         tauri::async_runtime::spawn_blocking(move || request.run(owner, battery_floor))
             .await
             .map_err(|_| "The closed-lid test request was interrupted".to_string())?

@@ -37,10 +37,15 @@ const openDisplay = async (page: Page) => {
 
 const installClosedLidMock = async (
   page: Page,
-  initial: { phase?: ClosedLidMockPhase; batterySupported?: boolean; deferInitialStatus?: boolean } = {},
+  initial: {
+    phase?: ClosedLidMockPhase
+    batterySupported?: boolean
+    deferInitialStatus?: boolean
+    onBattery?: boolean
+  } = {},
 ) => {
   await page.addInitScript(
-    ({ phase, batterySupported, deferInitialStatus }) => {
+    ({ phase, batterySupported, deferInitialStatus, onBattery }) => {
       const host = window as MockHost
       const listeners = new Map<number, { event: string; handler: number }>()
       const callbacks = new Map<number, (event: unknown) => void>()
@@ -96,7 +101,7 @@ const installClosedLidMock = async (
               thresholdPercent: 10,
               error: null,
               batteryLevel: 19,
-              isBatteryPowered: true,
+              isBatteryPowered: onBattery,
             }
           }
           if (command === 'set_battery_sleep_armed') {
@@ -107,7 +112,7 @@ const installClosedLidMock = async (
               thresholdPercent: 10,
               error: null,
               batteryLevel: 19,
-              isBatteryPowered: true,
+              isBatteryPowered: onBattery,
             }
           }
           if (command === 'get_closed_lid_test_status') {
@@ -190,6 +195,7 @@ const installClosedLidMock = async (
       phase: initial.phase ?? 'ready',
       batterySupported: initial.batterySupported ?? true,
       deferInitialStatus: initial.deferInitialStatus ?? false,
+      onBattery: initial.onBattery ?? true,
     },
   )
 }
@@ -252,20 +258,20 @@ test('initial pending and unsupported battery states stay safe and disabled with
   expect(consoleIssues).toEqual([])
 })
 
-test('closed-lid switch coexists with armed Low-battery sleep and handles stops and remount', async ({ page }) => {
+test('closed-lid switch works on AC with Low-battery sleep armed and handles stops and remount', async ({ page }) => {
   const consoleIssues: string[] = []
   page.on('pageerror', (error) => consoleIssues.push(error.message))
   page.on('console', (message) => {
     if (message.type() === 'error' || message.type() === 'warning') consoleIssues.push(message.text())
   })
 
-  await installClosedLidMock(page)
+  await installClosedLidMock(page, { onBattery: false })
   await page.goto('/?demo=1&demoScenario=idle')
   await openDisplay(page)
 
   const row = page.getByTestId('closed-lid-test-row')
   const lidSwitch = row.getByRole('switch', { name: 'Keep awake with lid closed' })
-  await expect(row.getByRole('status')).toHaveText('On battery only')
+  await expect(row.getByRole('status')).toHaveText('On battery or charger')
   await expect(lidSwitch).toBeEnabled()
   await expect(lidSwitch).toHaveAttribute('aria-checked', 'false')
   await expect(lidSwitch).toHaveText('Off')
@@ -278,11 +284,11 @@ test('closed-lid switch coexists with armed Low-battery sleep and handles stops 
     }),
   ).toEqual({ statusCalls: 1, startCalls: 0, stopCalls: 0 })
 
-  // Arming above the threshold does not block closed-lid keep-awake.
+  // Arming Low-battery sleep on AC does not block closed-lid keep-awake.
   const lowBatterySwitch = page.getByRole('switch', { name: 'Low-battery sleep' })
   await lowBatterySwitch.click()
   await expect(lowBatterySwitch).toHaveAttribute('aria-checked', 'true')
-  await expect(row.getByRole('status')).toHaveText('On battery only')
+  await expect(row.getByRole('status')).toHaveText('On battery or charger')
   await expect(lidSwitch).toBeEnabled()
 
   const collapsedHalo = page.getByRole('button', { name: 'Open Agent Halo', exact: true })
@@ -309,10 +315,10 @@ test('closed-lid switch coexists with armed Low-battery sleep and handles stops 
   // Native rejection survives the collapse and is visible on reopen.
   await clickOnAndWaitForCollapse(1)
   await page.evaluate(() => {
-    ;(window as MockHost).__closedLidMock.rejectStart?.('Unplug your MacBook first')
+    ;(window as MockHost).__closedLidMock.rejectStart?.('Resolve the Low-battery sleep error first')
   })
   await reopenDisplay()
-  await expect(row.getByRole('status')).toHaveText('Unplug your MacBook first')
+  await expect(row.getByRole('status')).toHaveText('Resolve the Low-battery sleep error first')
   await expect(lidSwitch).toBeEnabled()
   await expect(lidSwitch).toHaveText('Off')
 
@@ -322,7 +328,7 @@ test('closed-lid switch coexists with armed Low-battery sleep and handles stops 
     ;(window as MockHost).__closedLidMock.resolveStart?.('ready')
   })
   await reopenDisplay()
-  await expect(row.getByRole('status')).toHaveText('On battery only')
+  await expect(row.getByRole('status')).toHaveText('On battery or charger')
   await expect(lidSwitch).toHaveText('Off')
 
   // Reopening during authorization neither starts a second request nor shows optimistic On.
@@ -334,7 +340,7 @@ test('closed-lid switch coexists with armed Low-battery sleep and handles stops 
   await page.evaluate(() => {
     ;(window as MockHost).__closedLidMock.resolveStart?.('active')
   })
-  await expect(row.getByRole('status')).toHaveText('On battery only')
+  await expect(row.getByRole('status')).toHaveText('On battery or charger')
   await expect(lidSwitch).toBeEnabled()
   await expect(lidSwitch).toHaveAttribute('aria-checked', 'true')
   await expect(lidSwitch).toHaveText('On')
@@ -360,7 +366,7 @@ test('closed-lid switch coexists with armed Low-battery sleep and handles stops 
   await page.evaluate(() => {
     ;(window as MockHost).__closedLidMock.setPhase('ready')
   })
-  await expect(row.getByRole('status')).toHaveText('On battery only', { timeout: 5_000 })
+  await expect(row.getByRole('status')).toHaveText('On battery or charger', { timeout: 5_000 })
   await expect(lidSwitch).toBeEnabled()
   await expect(lidSwitch).toHaveAttribute('aria-checked', 'false')
   await expect(lidSwitch).toHaveText('Off')
@@ -384,7 +390,7 @@ test('closed-lid switch coexists with armed Low-battery sleep and handles stops 
   })
   await expect(lidSwitch).toHaveAttribute('aria-checked', 'true', { timeout: 5_000 })
 
-  // An external stop, such as connecting power, also restores the switch without a click.
+  // An external stop, such as a watchdog recovery, also restores the switch without a click.
   await page.evaluate(() => {
     ;(window as MockHost).__closedLidMock.setPhase('restoring')
   })

@@ -30,7 +30,7 @@ const getStatusDetail = ({
   if (phase === 'restoring' || (pending && phase === 'active')) return 'Restoring sleep settings…'
   if (phase === 'unavailable') return 'Unavailable'
   if (phase === 'ready' && !batterySleepSupported) return 'MacBook battery unavailable'
-  if (phase === 'ready' || phase === 'active') return 'On battery only'
+  if (phase === 'ready' || phase === 'active') return 'On battery or charger'
   return 'Checking status…'
 }
 

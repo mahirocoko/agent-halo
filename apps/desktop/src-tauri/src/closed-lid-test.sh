@@ -27,15 +27,19 @@ pm() {
     ' -- "$@"
 }
 
-on_battery() {
+power_allows_keep_awake() {
     pm -g batt | /usr/bin/awk -v floor="${1:-0}" '
         /^Now drawing from / { source_count++ }
+        $0 == "Now drawing from \047AC Power\047" { ac=1 }
         $0 == "Now drawing from \047Battery Power\047" { battery=1 }
         /-InternalBattery-/ && match($0, /[0-9]+%/) {
             count++
             charge=substr($0, RSTART, RLENGTH-1)+0
         }
-        END { exit !(source_count == 1 && battery && (!floor || (count == 1 && charge >= floor && charge <= 100))) }'
+        END {
+            allowed = ac || (battery && (!floor || (count == 1 && charge >= floor && charge <= 100)))
+            exit !(source_count == 1 && allowed)
+        }'
 }
 
 lid_is_open() {
@@ -98,7 +102,7 @@ recover_locked() {
         read -r kind seen boot < "$state/phase" || true
         if [[ $kind == active && $seen =~ ^[0-9]{10}$ ]] &&
             [[ -n $boot && $boot == "$(/usr/sbin/sysctl -n kern.bootsessionuuid)" ]] &&
-            owner_alive && on_battery && [[ $(sleep_setting) == 1 ]]; then
+            owner_alive && [[ $(sleep_setting) == 1 ]]; then
             phase "active $(/bin/date +%s) $boot"
             return
         fi
@@ -118,7 +122,7 @@ install_locked() {
     # Never replace another active or uncertain override. Staging with no claim
     # cannot have written to pmset and can be retired before a fresh request.
     [[ ! -e $state/restore-needed && $(sleep_setting) == 0 ]] || exit 65
-    on_battery "$battery_floor" && lid_is_open || exit 65
+    power_allows_keep_awake "$battery_floor" && lid_is_open || exit 65
     clear_job
     printf '%s\n%s\n' "$caller_pid" "$caller_fingerprint" > "$owner"
     owner_alive || exit 65
@@ -144,7 +148,7 @@ PLIST
         exit 69
     fi
     /bin/sync
-    on_battery "$battery_floor" && lid_is_open && [[ $(sleep_setting) == 0 ]] || exit 65
+    power_allows_keep_awake "$battery_floor" && lid_is_open && [[ $(sleep_setting) == 0 ]] || exit 65
     boot=$(/usr/sbin/sysctl -n kern.bootsessionuuid)
     [[ -n $boot ]] || exit 65
     now=$(/bin/date +%s)
@@ -152,8 +156,8 @@ PLIST
     : > "$state/restore-needed"
     /bin/sync
     # Time and recovery ownership are checked again after the durable write.
-    if ! on_battery "$battery_floor" || (( $(/bin/date +%s) > cutoff )) || ! installed_job || ! owner_alive ||
-        ! pm -a disablesleep 1 || [[ $(sleep_setting) != 1 ]] || ! owner_alive || ! on_battery "$battery_floor"; then
+    if ! power_allows_keep_awake "$battery_floor" || (( $(/bin/date +%s) > cutoff )) || ! installed_job || ! owner_alive ||
+        ! pm -a disablesleep 1 || [[ $(sleep_setting) != 1 ]] || ! owner_alive || ! power_allows_keep_awake "$battery_floor"; then
         restore
         exit 69
     fi
