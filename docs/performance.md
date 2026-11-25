@@ -29,11 +29,23 @@ The revision entries below are historical measurement/provenance records, not th
 2. **Session model** — deterministic 3,200-existing + 500-incoming event merge across 100 conversations, summary derivation, and 1,000-session workspace grouping.
 3. **Bridge** — temporary-`HOME` mod startup and 5,000-event publication with bounded startup/throughput and a real temporary NDJSON log.
 
-### Current bundle gate: `pi-observability-v1`
+### Current bundle gate: `closed-lid-v1` (v0.1.26)
 
-The executable bundle gate is `scripts/check-performance-budget.mjs`. A fresh isolated archive of `3939e2094212331b50f72149eaa83222543530ec` was built with the same installed dependencies and Node 22.22.3 toolchain, with its workspace protocol resolving to the archived source rather than the candidate. The earlier material-tabs limits already failed on that HEAD; the comparison below separates that existing drift from this change instead of attributing the entire increase to Pi.
+The executable gate is `scripts/check-performance-budget.mjs`. The v0.1.25 baseline (`970604e`) was built from a clean archive with the same Node 24.22.1, Vite 8.0.16, and installed dependencies, resolving the workspace protocol to the archived source.
 
-| Metric (bytes) | Archived HEAD | Pi candidate | Candidate delta | Current ceiling |
+| Metric (bytes) | v0.1.25 | Closed-lid candidate | Delta | Ceiling |
+| --- | ---: | ---: | ---: | ---: |
+| Primary CSS gzip | 17,391 | 17,391 | 0 | 17,400 |
+| Primary JavaScript gzip | 109,493 | 109,558 | +65 | 109,600 |
+| Core `dist/` | 584,509 | 588,772 | +4,263 | 590,500 |
+
+The JavaScript allowance covers the state that preserves a native enable request through the immediate panel collapse. Switch logic lives in the lazy Setup chunk; the native lease, watchdog and lid monitor are not web payload. CSS, core, asset and legacy-asset limits, session timings, and bridge budgets are unchanged.
+
+### Historical bundle gate: `pi-observability-v1`
+
+A fresh isolated archive of `3939e2094212331b50f72149eaa83222543530ec` was built with the same installed dependencies and Node 22.22.3 toolchain, with its workspace protocol resolving to the archived source rather than the candidate. The earlier material-tabs limits already failed on that HEAD; the comparison below separates that existing drift from this change instead of attributing the entire increase to Pi.
+
+| Metric (bytes) | Archived HEAD | Pi candidate | Candidate delta | Pi-era ceiling |
 | --- | ---: | ---: | ---: | ---: |
 | Primary CSS gzip | 17,210 | 17,292 | +82 | 17,400 |
 | Primary JavaScript gzip | 108,012 | 109,218 | +1,206 | 109,500 |

@@ -21,6 +21,7 @@ import {
   useResizableCardLayout,
 } from '../../components/resizable-card-tray'
 import { BatterySleepControls } from '../battery-sleep/controls'
+import { ClosedLidTestRow } from '../closed-lid-test/closed-lid-test-row'
 import {
   KEEP_AWAKE_MODE_COPY,
   KEEP_AWAKE_MODES,
@@ -163,6 +164,9 @@ export interface ISetupPanelProps {
   onKeepAwakeChange: (mode: KeepAwakeMode) => void
   onSystemKeepAwakeChange: (mode: KeepAwakeMode) => void
   onBatterySleepChange: (armed: boolean) => void
+  closedLidStartPending: boolean
+  closedLidStartError: string | null
+  onClosedLidEnableRequested: (result: Promise<string | null>) => void
   onBatterySleepThresholdChange: (thresholdPercent: number) => void
   onPetChange: (pet: HaloPetName) => void
   onHaloBotLoadoutChange: (loadout: HaloBotLoadout) => void
@@ -209,6 +213,9 @@ export const SetupPanel = ({
   nativeAction,
   onBatterySleepChange,
   onBatterySleepThresholdChange,
+  closedLidStartPending,
+  closedLidStartError,
+  onClosedLidEnableRequested,
   onCheckBridge,
   onCompletionPetEnabledChange,
   onCompletionPetSizeChange,
@@ -1115,6 +1122,13 @@ export const SetupPanel = ({
                   1–100% · edit while Off, Enter or leave the field to save. On sleeps immediately if already below the
                   threshold on battery power. Save your work first.
                 </p>
+                <ClosedLidTestRow
+                  canUseNativeControls={canUseNativeControls}
+                  batterySleepSupported={batterySleepSupported}
+                  startPending={closedLidStartPending}
+                  startError={closedLidStartError}
+                  onEnableRequested={onClosedLidEnableRequested}
+                />
               </>
             ) : null}
           </div>

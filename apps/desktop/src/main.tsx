@@ -336,6 +336,10 @@ const App = () => {
   const [hoverExpandSuppressed, setHoverExpandSuppressed] = useState(false)
   const [activeMainTab, setActiveMainTab] = useState<MainPanelTab>('sessions')
   const [setupOpen, setSetupOpen] = useState(false)
+  const [closedLidStart, setClosedLidStart] = useState<{
+    request: Promise<string | null> | null
+    error: string | null
+  }>({ request: null, error: null })
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null)
   const panelWidthView = resolvePanelWidthView(setupOpen, selectedSessionId !== null, activeMainTab)
   const panelWindowWidth = Math.min(PANEL_WINDOW_WIDTH, availablePanelWidth)
@@ -2490,6 +2494,17 @@ const App = () => {
                       onKeepAwakeChange={updateKeepAwakeMode}
                       onSystemKeepAwakeChange={updateSystemKeepAwakeMode}
                       onBatterySleepChange={setBatterySleepArmed}
+                      closedLidStartPending={closedLidStart.request !== null}
+                      closedLidStartError={closedLidStart.error}
+                      onClosedLidEnableRequested={(request) => {
+                        setClosedLidStart({ request, error: null })
+                        closePanel({ suppressHover: true })
+                        void request.then((error) => {
+                          setClosedLidStart((current) =>
+                            current.request === request ? { request: null, error } : current,
+                          )
+                        })
+                      }}
                       onPetChange={updatePet}
                       onPetMotionChange={updatePetMotion}
                       onPetMotionReset={resetPetMotionMapping}

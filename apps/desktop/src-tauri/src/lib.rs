@@ -31,6 +31,7 @@ use std::os::unix::{
 };
 
 mod battery_sleep;
+mod closed_lid_test;
 mod cursor_usage_cache;
 mod keep_awake;
 mod local_services;
@@ -555,6 +556,76 @@ fn set_system_keep_awake(
     active: bool,
 ) -> Result<bool, String> {
     state.set_system_active(active)
+}
+
+#[tauri::command]
+fn get_closed_lid_test_status(
+    window: tauri::WebviewWindow,
+) -> Result<closed_lid_test::ClosedLidTestPhase, String> {
+    if window.label() != "main" {
+        return Err("Closed-lid test requires the main window".to_string());
+    }
+    Ok(closed_lid_test::phase())
+}
+
+#[tauri::command]
+async fn start_closed_lid_test(
+    window: tauri::WebviewWindow,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, BatterySleepState>,
+) -> Result<closed_lid_test::ClosedLidTestPhase, String> {
+    if window.label() != "main" {
+        return Err("Closed-lid test requires the main window".to_string());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        // Register before reading power so Low-battery sleep can cancel this
+        // generation even while native authorization is still pending.
+        let request = closed_lid_test::begin()?;
+        let owner = state
+            .power_owner()
+            .ok_or_else(|| "Close other Agent Halo instances, then reopen this app".to_string())?;
+        let status = get_battery_sleep_status(app, state).await?;
+        if !status.supported || status.is_battery_powered != Some(true) {
+            return Err("Unplug your MacBook first".to_string());
+        }
+        if status.error.is_some() {
+            return Err("Resolve the Low-battery sleep error first".to_string());
+        }
+        if status.armed
+            && status
+                .battery_level
+                .is_some_and(|level| level < status.threshold_percent)
+        {
+            return Err("Low-battery sleep takes priority below the saved threshold".to_string());
+        }
+        let battery_floor = if status.armed {
+            status.threshold_percent
+        } else {
+            0
+        };
+        tauri::async_runtime::spawn_blocking(move || request.run(owner, battery_floor))
+            .await
+            .map_err(|_| "The closed-lid test request was interrupted".to_string())?
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, state);
+        Err("Closed-lid test is only available on macOS laptops".to_string())
+    }
+}
+
+#[tauri::command]
+fn stop_closed_lid_test(
+    window: tauri::WebviewWindow,
+) -> Result<closed_lid_test::ClosedLidTestPhase, String> {
+    if window.label() != "main" {
+        return Err("Keep awake with lid closed requires the main window".to_string());
+    }
+    #[cfg(target_os = "macos")]
+    return closed_lid_test::stop();
+    #[cfg(not(target_os = "macos"))]
+    Ok(closed_lid_test::ClosedLidTestPhase::Unavailable)
 }
 
 #[tauri::command]
@@ -6101,6 +6172,9 @@ pub fn run() {
             schedule_pomodoro_notification,
             set_keep_awake,
             set_system_keep_awake,
+            get_closed_lid_test_status,
+            start_closed_lid_test,
+            stop_closed_lid_test,
             get_battery_sleep_status,
             set_battery_sleep_armed,
             set_battery_sleep_threshold,
@@ -6600,6 +6674,9 @@ mod display_selection_tests {
             "schedule_pomodoro_notification",
             "set_keep_awake",
             "set_system_keep_awake",
+            "get_closed_lid_test_status",
+            "start_closed_lid_test",
+            "stop_closed_lid_test",
             "show_completion_pet",
             "take_completion_pet_action",
         ] {

@@ -27,7 +27,7 @@ Each assertion has its own serialized command queue, idempotent native state, an
 - Existing `set_keep_awake` acquires/releases one macOS `PreventUserIdleDisplaySleep` IOKit assertion.
 - New `set_system_keep_awake` independently acquires/releases one macOS `PreventUserIdleSystemSleep` IOKit assertion.
 - Native main-window destruction, app exit and state drop clean up both; cleanup always attempts both releases even if one fails.
-- No `PreventSystemSleep`, `caffeinate`, lock bypass, or timer-specific assertion is used. Manual sleep and lid close remain allowed, screen locking is unchanged, and explicit low-battery sleep is not overridden.
+- The two idle controls use no `PreventSystemSleep`, `caffeinate`, lock bypass, or timer-specific assertion. By themselves they do not override manual sleep, lid-close sleep, screen locking, or explicit low-battery sleep. The separate [Keep awake with lid closed](closed-lid-test.md) switch applies a temporary machine-wide override without changing either idle preference.
 
 Implementation owners: `apps/desktop/src/features/keep-awake/preferences.ts` (mode/persistence/policy), `use-keep-awake-sync.ts` in that feature (independent serialized synchronization), `apps/desktop/src/main.tsx` (app-owned settings/activity), `apps/desktop/src/features/setup/setup-panel.tsx` (controls/status), and `apps/desktop/src-tauri/src/keep_awake.rs` (IOKit lifetime).
 

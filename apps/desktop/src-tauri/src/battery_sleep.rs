@@ -72,6 +72,16 @@ pub trait PowerSourceProvider: Send + Sync {
 }
 
 pub trait SleepRequester: Send + Sync {
+    fn prepare_sleep(&self) -> bool {
+        true
+    }
+
+    fn sleep_epoch(&self) -> Option<(i64, i32)> {
+        Some((0, 0))
+    }
+
+    fn schedule_retry(&self, _callback: Box<dyn FnOnce() + Send>) {}
+
     fn request_sleep(&self) -> Result<(), String>;
 }
 
@@ -190,6 +200,9 @@ struct BatterySleepEngineInner {
     armed: bool,
     threshold_percent: u8,
     threshold_save_uncertain: bool,
+    sleep_pending: bool,
+    sleep_epoch: Option<(i64, i32)>,
+    retry_scheduled: bool,
     error: Option<String>,
 }
 
@@ -199,6 +212,9 @@ impl Default for BatterySleepEngineInner {
             armed: false,
             threshold_percent: default_threshold_percent(),
             threshold_save_uncertain: false,
+            sleep_pending: false,
+            sleep_epoch: None,
+            retry_scheduled: false,
             error: None,
         }
     }
@@ -325,6 +341,9 @@ impl BatterySleepEngine {
         let threshold_percent = validate_threshold_percent(threshold_percent)?;
         {
             let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+            if inner.sleep_pending {
+                return Err("Wait for normal sleep to be restored".to_string());
+            }
             if inner.armed {
                 return Err("Turn sleep monitoring Off before changing its threshold".to_string());
             }
@@ -369,6 +388,7 @@ impl BatterySleepEngine {
             {
                 let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
                 inner.armed = false;
+                inner.sleep_pending = false;
                 inner.error = None;
             }
             let power_opt = self.power_provider.query_power_status().ok().flatten();
@@ -387,6 +407,9 @@ impl BatterySleepEngine {
         // Do not allow an ambiguous failed threshold save to be followed by ON.
         {
             let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+            if inner.sleep_pending {
+                return Err("Wait for normal sleep to be restored".to_string());
+            }
             if inner.threshold_save_uncertain {
                 return Err(
                     "Save the threshold successfully before arming sleep monitoring".to_string(),
@@ -510,17 +533,12 @@ impl BatterySleepEngine {
         }
 
         // Re-query live power under op_mutex
-        let live_power = match self.power_provider.query_power_status() {
-            Ok(Some(status))
-                if status.is_battery_powered
-                    && status.percentage < self.threshold_percent_locked() =>
-            {
-                status
-            }
-            _ => return,
-        };
+        if !self.is_below_threshold_on_battery() {
+            return;
+        }
 
-        // Step 1: Durably disarm on disk BEFORE requesting system sleep
+        // Restoring the override may itself put a closed Mac to sleep. Persist
+        // Off before releasing anything so waking cannot replay the one-shot.
         if let Err(persist_err) = self.preference_store.write_armed(false) {
             // Persistence failure => NO SLEEP!
             let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
@@ -533,35 +551,63 @@ impl BatterySleepEngine {
             return;
         }
 
-        // Step 2: Disarm in-memory
         {
             let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
             inner.armed = false;
+            inner.sleep_pending = true;
+            inner.sleep_epoch = self.sleep_requester.sleep_epoch();
         }
+        self.finish_pending_sleep_locked();
+    }
 
-        // Step 3: Cleanup event source
-        self.notification_controller.stop();
+    fn is_below_threshold_on_battery(&self) -> bool {
+        matches!(self.power_provider.query_power_status(), Ok(Some(power))
+            if power.is_battery_powered && power.percentage < self.threshold_percent_locked())
+    }
 
-        // Step 4: Emit state to UI before sleep
-        let status_before_sleep = BatterySleepStatus {
-            supported: true,
-            armed: false,
-            threshold_percent: self.threshold_percent_locked(),
-            error: None,
-            battery_level: Some(live_power.percentage),
-            is_battery_powered: Some(live_power.is_battery_powered),
-        };
-        (self.emitter)(status_before_sleep);
-
-        // Step 5: Request system sleep via native trusted API
-        if let Err(sleep_err) = self.sleep_requester.request_sleep() {
-            // Failed sleep must stay disarmed with visible error and manual rearm only
+    fn finish_pending_sleep_locked(self: &Arc<Self>) {
+        if !self.sleep_requester.prepare_sleep() {
             let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-            inner.armed = false;
-            inner.error = Some(format!("System sleep failed: {sleep_err}"));
+            if inner.retry_scheduled {
+                return;
+            }
+            inner.retry_scheduled = true;
+            inner.error = Some("Waiting for normal sleep to be restored".to_string());
             drop(inner);
-            let status = self.get_status_locked();
-            (self.emitter)(status);
+            (self.emitter)(self.get_status_locked());
+            let weak = Arc::downgrade(self);
+            self.sleep_requester.schedule_retry(Box::new(move || {
+                if let Some(engine) = weak.upgrade() {
+                    let _op = engine.op_mutex.lock().unwrap_or_else(|e| e.into_inner());
+                    let mut inner = engine.inner.lock().unwrap_or_else(|e| e.into_inner());
+                    inner.retry_scheduled = false;
+                    if inner.sleep_pending {
+                        drop(inner);
+                        engine.finish_pending_sleep_locked();
+                    }
+                }
+            }));
+            return;
+        }
+        let epoch_before_restore = {
+            let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+            inner.sleep_pending = false;
+            inner.error = None;
+            inner.sleep_epoch.take()
+        };
+        self.notification_controller.stop();
+        (self.emitter)(self.get_status_locked());
+        // Normal sleep can happen before the retry runs. In particular, waking
+        // by opening the lid must not cause a second sleep from this same arm.
+        if self.is_below_threshold_on_battery()
+            && epoch_before_restore.is_some()
+            && epoch_before_restore == self.sleep_requester.sleep_epoch()
+        {
+            if let Err(error) = self.sleep_requester.request_sleep() {
+                self.inner.lock().unwrap_or_else(|e| e.into_inner()).error =
+                    Some(format!("System sleep failed: {error}"));
+                (self.emitter)(self.get_status_locked());
+            }
         }
     }
 }
@@ -749,10 +795,41 @@ impl PowerSourceProvider for MacPowerSourceProvider {
 }
 
 #[cfg(target_os = "macos")]
-pub struct MacSleepRequester;
+pub struct MacSleepRequester(tauri::AppHandle);
 
 #[cfg(target_os = "macos")]
 impl SleepRequester for MacSleepRequester {
+    fn prepare_sleep(&self) -> bool {
+        crate::closed_lid_test::yield_to_battery_sleep()
+    }
+
+    fn sleep_epoch(&self) -> Option<(i64, i32)> {
+        let mut time = std::mem::MaybeUninit::<libc::timeval>::uninit();
+        let mut size = std::mem::size_of::<libc::timeval>();
+        let result = unsafe {
+            libc::sysctlbyname(
+                c"kern.sleeptime".as_ptr(),
+                time.as_mut_ptr().cast(),
+                &mut size,
+                std::ptr::null_mut(),
+                0,
+            )
+        };
+        if result != 0 || size != std::mem::size_of::<libc::timeval>() {
+            return None;
+        }
+        let time = unsafe { time.assume_init() };
+        Some((time.tv_sec, time.tv_usec))
+    }
+
+    fn schedule_retry(&self, callback: Box<dyn FnOnce() + Send>) {
+        let app = self.0.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            std::thread::sleep(std::time::Duration::from_secs(2));
+            let _ = app.run_on_main_thread(callback);
+        });
+    }
+
     fn request_sleep(&self) -> Result<(), String> {
         platform::sleep_system()
     }
@@ -898,6 +975,8 @@ impl NotificationController for NonMacNotificationController {
 #[derive(Clone, Default)]
 pub struct BatterySleepState {
     engine: Arc<Mutex<Option<Arc<BatterySleepEngine>>>>,
+    #[cfg(target_os = "macos")]
+    owner: Arc<Mutex<Option<Arc<fs::File>>>>,
 }
 
 impl BatterySleepState {
@@ -905,6 +984,14 @@ impl BatterySleepState {
         let Ok(config_dir) = app.path().app_config_dir() else {
             return;
         };
+        #[cfg(target_os = "macos")]
+        {
+            let Ok(lock) = crate::closed_lid_test::acquire_battery_owner(&config_dir) else {
+                // A duplicate app cannot start or resume a second power engine.
+                return;
+            };
+            *self.owner.lock().unwrap_or_else(|e| e.into_inner()) = Some(Arc::new(lock));
+        }
 
         let app_handle = app.clone();
         let emitter: Arc<dyn Fn(BatterySleepStatus) + Send + Sync + 'static> =
@@ -922,7 +1009,7 @@ impl BatterySleepState {
             Arc<dyn NotificationController>,
         ) = (
             Arc::new(MacPowerSourceProvider),
-            Arc::new(MacSleepRequester),
+            Arc::new(MacSleepRequester(app.clone())),
             Arc::new(MacNotificationController::default()),
         );
 
@@ -949,6 +1036,11 @@ impl BatterySleepState {
         *lock = Some(engine);
     }
 
+    #[cfg(target_os = "macos")]
+    pub fn power_owner(&self) -> Option<Arc<fs::File>> {
+        self.owner.lock().unwrap_or_else(|e| e.into_inner()).clone()
+    }
+
     pub fn get_status(&self) -> BatterySleepStatus {
         let lock = self.engine.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(engine) = lock.as_ref() {
@@ -972,6 +1064,8 @@ impl BatterySleepState {
         if let Some(engine) = engine {
             engine.notification_controller.stop();
         }
+        #[cfg(target_os = "macos")]
+        self.owner.lock().unwrap_or_else(|e| e.into_inner()).take();
     }
 
     pub fn set_armed(&self, armed: bool) -> Result<BatterySleepStatus, String> {
@@ -1241,6 +1335,9 @@ pub(crate) mod tests {
     struct MockSleepRequester {
         sleep_calls: Mutex<usize>,
         result: Mutex<Result<(), String>>,
+        restored: Mutex<bool>,
+        sleep_epoch: Mutex<Option<(i64, i32)>>,
+        retry: Mutex<Option<Box<dyn FnOnce() + Send>>>,
     }
 
     impl MockSleepRequester {
@@ -1248,15 +1345,35 @@ pub(crate) mod tests {
             Self {
                 sleep_calls: Mutex::new(0),
                 result: Mutex::new(result),
+                restored: Mutex::new(true),
+                sleep_epoch: Mutex::new(Some((0, 0))),
+                retry: Mutex::new(None),
             }
         }
 
         fn sleep_calls(&self) -> usize {
             *self.sleep_calls.lock().unwrap()
         }
+
+        fn run_retry(&self) {
+            let retry = self.retry.lock().unwrap().take().expect("scheduled retry");
+            retry();
+        }
     }
 
     impl SleepRequester for MockSleepRequester {
+        fn prepare_sleep(&self) -> bool {
+            *self.restored.lock().unwrap()
+        }
+
+        fn sleep_epoch(&self) -> Option<(i64, i32)> {
+            *self.sleep_epoch.lock().unwrap()
+        }
+
+        fn schedule_retry(&self, callback: Box<dyn FnOnce() + Send>) {
+            assert!(self.retry.lock().unwrap().replace(callback).is_none());
+        }
+
         fn request_sleep(&self) -> Result<(), String> {
             let mut calls = self.sleep_calls.lock().unwrap();
             *calls += 1;
@@ -1427,6 +1544,59 @@ pub(crate) mod tests {
 
         assert_eq!(sleep_req.sleep_calls(), 0);
         assert!(engine.get_status().armed);
+    }
+
+    #[test]
+    fn low_battery_waits_for_restoration_and_rechecks_power_before_sleep() {
+        for (connect_charger, asleep_since_release) in
+            [(false, false), (true, false), (false, true)]
+        {
+            let (engine, power, sleep, prefs, notifications, _) = setup_test_engine(
+                BatteryStatus {
+                    is_battery_powered: true,
+                    percentage: 70,
+                },
+                false,
+            );
+            *sleep.restored.lock().unwrap() = false;
+            assert!(engine.set_armed(true).unwrap().armed);
+            assert!(sleep.retry.lock().unwrap().is_none());
+
+            power.set_status(Ok(Some(BatteryStatus {
+                is_battery_powered: true,
+                percentage: 9,
+            })));
+            notifications.trigger_callback();
+            assert!(!prefs.read_armed().unwrap());
+            assert_eq!(sleep.sleep_calls(), 0);
+            assert_eq!(
+                engine.get_status().error.as_deref(),
+                Some("Waiting for normal sleep to be restored")
+            );
+            assert!(engine.set_armed(true).is_err());
+            assert!(engine.set_threshold(20).is_err());
+            sleep.run_retry();
+            assert_eq!(sleep.sleep_calls(), 0);
+
+            if connect_charger {
+                power.set_status(Ok(Some(BatteryStatus {
+                    is_battery_powered: false,
+                    percentage: 9,
+                })));
+            }
+            if asleep_since_release {
+                *sleep.sleep_epoch.lock().unwrap() = Some((1, 0));
+            }
+            *sleep.restored.lock().unwrap() = true;
+            sleep.run_retry();
+            assert_eq!(
+                sleep.sleep_calls(),
+                usize::from(!connect_charger && !asleep_since_release)
+            );
+            assert_eq!(engine.get_status().error, None);
+            assert!(!notifications.is_started());
+            assert!(sleep.retry.lock().unwrap().is_none());
+        }
     }
 
     #[test]
